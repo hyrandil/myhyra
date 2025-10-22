@@ -1,9 +1,8 @@
 name: Frontend PR Preview
 on:
   pull_request:
-    paths:
-      - 'frontend/**'
-      - '.github/workflows/frontend-preview.yml'
+    types: [opened, synchronize, reopened, ready_for_review]
+  workflow_dispatch:
 permissions:
   contents: read
   pages: write
