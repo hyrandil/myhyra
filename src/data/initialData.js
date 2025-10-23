@@ -1,0 +1,130 @@
+export const initialPrograms = [
+  {
+    id: 'prog-dest',
+    name: 'Destillation',
+    description: 'Aufbereitung und Reinigung von Rohalkoholen in kontinuierlichen Kolonnen.',
+    status: 'aktiv',
+    color: '#2563eb',
+  },
+  {
+    id: 'prog-fer',
+    name: 'Fermentation',
+    description: 'Biotechnologische Erzeugung organischer Zwischenprodukte.',
+    status: 'aktiv',
+    color: '#16a34a',
+  },
+  {
+    id: 'prog-syn',
+    name: 'Synthese',
+    description: 'Batchweise Herstellung hochwertiger Feinchemikalien.',
+    status: 'inaktiv',
+    color: '#7c3aed',
+  },
+]
+
+export const initialFacilities = [
+  {
+    id: 'anlage-kolonne-a',
+    name: 'Kolonne A',
+    location: 'Werk Ost',
+    manager: 'Ing. Krause',
+    status: 'Aktiv',
+    programId: 'prog-dest',
+    sampleTypes: [
+      { id: 'temp', name: 'Temperatur', unit: '°C' },
+      { id: 'druck', name: 'Druck', unit: 'bar' },
+      { id: 'ethanol', name: 'Ethanolgehalt', unit: '%' },
+    ],
+  },
+  {
+    id: 'anlage-kolonne-b',
+    name: 'Kolonne B',
+    location: 'Werk West',
+    manager: 'Dr. Petersen',
+    status: 'Wartung',
+    programId: 'prog-dest',
+    sampleTypes: [
+      { id: 'temp', name: 'Temperatur', unit: '°C' },
+      { id: 'druck', name: 'Druck', unit: 'bar' },
+      { id: 'methanol', name: 'Methanol-Restgehalt', unit: 'mg/l' },
+    ],
+  },
+  {
+    id: 'anlage-fermenter-12',
+    name: 'Fermenter 12',
+    location: 'Bioreaktorhalle',
+    manager: 'Dr. Nguyen',
+    status: 'Aktiv',
+    programId: 'prog-fer',
+    sampleTypes: [
+      { id: 'ph', name: 'pH-Wert', unit: 'pH' },
+      { id: 'glucose', name: 'Glucose', unit: 'mg/dl' },
+      { id: 'temperatur', name: 'Temperatur', unit: '°C' },
+    ],
+  },
+  {
+    id: 'anlage-fermenter-28',
+    name: 'Fermenter 28',
+    location: 'Bioreaktorhalle',
+    manager: 'M. Schreiber',
+    status: 'Stillstand',
+    programId: 'prog-fer',
+    sampleTypes: [
+      { id: 'ph', name: 'pH-Wert', unit: 'pH' },
+      { id: 'laktat', name: 'Laktat', unit: 'mmol/l' },
+      { id: 'co2', name: 'CO₂-Volumenstrom', unit: 'Nl/h' },
+    ],
+  },
+  {
+    id: 'anlage-reaktor-5',
+    name: 'Reaktor 5',
+    location: 'Synthesepark',
+    manager: 'Dipl.-Chem. Vogt',
+    status: 'Aktiv',
+    programId: 'prog-syn',
+    sampleTypes: [
+      { id: 'druck', name: 'Druck', unit: 'bar' },
+      { id: 'viskositaet', name: 'Viskosität', unit: 'mPa·s' },
+      { id: 'ausbeute', name: 'Ausbeute', unit: '%' },
+    ],
+  },
+]
+
+export const initialEmployees = [
+  {
+    id: 'emp-anna',
+    name: 'Anna Schulz',
+    position: 'Laborleitung',
+    department: 'Qualitätssicherung',
+    email: 'anna.schulz@hyra-labs.de',
+    phone: '+49 30 1234 100',
+    active: true,
+  },
+  {
+    id: 'emp-lukas',
+    name: 'Lukas Meier',
+    position: 'Labortechniker',
+    department: 'Destillation',
+    email: 'lukas.meier@hyra-labs.de',
+    phone: '+49 30 1234 212',
+    active: true,
+  },
+  {
+    id: 'emp-samira',
+    name: 'Samira Hassan',
+    position: 'Bioprozesstechnologin',
+    department: 'Fermentation',
+    email: 'samira.hassan@hyra-labs.de',
+    phone: '+49 30 1234 324',
+    active: true,
+  },
+  {
+    id: 'emp-jonas',
+    name: 'Jonas Falk',
+    position: 'Analytik-Spezialist',
+    department: 'Synthese',
+    email: 'jonas.falk@hyra-labs.de',
+    phone: '+49 30 1234 455',
+    active: false,
+  },
+]
