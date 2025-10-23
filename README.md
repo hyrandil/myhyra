@@ -12,20 +12,53 @@ docs/           # API examples and additional documentation
 ops/            # Deployment manifests (Caddyfile, docker compose assets)
 ```
 
-## Quickstart (local with Docker Compose)
+## Step-by-step tutorial (Docker beginners welcome)
 
-```bash
-cp .env.example .env
-# adjust secrets, Stripe keys, and URLs
+The following walkthrough assumes you are on Windows, macOS, or Linux with Docker Desktop (or Docker Engine) installed. Every step is spelled out so you can follow along even if you have never used Docker before.
 
-docker compose up -d --build
-```
+1. **Install prerequisites.**
+   - Install [Docker Desktop](https://www.docker.com/products/docker-desktop/) and ensure it is running.
+   - Install the [.NET 8 SDK](https://dotnet.microsoft.com/en-us/download/dotnet/8.0) if you plan to build or run the API outside of containers.
+   - (Optional) Install [Node.js 20+](https://nodejs.org/) if you want to run the Next.js app locally.
+2. **Clone the repository.** In a terminal or PowerShell window, run:
+   ```bash
+   git clone <your-repo-url>
+   cd myhyra
+   ```
+3. **Create the environment file.** Copy the template and edit it with your favourite editor:
+   ```bash
+   cp .env.example .env
+   ```
+   Fill in the following values:
+   - `JWT_SECRET`: random string (e.g. generated via `openssl rand -base64 32`).
+   - `STRIPE_*` keys: use Stripe test keys or leave the defaults if you only want to explore the UI.
+   - `PUBLIC_URL`: leave as `http://localhost` for local testing.
+4. **Start the stack.** Build and launch all services in the background:
+   ```bash
+   docker compose up -d --build
+   ```
+   The first run downloads Docker images and may take a few minutes. Subsequent runs are faster because Docker caches the layers.
+5. **Check container status.** Confirm everything is healthy:
+   ```bash
+   docker compose ps
+   docker compose logs api -f
+   ```
+   Wait until the `api` service reports `Now listening on: http://0.0.0.0:8080` and migrations have completed.
+6. **Open the applications.**
+   - API (Swagger UI): <http://localhost:8080/swagger>
+   - Webshop / Admin UI: <http://localhost:3000>
+7. **Shut everything down.** When you are done testing, stop the containers with:
+   ```bash
+   docker compose down
+   ```
 
-Services:
+If you encounter issues, rerun with `docker compose up --build` (without `-d`) to see live logs.
 
-- API: https://localhost:8080 (Swagger at `/swagger`)
-- Frontend: http://localhost:3000
-- Caddy proxy: https://localhost
+## Service endpoints
+
+- API: <http://localhost:8080> (Swagger at `/swagger`)
+- Frontend: <http://localhost:3000>
+- Reverse proxy (Caddy): <http://localhost>
 
 ## Agent installation (Windows)
 
