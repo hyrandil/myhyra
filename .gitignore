@@ -1,0 +1,17 @@
+# Node
+node_modules/
+.next/
+
+# Logs
+*.log
+logs/
+
+# Dotnet
+bin/
+obj/
+
+# Env
+.env
+
+# Certificates
+ops/devcert.pfx
