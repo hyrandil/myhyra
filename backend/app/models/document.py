@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Optional
+from typing import List, Optional
 
 from sqlmodel import Field, Relationship, SQLModel
 
@@ -20,7 +20,7 @@ class ImportShare(SQLModel, table=True):
     active: bool = Field(default=True)
     created_at: datetime = Field(default_factory=datetime.utcnow)
 
-    documents: list["Document"] = Relationship(back_populates="import_share")
+    documents: List["Document"] = Relationship(back_populates="import_share")
 
 
 class Tag(SQLModel, table=True):
@@ -28,7 +28,7 @@ class Tag(SQLModel, table=True):
     name: str = Field(index=True, unique=True)
     created_at: datetime = Field(default_factory=datetime.utcnow)
 
-    documents: list["Document"] = Relationship(back_populates="tags", link_model=DocumentTagLink)
+    documents: List["Document"] = Relationship(back_populates="tags", link_model=DocumentTagLink)
 
 
 class Document(SQLModel, table=True):
@@ -44,5 +44,5 @@ class Document(SQLModel, table=True):
     ocr_text: Optional[str] = Field(default=None)
     created_at: datetime = Field(default_factory=datetime.utcnow)
 
-    tags: list[Tag] = Relationship(back_populates="documents", link_model=DocumentTagLink)
+    tags: List[Tag] = Relationship(back_populates="documents", link_model=DocumentTagLink)
     import_share: Optional[ImportShare] = Relationship(back_populates="documents")
