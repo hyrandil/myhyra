@@ -4,6 +4,8 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
+using HostEntity = HvShop.Domain.Entities.Host;
+
 namespace HvShop.Api.Controllers;
 
 [ApiController]
@@ -24,7 +26,7 @@ public class AgentController : ControllerBase
         var host = await _db.Hosts.FirstOrDefaultAsync(h => h.Hostname == request.Hostname, cancellationToken);
         if (host == null)
         {
-            host = new Host
+            host = new HostEntity
             {
                 Hostname = request.Hostname,
                 Ip = request.Ip,
