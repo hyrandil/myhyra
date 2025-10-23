@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import List, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 
 
 class TagBase(BaseModel):
@@ -18,8 +18,7 @@ class TagRead(TagBase):
     id: int
     created_at: datetime
 
-    class Config:
-        orm_mode = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class DocumentBase(BaseModel):
@@ -42,8 +41,7 @@ class DocumentRead(DocumentBase):
     created_at: datetime
     tags: List[TagRead] = Field(default_factory=list)
 
-    class Config:
-        orm_mode = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class ShareBase(BaseModel):
@@ -62,5 +60,4 @@ class ShareRead(ShareBase):
     id: int
     created_at: datetime
 
-    class Config:
-        orm_mode = True
+    model_config = ConfigDict(from_attributes=True)
