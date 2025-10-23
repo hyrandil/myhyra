@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import PropTypes from 'prop-types'
 
 const formatDate = (date) => new Date(date).toLocaleDateString('de-DE', { weekday: 'short', day: '2-digit', month: '2-digit' })
 
@@ -19,6 +20,7 @@ const buildTimeseries = (samples) => {
     })
 }
 
+export default function DashboardView({ programs, facilities, employees, units, samples }) {
 export default function DashboardView({ programs, facilities, employees, samples }) {
   const [filters, setFilters] = useState({
     dateFrom: '',
@@ -29,12 +31,18 @@ export default function DashboardView({ programs, facilities, employees, samples
   })
 
   const facilityMap = useMemo(() => Object.fromEntries(facilities.map((facility) => [facility.id, facility])), [facilities])
+  const unitsMap = useMemo(() => Object.fromEntries(units.map((unit) => [unit.id, unit])), [units])
+  const getSampleDateKey = (sample) =>
+    sample.date ?? (sample.capturedAt ? new Date(sample.capturedAt).toISOString().slice(0, 10) : '')
 
   const filteredSamples = useMemo(() => {
     return samples.filter((sample) => {
       if (filters.programId && sample.programId !== filters.programId) return false
       if (filters.facilityId && sample.facilityId !== filters.facilityId) return false
       if (filters.employeeId && sample.employeeId !== filters.employeeId) return false
+      const sampleDateKey = getSampleDateKey(sample)
+      if (filters.dateFrom && sampleDateKey < filters.dateFrom) return false
+      if (filters.dateTo && sampleDateKey > filters.dateTo) return false
       if (filters.dateFrom && new Date(sample.date) < new Date(filters.dateFrom)) return false
       if (filters.dateTo && new Date(sample.date) > new Date(filters.dateTo)) return false
       return true
@@ -42,6 +50,9 @@ export default function DashboardView({ programs, facilities, employees, samples
   }, [samples, filters])
 
   const todayKey = new Date().toISOString().slice(0, 10)
+  const todayCount = filteredSamples.filter((sample) => getSampleDateKey(sample) === todayKey).length
+  const last7Count = filteredSamples.filter((sample) => {
+    const difference = daysBetween(todayKey, getSampleDateKey(sample))
   const todayCount = filteredSamples.filter((sample) => sample.date === todayKey).length
   const last7Count = filteredSamples.filter((sample) => {
     const difference = daysBetween(todayKey, sample.date)
@@ -90,11 +101,17 @@ export default function DashboardView({ programs, facilities, employees, samples
     filteredSamples.forEach((sample) => {
       const facility = facilityMap[sample.facilityId]
       const sampleType = facility?.sampleTypes.find((type) => type.id === sample.sampleTypeId)
+      const key = sampleType ? `${sampleType.name}|||${sampleType.unitId}` : 'Unbekannt|||'
       const key = sampleType ? `${sampleType.name}|||${sampleType.unit}` : 'Unbekannt|||'
       const current = aggregates.get(key) ?? { sum: 0, count: 0 }
       aggregates.set(key, { sum: current.sum + sample.value, count: current.count + 1 })
     })
     return Array.from(aggregates.entries()).map(([key, value]) => {
+      const [name, unitId] = key.split('|||')
+      const unitSymbol = unitsMap[unitId]?.symbol ?? ''
+      return {
+        name,
+        unit: unitSymbol,
       const [name, unit] = key.split('|||')
       return {
         name,
@@ -103,6 +120,12 @@ export default function DashboardView({ programs, facilities, employees, samples
         count: value.count,
       }
     })
+  }, [filteredSamples, facilityMap, unitsMap])
+
+  const timeseries = useMemo(
+    () => buildTimeseries(filteredSamples.map((sample) => ({ ...sample, date: getSampleDateKey(sample) }))),
+    [filteredSamples]
+  )
   }, [filteredSamples, facilityMap])
 
   const timeseries = useMemo(() => buildTimeseries(filteredSamples), [filteredSamples])
@@ -335,4 +358,67 @@ export default function DashboardView({ programs, facilities, employees, samples
       </div>
     </section>
   )
+}
+
+const programShape = PropTypes.shape({
+  id: PropTypes.string.isRequired,
+  name: PropTypes.string.isRequired,
+  description: PropTypes.string,
+  status: PropTypes.string,
+  color: PropTypes.string,
+})
+
+const facilitySampleTypeShape = PropTypes.shape({
+  id: PropTypes.string.isRequired,
+  name: PropTypes.string.isRequired,
+  unitId: PropTypes.string.isRequired,
+})
+
+const facilityShape = PropTypes.shape({
+  id: PropTypes.string.isRequired,
+  name: PropTypes.string.isRequired,
+  location: PropTypes.string,
+  manager: PropTypes.string,
+  status: PropTypes.string,
+  programId: PropTypes.string.isRequired,
+  sampleTypes: PropTypes.arrayOf(facilitySampleTypeShape).isRequired,
+})
+
+const employeeShape = PropTypes.shape({
+  id: PropTypes.string.isRequired,
+  name: PropTypes.string.isRequired,
+  position: PropTypes.string,
+  department: PropTypes.string,
+  email: PropTypes.string,
+  phone: PropTypes.string,
+  active: PropTypes.bool.isRequired,
+})
+
+const unitShape = PropTypes.shape({
+  id: PropTypes.string.isRequired,
+  name: PropTypes.string.isRequired,
+  symbol: PropTypes.string.isRequired,
+  description: PropTypes.string,
+  active: PropTypes.bool.isRequired,
+})
+
+const sampleShape = PropTypes.shape({
+  id: PropTypes.string.isRequired,
+  capturedAt: PropTypes.string,
+  date: PropTypes.string,
+  programId: PropTypes.string.isRequired,
+  facilityId: PropTypes.string.isRequired,
+  sampleTypeId: PropTypes.string.isRequired,
+  value: PropTypes.number.isRequired,
+  employeeId: PropTypes.string,
+  note: PropTypes.string,
+  createdAt: PropTypes.string,
+})
+
+DashboardView.propTypes = {
+  programs: PropTypes.arrayOf(programShape).isRequired,
+  facilities: PropTypes.arrayOf(facilityShape).isRequired,
+  employees: PropTypes.arrayOf(employeeShape).isRequired,
+  units: PropTypes.arrayOf(unitShape).isRequired,
+  samples: PropTypes.arrayOf(sampleShape).isRequired,
 }

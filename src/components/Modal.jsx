@@ -1,3 +1,5 @@
+import PropTypes from 'prop-types'
+
 export default function Modal({ title, onClose, children, footer }) {
   return (
     <div className="modal-backdrop">
@@ -13,4 +15,15 @@ export default function Modal({ title, onClose, children, footer }) {
       </div>
     </div>
   )
+}
+
+Modal.propTypes = {
+  title: PropTypes.string.isRequired,
+  onClose: PropTypes.func.isRequired,
+  children: PropTypes.node.isRequired,
+  footer: PropTypes.node,
+}
+
+Modal.defaultProps = {
+  footer: null,
 }

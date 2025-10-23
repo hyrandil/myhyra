@@ -23,7 +23,10 @@ Für einen Produktionsbuild:
 
 ```bash
 npm run build
+npm run preview
 ```
+
+Der Vorschau-Server für den Build ist anschließend unter <http://localhost:4173> erreichbar.
 
 ## Technologie-Stack
 

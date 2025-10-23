@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import PropTypes from 'prop-types'
 import Modal from './Modal'
 
 const createUnitId = () => {
@@ -205,4 +206,19 @@ export default function MeasurementUnitsView({ units, onCreate, onUpdate, onTogg
       ) : null}
     </section>
   )
+}
+
+const unitShape = PropTypes.shape({
+  id: PropTypes.string.isRequired,
+  name: PropTypes.string.isRequired,
+  symbol: PropTypes.string.isRequired,
+  description: PropTypes.string,
+  active: PropTypes.bool.isRequired,
+})
+
+MeasurementUnitsView.propTypes = {
+  units: PropTypes.arrayOf(unitShape).isRequired,
+  onCreate: PropTypes.func.isRequired,
+  onUpdate: PropTypes.func.isRequired,
+  onToggle: PropTypes.func.isRequired,
 }

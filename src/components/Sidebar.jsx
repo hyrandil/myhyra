@@ -1,8 +1,11 @@
+import PropTypes from 'prop-types'
+
 const MODULES = [
   { id: 'dashboard', label: 'Auswertungen', icon: '📊' },
   { id: 'samples', label: 'Proben', icon: '🔬' },
   { id: 'programs', label: 'Programme', icon: '🧪' },
   { id: 'facilities', label: 'Anlagen', icon: '🏭' },
+  { id: 'units', label: 'Messeinheiten', icon: '⚖️' },
   { id: 'employees', label: 'Mitarbeiter', icon: '👥' },
 ]
 
@@ -39,4 +42,9 @@ export default function Sidebar({ activeModule, onSelect }) {
       </div>
     </aside>
   )
+}
+
+Sidebar.propTypes = {
+  activeModule: PropTypes.string.isRequired,
+  onSelect: PropTypes.func.isRequired,
 }

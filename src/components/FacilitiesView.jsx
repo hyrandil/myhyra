@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import PropTypes from 'prop-types'
 import Modal from './Modal'
 
 const statusOptions = ['Aktiv', 'Wartung', 'Stillstand']
@@ -19,6 +20,7 @@ const createSampleTypeId = () => {
   return `stype-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`
 }
 
+const createEmptyFacility = (defaultUnitId = '') => ({
 const createEmptyFacility = () => ({
   id: null,
   name: '',
@@ -27,6 +29,11 @@ const createEmptyFacility = () => ({
   manager: '',
   status: 'Aktiv',
   sampleTypes: [
+    { id: createSampleTypeId(), name: '', unitId: defaultUnitId },
+  ],
+})
+
+export default function FacilitiesView({ facilities, programs, units, onCreate, onUpdate }) {
     { id: createSampleTypeId(), name: '', unit: '' },
   ],
 })
@@ -43,6 +50,14 @@ export default function FacilitiesView({ facilities, programs, onCreate, onUpdat
   }, [facilities, filterProgram])
 
   const programMap = useMemo(() => Object.fromEntries(programs.map((program) => [program.id, program])), [programs])
+  const unitsMap = useMemo(() => Object.fromEntries(units.map((unit) => [unit.id, unit])), [units])
+  const defaultUnitId = useMemo(
+    () => units.find((unit) => unit.active)?.id ?? units[0]?.id ?? '',
+    [units]
+  )
+
+  const openCreateForm = () => {
+    setFormData(createEmptyFacility(defaultUnitId))
 
   const openCreateForm = () => {
     setFormData(createEmptyFacility())
@@ -69,6 +84,10 @@ export default function FacilitiesView({ facilities, programs, onCreate, onUpdat
   const addSampleType = () => {
     setFormData((prev) => ({
       ...prev,
+      sampleTypes: [
+        ...prev.sampleTypes,
+        { id: createSampleTypeId(), name: '', unitId: defaultUnitId },
+      ],
       sampleTypes: [...prev.sampleTypes, { id: createSampleTypeId(), name: '', unit: '' }],
     }))
   }
@@ -99,6 +118,10 @@ export default function FacilitiesView({ facilities, programs, onCreate, onUpdat
     const cleanedSampleTypes = formData.sampleTypes.map((type) => ({
       ...type,
       name: type.name.trim(),
+      unitId: type.unitId,
+    }))
+
+    if (cleanedSampleTypes.some((type) => !type.name || !type.unitId)) {
       unit: type.unit.trim(),
     }))
 
@@ -177,6 +200,7 @@ export default function FacilitiesView({ facilities, programs, onCreate, onUpdat
                 {facility.sampleTypes.map((type) => (
                   <li key={type.id} className="chip">
                     <span className="chip__label">{type.name}</span>
+                    <span className="chip__unit">{unitsMap[type.unitId]?.symbol ?? '—'}</span>
                     <span className="chip__unit">{type.unit}</span>
                   </li>
                 ))}
@@ -298,6 +322,18 @@ export default function FacilitiesView({ facilities, programs, onCreate, onUpdat
                   </label>
                   <label>
                     <span>Einheit</span>
+                    <select
+                      value={type.unitId}
+                      onChange={(event) => updateSampleType(type.id, { unitId: event.target.value })}
+                    >
+                      <option value="">Bitte wählen</option>
+                      {units.map((unit) => (
+                        <option key={unit.id} value={unit.id} disabled={!unit.active && unit.id !== type.unitId}>
+                          {unit.symbol} – {unit.name}
+                          {!unit.active ? ' (inaktiv)' : ''}
+                        </option>
+                      ))}
+                    </select>
                     <input
                       value={type.unit}
                       onChange={(event) => updateSampleType(type.id, { unit: event.target.value })}
@@ -320,4 +356,44 @@ export default function FacilitiesView({ facilities, programs, onCreate, onUpdat
       ) : null}
     </section>
   )
+}
+
+const programShape = PropTypes.shape({
+  id: PropTypes.string.isRequired,
+  name: PropTypes.string.isRequired,
+  description: PropTypes.string,
+  status: PropTypes.string,
+  color: PropTypes.string,
+})
+
+const sampleTypeShape = PropTypes.shape({
+  id: PropTypes.string.isRequired,
+  name: PropTypes.string.isRequired,
+  unitId: PropTypes.string.isRequired,
+})
+
+const facilityShape = PropTypes.shape({
+  id: PropTypes.string.isRequired,
+  name: PropTypes.string.isRequired,
+  location: PropTypes.string,
+  manager: PropTypes.string,
+  status: PropTypes.string.isRequired,
+  programId: PropTypes.string.isRequired,
+  sampleTypes: PropTypes.arrayOf(sampleTypeShape).isRequired,
+})
+
+const unitShape = PropTypes.shape({
+  id: PropTypes.string.isRequired,
+  name: PropTypes.string.isRequired,
+  symbol: PropTypes.string.isRequired,
+  description: PropTypes.string,
+  active: PropTypes.bool.isRequired,
+})
+
+FacilitiesView.propTypes = {
+  facilities: PropTypes.arrayOf(facilityShape).isRequired,
+  programs: PropTypes.arrayOf(programShape).isRequired,
+  units: PropTypes.arrayOf(unitShape).isRequired,
+  onCreate: PropTypes.func.isRequired,
+  onUpdate: PropTypes.func.isRequired,
 }

@@ -1,4 +1,32 @@
 import { useMemo, useState } from 'react'
+import PropTypes from 'prop-types'
+import Modal from './Modal'
+
+const toDateKey = (value) => {
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return ''
+  const pad = (input) => String(input).padStart(2, '0')
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`
+}
+
+const toLocalDateTimeInput = (value = new Date()) => {
+  const date = value instanceof Date ? value : new Date(value)
+  if (Number.isNaN(date.getTime())) return ''
+  const pad = (input) => String(input).padStart(2, '0')
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(
+    date.getMinutes()
+  )}`
+}
+
+const formatDateTime = (value) => {
+  const date = value instanceof Date ? value : new Date(value)
+  if (Number.isNaN(date.getTime())) return '—'
+  return date.toLocaleString('de-DE', { dateStyle: 'short', timeStyle: 'short' })
+}
+
+const createEmptyForm = (employeeId) => ({
+  id: null,
+  capturedAt: toLocalDateTimeInput(new Date()),
 import Modal from './Modal'
 
 const createEmptyForm = () => ({
@@ -8,6 +36,11 @@ const createEmptyForm = () => ({
   facilityId: '',
   sampleTypeId: '',
   value: '',
+  employeeId: employeeId ?? '',
+  note: '',
+})
+
+const createSampleId = () => {
   employeeId: '',
   note: '',
 })
@@ -20,6 +53,18 @@ const createId = () => {
   return `sample-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`
 }
 
+const createDraftId = () => {
+  const { crypto } = globalThis
+  if (crypto?.randomUUID) {
+    return crypto.randomUUID()
+  }
+  return `draft-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`
+}
+
+const validateSample = (data, availableSampleTypes) => {
+  const errors = {}
+  if (!data.capturedAt) {
+    errors.capturedAt = 'Bitte Datum und Uhrzeit angeben.'
 const validateSample = (data, availableSampleTypes) => {
   const errors = {}
   if (!data.date) {
@@ -41,6 +86,9 @@ const validateSample = (data, availableSampleTypes) => {
   } else if (Number.isNaN(Number(data.value))) {
     errors.value = 'Messwert muss eine Zahl sein.'
   }
+  return errors
+}
+
   if (!data.employeeId) {
     errors.employeeId = 'Mitarbeiter auswählen.'
   }
@@ -53,10 +101,12 @@ export default function SamplesView({
   programs,
   facilities,
   employees,
+  units,
   samples,
   onCreate,
   onUpdate,
   onDelete,
+  currentEmployeeId,
 }) {
   const [filters, setFilters] = useState({
     dateFrom: '',
@@ -67,6 +117,10 @@ export default function SamplesView({
     employeeId: '',
   })
   const [showForm, setShowForm] = useState(false)
+  const [formData, setFormData] = useState(() => createEmptyForm(currentEmployeeId))
+  const [errors, setErrors] = useState({})
+  const [editingSampleId, setEditingSampleId] = useState(null)
+  const [drafts, setDrafts] = useState([])
   const [formData, setFormData] = useState(createEmptyForm)
   const [errors, setErrors] = useState({})
   const [editingSampleId, setEditingSampleId] = useState(null)
@@ -74,6 +128,7 @@ export default function SamplesView({
   const programMap = useMemo(() => Object.fromEntries(programs.map((p) => [p.id, p])), [programs])
   const facilityMap = useMemo(() => Object.fromEntries(facilities.map((f) => [f.id, f])), [facilities])
   const employeeMap = useMemo(() => Object.fromEntries(employees.map((e) => [e.id, e])), [employees])
+  const unitsMap = useMemo(() => Object.fromEntries(units.map((unit) => [unit.id, unit])), [units])
 
   const filteredFacilities = useMemo(() => {
     if (!formData.programId) return facilities
@@ -86,6 +141,18 @@ export default function SamplesView({
   }, [facilities, formData.facilityId])
 
   const selectedSampleType = availableSampleTypes.find((type) => type.id === formData.sampleTypeId)
+  const selectedUnit = selectedSampleType ? unitsMap[selectedSampleType.unitId] : null
+  const currentEmployee = currentEmployeeId ? employeeMap[currentEmployeeId] : null
+
+  const filteredSamples = useMemo(() => {
+    return samples.filter((sample) => {
+      if (filters.programId && sample.programId !== filters.programId) return false
+      if (filters.facilityId && sample.facilityId !== filters.facilityId) return false
+      if (filters.sampleTypeId && sample.sampleTypeId !== filters.sampleTypeId) return false
+      if (filters.employeeId && sample.employeeId !== filters.employeeId) return false
+      const sampleDateKey = sample.date ?? (sample.capturedAt ? toDateKey(sample.capturedAt) : '')
+      if (filters.dateFrom && sampleDateKey < filters.dateFrom) return false
+      if (filters.dateTo && sampleDateKey > filters.dateTo) return false
 
   const activeEmployees = useMemo(() => employees.filter((employee) => employee.active), [employees])
 
@@ -115,6 +182,7 @@ export default function SamplesView({
 
   const sortedSamples = useMemo(() => {
     return [...filteredSamples].sort((a, b) => {
+      const dateDiff = new Date(b.capturedAt ?? b.date) - new Date(a.capturedAt ?? a.date)
       const dateDiff = new Date(b.date) - new Date(a.date)
       if (dateDiff !== 0) return dateDiff
       return new Date(b.createdAt) - new Date(a.createdAt)
@@ -132,6 +200,7 @@ export default function SamplesView({
   }, [facilities, filters.facilityId])
 
   const resetForm = () => {
+    setFormData(createEmptyForm(currentEmployeeId))
     setFormData(createEmptyForm())
     setErrors({})
     setEditingSampleId(null)
@@ -145,11 +214,13 @@ export default function SamplesView({
   const openEditForm = (sample) => {
     setFormData({
       id: sample.id,
+      capturedAt: toLocalDateTimeInput(sample.capturedAt ?? sample.date),
       date: sample.date,
       programId: sample.programId,
       facilityId: sample.facilityId,
       sampleTypeId: sample.sampleTypeId,
       value: sample.value.toString(),
+      employeeId: sample.employeeId ?? currentEmployeeId,
       employeeId: sample.employeeId,
       note: sample.note || '',
     })
@@ -182,6 +253,11 @@ export default function SamplesView({
       return
     }
 
+    const capturedAtIso = new Date(formData.capturedAt).toISOString()
+    const payload = {
+      id: formData.id ?? createSampleId(),
+      capturedAt: capturedAtIso,
+      date: toDateKey(formData.capturedAt),
     const payload = {
       id: formData.id ?? createId(),
       date: formData.date,
@@ -189,6 +265,7 @@ export default function SamplesView({
       facilityId: formData.facilityId,
       sampleTypeId: formData.sampleTypeId,
       value: Number(formData.value),
+      employeeId: formData.employeeId || currentEmployeeId,
       employeeId: formData.employeeId,
       note: formData.note?.trim() || '',
       createdAt: formData.id
@@ -207,11 +284,55 @@ export default function SamplesView({
   }
 
   const handleDelete = (sample) => {
+    const timestamp = sample.capturedAt ?? sample.date
+    if (window.confirm(`Probe vom ${formatDateTime(timestamp)} wirklich löschen?`)) {
     if (window.confirm(`Probe vom ${formatDate(sample.date)} wirklich löschen?`)) {
       onDelete(sample.id)
     }
   }
 
+  const handleStoreDraft = () => {
+    const draftPayload = {
+      draftId: createDraftId(),
+      formData: { ...formData, employeeId: currentEmployeeId || formData.employeeId },
+      editingSampleId,
+      savedAt: new Date().toISOString(),
+    }
+
+    setDrafts((prev) => {
+      if (editingSampleId) {
+        const existingIndex = prev.findIndex((draft) => draft.editingSampleId === editingSampleId)
+        if (existingIndex !== -1) {
+          const next = [...prev]
+          next[existingIndex] = { ...draftPayload, draftId: prev[existingIndex].draftId }
+          return next
+        }
+      }
+      return [...prev, draftPayload]
+    })
+
+    setShowForm(false)
+    setErrors({})
+    resetForm()
+  }
+
+  const resumeDraft = (draftId) => {
+    const draft = drafts.find((item) => item.draftId === draftId)
+    if (!draft) return
+    setDrafts((prev) => prev.filter((item) => item.draftId !== draftId))
+    setFormData(draft.formData)
+    setEditingSampleId(draft.editingSampleId)
+    setErrors({})
+    setShowForm(true)
+  }
+
+  const removeDraft = (draftId) => {
+    setDrafts((prev) => prev.filter((item) => item.draftId !== draftId))
+  }
+
+  const exportCsv = () => {
+    const header = [
+      'Datum & Uhrzeit',
   const exportCsv = () => {
     const header = [
       'Datum',
@@ -228,6 +349,10 @@ export default function SamplesView({
       const program = programMap[sample.programId]
       const facility = facilityMap[sample.facilityId]
       const sampleType = facility?.sampleTypes.find((type) => type.id === sample.sampleTypeId)
+      const unitSymbol = sampleType ? unitsMap[sampleType.unitId]?.symbol ?? '' : ''
+      const employee = employeeMap[sample.employeeId]
+      return [
+        formatDateTime(sample.capturedAt ?? sample.date),
       const employee = employeeMap[sample.employeeId]
       const unit = sampleType?.unit ?? ''
       return [
@@ -236,6 +361,7 @@ export default function SamplesView({
         facility?.name ?? '',
         sampleType?.name ?? '',
         String(sample.value).replace('.', ','),
+        unitSymbol,
         unit,
         employee ? `${employee.name}` : '',
         sample.note ?? '',
@@ -359,6 +485,48 @@ export default function SamplesView({
         </div>
       </div>
 
+      {drafts.length > 0 ? (
+        <div className="card drafts">
+          <div className="table-meta">
+            <h3>Aktive Messungen</h3>
+            <span>{drafts.length} Entwürfe</span>
+          </div>
+          <ul className="draft-list">
+            {drafts.map((draft) => {
+              const draftProgram = programMap[draft.formData.programId]
+              const draftFacility = facilityMap[draft.formData.facilityId]
+              const draftSampleType = draftFacility?.sampleTypes.find(
+                (type) => type.id === draft.formData.sampleTypeId
+              )
+              const draftUnit = draftSampleType
+                ? unitsMap[draftSampleType.unitId]?.symbol ?? ''
+                : ''
+              return (
+                <li key={draft.draftId} className="draft-list__item">
+                  <div className="draft-list__meta">
+                    <strong>{draftSampleType?.name ?? 'Unvollständig'}</strong>
+                    <div className="draft-list__details">
+                      {draftProgram ? <span>{draftProgram.name}</span> : null}
+                      {draftFacility ? <span>{draftFacility.name}</span> : null}
+                      {draftUnit ? <span>{draftUnit}</span> : null}
+                    </div>
+                    <small>Gespeichert: {formatDateTime(draft.savedAt)}</small>
+                  </div>
+                  <div className="draft-list__actions">
+                    <button type="button" className="ghost" onClick={() => resumeDraft(draft.draftId)}>
+                      Fortsetzen
+                    </button>
+                    <button type="button" className="icon-button" onClick={() => removeDraft(draft.draftId)}>
+                      🗑️
+                    </button>
+                  </div>
+                </li>
+              )
+            })}
+          </ul>
+        </div>
+      ) : null}
+
       <div className="card">
         <div className="table-meta">
           <h3>Erfasste Proben</h3>
@@ -368,6 +536,7 @@ export default function SamplesView({
           <table>
             <thead>
               <tr>
+                <th>Datum & Uhrzeit</th>
                 <th>Datum</th>
                 <th>Programm</th>
                 <th>Anlage</th>
@@ -390,6 +559,11 @@ export default function SamplesView({
                   const program = programMap[sample.programId]
                   const facility = facilityMap[sample.facilityId]
                   const sampleType = facility?.sampleTypes.find((type) => type.id === sample.sampleTypeId)
+                  const sampleUnit = sampleType ? unitsMap[sampleType.unitId]?.symbol ?? '' : ''
+                  const employee = employeeMap[sample.employeeId]
+                  return (
+                    <tr key={sample.id}>
+                      <td>{formatDateTime(sample.capturedAt ?? sample.date)}</td>
                   const employee = employeeMap[sample.employeeId]
                   return (
                     <tr key={sample.id}>
@@ -410,11 +584,13 @@ export default function SamplesView({
                       <td>
                         <div className="badge-group">
                           <span className="badge badge--outlined">{sampleType?.name ?? 'Gelöscht'}</span>
+                          <span className="badge badge--unit">{sampleUnit}</span>
                           <span className="badge badge--unit">{sampleType?.unit ?? ''}</span>
                         </div>
                       </td>
                       <td>
                         <strong>{sample.value}</strong>
+                        {sampleUnit ? <span className="value-unit"> {sampleUnit}</span> : null}
                         {sampleType?.unit ? <span className="value-unit"> {sampleType.unit}</span> : null}
                       </td>
                       <td>{employee?.name ?? 'Unbekannt'}</td>
@@ -445,6 +621,9 @@ export default function SamplesView({
           }}
           footer={
             <div className="modal-actions">
+              <button type="button" className="ghost" onClick={handleStoreDraft}>
+                Minimieren
+              </button>
               <button type="button" className="ghost" onClick={() => setShowForm(false)}>
                 Abbrechen
               </button>
@@ -457,6 +636,14 @@ export default function SamplesView({
           <form id="sample-form" className="form" onSubmit={handleSubmit}>
             <div className="form__grid">
               <label>
+                <span>Eingabezeitpunkt</span>
+                <input
+                  type="datetime-local"
+                  name="capturedAt"
+                  value={formData.capturedAt}
+                  onChange={handleChange}
+                />
+                {errors.capturedAt ? <span className="form__error">{errors.capturedAt}</span> : null}
                 <span>Eingabedatum</span>
                 <input type="date" name="date" value={formData.date} onChange={handleChange} />
                 {errors.date ? <span className="form__error">{errors.date}</span> : null}
@@ -498,6 +685,14 @@ export default function SamplesView({
                 {errors.sampleTypeId ? <span className="form__error">{errors.sampleTypeId}</span> : null}
               </label>
               <label>
+                <span>Messwert {selectedUnit ? `(${selectedUnit.symbol})` : ''}</span>
+                <input type="number" name="value" value={formData.value} onChange={handleChange} step="any" />
+                {errors.value ? <span className="form__error">{errors.value}</span> : null}
+              </label>
+              <div className="form__info">
+                <span>Erfasst durch</span>
+                <strong>{currentEmployee ? currentEmployee.name : 'Unbekannt'}</strong>
+              </div>
                 <span>Messwert {selectedSampleType ? `(${selectedSampleType.unit})` : ''}</span>
                 <input type="number" name="value" value={formData.value} onChange={handleChange} step="any" />
                 {errors.value ? <span className="form__error">{errors.value}</span> : null}
@@ -524,4 +719,75 @@ export default function SamplesView({
       ) : null}
     </section>
   )
+}
+
+const programShape = PropTypes.shape({
+  id: PropTypes.string.isRequired,
+  name: PropTypes.string.isRequired,
+  description: PropTypes.string,
+  status: PropTypes.string,
+  color: PropTypes.string,
+})
+
+const facilitySampleTypeShape = PropTypes.shape({
+  id: PropTypes.string.isRequired,
+  name: PropTypes.string.isRequired,
+  unitId: PropTypes.string.isRequired,
+})
+
+const facilityShape = PropTypes.shape({
+  id: PropTypes.string.isRequired,
+  name: PropTypes.string.isRequired,
+  location: PropTypes.string,
+  manager: PropTypes.string,
+  status: PropTypes.string,
+  programId: PropTypes.string.isRequired,
+  sampleTypes: PropTypes.arrayOf(facilitySampleTypeShape).isRequired,
+})
+
+const employeeShape = PropTypes.shape({
+  id: PropTypes.string.isRequired,
+  name: PropTypes.string.isRequired,
+  position: PropTypes.string,
+  department: PropTypes.string,
+  email: PropTypes.string,
+  phone: PropTypes.string,
+  active: PropTypes.bool.isRequired,
+})
+
+const unitShape = PropTypes.shape({
+  id: PropTypes.string.isRequired,
+  name: PropTypes.string.isRequired,
+  symbol: PropTypes.string.isRequired,
+  description: PropTypes.string,
+  active: PropTypes.bool.isRequired,
+})
+
+const sampleShape = PropTypes.shape({
+  id: PropTypes.string.isRequired,
+  capturedAt: PropTypes.string,
+  date: PropTypes.string,
+  programId: PropTypes.string.isRequired,
+  facilityId: PropTypes.string.isRequired,
+  sampleTypeId: PropTypes.string.isRequired,
+  value: PropTypes.number.isRequired,
+  employeeId: PropTypes.string,
+  note: PropTypes.string,
+  createdAt: PropTypes.string,
+})
+
+SamplesView.propTypes = {
+  programs: PropTypes.arrayOf(programShape).isRequired,
+  facilities: PropTypes.arrayOf(facilityShape).isRequired,
+  employees: PropTypes.arrayOf(employeeShape).isRequired,
+  units: PropTypes.arrayOf(unitShape).isRequired,
+  samples: PropTypes.arrayOf(sampleShape).isRequired,
+  onCreate: PropTypes.func.isRequired,
+  onUpdate: PropTypes.func.isRequired,
+  onDelete: PropTypes.func.isRequired,
+  currentEmployeeId: PropTypes.string,
+}
+
+SamplesView.defaultProps = {
+  currentEmployeeId: '',
 }
