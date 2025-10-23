@@ -19,7 +19,7 @@ const buildTimeseries = (samples) => {
     })
 }
 
-export default function DashboardView({ programs, facilities, employees, units, samples }) {
+export default function DashboardView({ programs, facilities, employees, samples }) {
   const [filters, setFilters] = useState({
     dateFrom: '',
     dateTo: '',
@@ -29,26 +29,22 @@ export default function DashboardView({ programs, facilities, employees, units, 
   })
 
   const facilityMap = useMemo(() => Object.fromEntries(facilities.map((facility) => [facility.id, facility])), [facilities])
-  const unitsMap = useMemo(() => Object.fromEntries(units.map((unit) => [unit.id, unit])), [units])
-  const getSampleDateKey = (sample) =>
-    sample.date ?? (sample.capturedAt ? new Date(sample.capturedAt).toISOString().slice(0, 10) : '')
 
   const filteredSamples = useMemo(() => {
     return samples.filter((sample) => {
       if (filters.programId && sample.programId !== filters.programId) return false
       if (filters.facilityId && sample.facilityId !== filters.facilityId) return false
       if (filters.employeeId && sample.employeeId !== filters.employeeId) return false
-      const sampleDateKey = getSampleDateKey(sample)
-      if (filters.dateFrom && sampleDateKey < filters.dateFrom) return false
-      if (filters.dateTo && sampleDateKey > filters.dateTo) return false
+      if (filters.dateFrom && new Date(sample.date) < new Date(filters.dateFrom)) return false
+      if (filters.dateTo && new Date(sample.date) > new Date(filters.dateTo)) return false
       return true
     })
   }, [samples, filters])
 
   const todayKey = new Date().toISOString().slice(0, 10)
-  const todayCount = filteredSamples.filter((sample) => getSampleDateKey(sample) === todayKey).length
+  const todayCount = filteredSamples.filter((sample) => sample.date === todayKey).length
   const last7Count = filteredSamples.filter((sample) => {
-    const difference = daysBetween(todayKey, getSampleDateKey(sample))
+    const difference = daysBetween(todayKey, sample.date)
     return difference >= 0 && difference <= 6
   }).length
   const totalCount = filteredSamples.length
@@ -94,26 +90,22 @@ export default function DashboardView({ programs, facilities, employees, units, 
     filteredSamples.forEach((sample) => {
       const facility = facilityMap[sample.facilityId]
       const sampleType = facility?.sampleTypes.find((type) => type.id === sample.sampleTypeId)
-      const key = sampleType ? `${sampleType.name}|||${sampleType.unitId}` : 'Unbekannt|||'
+      const key = sampleType ? `${sampleType.name}|||${sampleType.unit}` : 'Unbekannt|||'
       const current = aggregates.get(key) ?? { sum: 0, count: 0 }
       aggregates.set(key, { sum: current.sum + sample.value, count: current.count + 1 })
     })
     return Array.from(aggregates.entries()).map(([key, value]) => {
-      const [name, unitId] = key.split('|||')
-      const unitSymbol = unitsMap[unitId]?.symbol ?? ''
+      const [name, unit] = key.split('|||')
       return {
         name,
-        unit: unitSymbol,
+        unit,
         average: value.count === 0 ? 0 : value.sum / value.count,
         count: value.count,
       }
     })
-  }, [filteredSamples, facilityMap, unitsMap])
+  }, [filteredSamples, facilityMap])
 
-  const timeseries = useMemo(
-    () => buildTimeseries(filteredSamples.map((sample) => ({ ...sample, date: getSampleDateKey(sample) }))),
-    [filteredSamples]
-  )
+  const timeseries = useMemo(() => buildTimeseries(filteredSamples), [filteredSamples])
   const maxTimeseries = Math.max(...timeseries.map((item) => item.count), 1)
 
   const resetFilters = () => {

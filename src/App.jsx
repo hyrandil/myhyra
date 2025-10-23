@@ -6,8 +6,7 @@ import ProgramsView from './components/ProgramsView'
 import FacilitiesView from './components/FacilitiesView'
 import EmployeesView from './components/EmployeesView'
 import DashboardView from './components/DashboardView'
-import MeasurementUnitsView from './components/MeasurementUnitsView'
-import { initialPrograms, initialFacilities, initialEmployees, initialUnits } from './data/initialData'
+import { initialPrograms, initialFacilities, initialEmployees } from './data/initialData'
 
 const MODULES = {
   dashboard: 'Auswertungen',
@@ -15,7 +14,6 @@ const MODULES = {
   programs: 'Programme',
   facilities: 'Anlagen',
   employees: 'Mitarbeiter',
-  units: 'Messeinheiten',
 }
 
 export default function App() {
@@ -23,11 +21,7 @@ export default function App() {
   const [programs, setPrograms] = useState(initialPrograms)
   const [facilities, setFacilities] = useState(initialFacilities)
   const [employees, setEmployees] = useState(initialEmployees)
-  const [units, setUnits] = useState(initialUnits)
   const [samples, setSamples] = useState([])
-  const [currentEmployeeId] = useState(
-    initialEmployees.find((employee) => employee.active)?.id ?? initialEmployees[0]?.id ?? null
-  )
 
   const sortedPrograms = useMemo(
     () => [...programs].sort((a, b) => a.name.localeCompare(b.name, 'de-DE')),
@@ -42,11 +36,6 @@ export default function App() {
   const sortedEmployees = useMemo(
     () => [...employees].sort((a, b) => a.name.localeCompare(b.name, 'de-DE')),
     [employees]
-  )
-
-  const sortedUnits = useMemo(
-    () => [...units].sort((a, b) => a.name.localeCompare(b.name, 'de-DE')),
-    [units]
   )
 
   const handleCreateSample = (sample) => {
@@ -103,20 +92,6 @@ export default function App() {
     )
   }
 
-  const handleCreateUnit = (unit) => {
-    setUnits((prev) => [...prev, unit])
-  }
-
-  const handleUpdateUnit = (updatedUnit) => {
-    setUnits((prev) => prev.map((unit) => (unit.id === updatedUnit.id ? updatedUnit : unit)))
-  }
-
-  const handleToggleUnit = (unitId) => {
-    setUnits((prev) =>
-      prev.map((unit) => (unit.id === unitId ? { ...unit, active: !unit.active } : unit))
-    )
-  }
-
   const renderModule = () => {
     switch (activeModule) {
       case 'samples':
@@ -125,12 +100,10 @@ export default function App() {
             programs={sortedPrograms}
             facilities={sortedFacilities}
             employees={sortedEmployees}
-            units={sortedUnits}
             samples={samples}
             onCreate={handleCreateSample}
             onUpdate={handleUpdateSample}
             onDelete={handleDeleteSample}
-            currentEmployeeId={currentEmployeeId}
           />
         )
       case 'programs':
@@ -147,7 +120,6 @@ export default function App() {
           <FacilitiesView
             facilities={sortedFacilities}
             programs={sortedPrograms}
-            units={sortedUnits}
             onCreate={handleCreateFacility}
             onUpdate={handleUpdateFacility}
           />
@@ -161,22 +133,12 @@ export default function App() {
             onToggle={handleToggleEmployee}
           />
         )
-      case 'units':
-        return (
-          <MeasurementUnitsView
-            units={sortedUnits}
-            onCreate={handleCreateUnit}
-            onUpdate={handleUpdateUnit}
-            onToggle={handleToggleUnit}
-          />
-        )
       default:
         return (
           <DashboardView
             programs={sortedPrograms}
             facilities={sortedFacilities}
             employees={sortedEmployees}
-            units={sortedUnits}
             samples={samples}
           />
         )

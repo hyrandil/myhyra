@@ -1,69 +1,3 @@
-export const initialUnits = [
-  {
-    id: 'unit-temp-c',
-    name: 'Temperatur',
-    symbol: '°C',
-    description: 'Temperatur in Grad Celsius.',
-    active: true,
-  },
-  {
-    id: 'unit-pressure-bar',
-    name: 'Druck',
-    symbol: 'bar',
-    description: 'Druckmessung in bar.',
-    active: true,
-  },
-  {
-    id: 'unit-percent',
-    name: 'Prozentualer Anteil',
-    symbol: '%',
-    description: 'Anteile und Konzentrationen in Prozent.',
-    active: true,
-  },
-  {
-    id: 'unit-mg-l',
-    name: 'Massekonzentration',
-    symbol: 'mg/l',
-    description: 'Milligramm pro Liter.',
-    active: true,
-  },
-  {
-    id: 'unit-mg-dl',
-    name: 'Massekonzentration',
-    symbol: 'mg/dl',
-    description: 'Milligramm pro Deziliter.',
-    active: true,
-  },
-  {
-    id: 'unit-ph',
-    name: 'pH-Wert',
-    symbol: 'pH',
-    description: 'pH-Skala (säure-basen-Verhältnis).',
-    active: true,
-  },
-  {
-    id: 'unit-mmol-l',
-    name: 'Stoffmengenkonzentration',
-    symbol: 'mmol/l',
-    description: 'Millimol pro Liter.',
-    active: true,
-  },
-  {
-    id: 'unit-nl-h',
-    name: 'Volumenstrom',
-    symbol: 'Nl/h',
-    description: 'Normliter pro Stunde.',
-    active: true,
-  },
-  {
-    id: 'unit-mpa-s',
-    name: 'Dynamische Viskosität',
-    symbol: 'mPa·s',
-    description: 'Millipascalsekunden.',
-    active: true,
-  },
-]
-
 export const initialPrograms = [
   {
     id: 'prog-dest',
@@ -97,9 +31,9 @@ export const initialFacilities = [
     status: 'Aktiv',
     programId: 'prog-dest',
     sampleTypes: [
-      { id: 'temp', name: 'Temperatur', unitId: 'unit-temp-c' },
-      { id: 'druck', name: 'Druck', unitId: 'unit-pressure-bar' },
-      { id: 'ethanol', name: 'Ethanolgehalt', unitId: 'unit-percent' },
+      { id: 'temp', name: 'Temperatur', unit: '°C' },
+      { id: 'druck', name: 'Druck', unit: 'bar' },
+      { id: 'ethanol', name: 'Ethanolgehalt', unit: '%' },
     ],
   },
   {
@@ -110,9 +44,9 @@ export const initialFacilities = [
     status: 'Wartung',
     programId: 'prog-dest',
     sampleTypes: [
-      { id: 'temp', name: 'Temperatur', unitId: 'unit-temp-c' },
-      { id: 'druck', name: 'Druck', unitId: 'unit-pressure-bar' },
-      { id: 'methanol', name: 'Methanol-Restgehalt', unitId: 'unit-mg-l' },
+      { id: 'temp', name: 'Temperatur', unit: '°C' },
+      { id: 'druck', name: 'Druck', unit: 'bar' },
+      { id: 'methanol', name: 'Methanol-Restgehalt', unit: 'mg/l' },
     ],
   },
   {
@@ -123,9 +57,9 @@ export const initialFacilities = [
     status: 'Aktiv',
     programId: 'prog-fer',
     sampleTypes: [
-      { id: 'ph', name: 'pH-Wert', unitId: 'unit-ph' },
-      { id: 'glucose', name: 'Glucose', unitId: 'unit-mg-dl' },
-      { id: 'temperatur', name: 'Temperatur', unitId: 'unit-temp-c' },
+      { id: 'ph', name: 'pH-Wert', unit: 'pH' },
+      { id: 'glucose', name: 'Glucose', unit: 'mg/dl' },
+      { id: 'temperatur', name: 'Temperatur', unit: '°C' },
     ],
   },
   {
@@ -136,9 +70,9 @@ export const initialFacilities = [
     status: 'Stillstand',
     programId: 'prog-fer',
     sampleTypes: [
-      { id: 'ph', name: 'pH-Wert', unitId: 'unit-ph' },
-      { id: 'laktat', name: 'Laktat', unitId: 'unit-mmol-l' },
-      { id: 'co2', name: 'CO₂-Volumenstrom', unitId: 'unit-nl-h' },
+      { id: 'ph', name: 'pH-Wert', unit: 'pH' },
+      { id: 'laktat', name: 'Laktat', unit: 'mmol/l' },
+      { id: 'co2', name: 'CO₂-Volumenstrom', unit: 'Nl/h' },
     ],
   },
   {
@@ -149,9 +83,9 @@ export const initialFacilities = [
     status: 'Aktiv',
     programId: 'prog-syn',
     sampleTypes: [
-      { id: 'druck', name: 'Druck', unitId: 'unit-pressure-bar' },
-      { id: 'viskositaet', name: 'Viskosität', unitId: 'unit-mpa-s' },
-      { id: 'ausbeute', name: 'Ausbeute', unitId: 'unit-percent' },
+      { id: 'druck', name: 'Druck', unit: 'bar' },
+      { id: 'viskositaet', name: 'Viskosität', unit: 'mPa·s' },
+      { id: 'ausbeute', name: 'Ausbeute', unit: '%' },
     ],
   },
 ]

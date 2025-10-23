@@ -19,7 +19,7 @@ const createSampleTypeId = () => {
   return `stype-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`
 }
 
-const createEmptyFacility = (defaultUnitId = '') => ({
+const createEmptyFacility = () => ({
   id: null,
   name: '',
   programId: '',
@@ -27,11 +27,11 @@ const createEmptyFacility = (defaultUnitId = '') => ({
   manager: '',
   status: 'Aktiv',
   sampleTypes: [
-    { id: createSampleTypeId(), name: '', unitId: defaultUnitId },
+    { id: createSampleTypeId(), name: '', unit: '' },
   ],
 })
 
-export default function FacilitiesView({ facilities, programs, units, onCreate, onUpdate }) {
+export default function FacilitiesView({ facilities, programs, onCreate, onUpdate }) {
   const [showForm, setShowForm] = useState(false)
   const [formData, setFormData] = useState(createEmptyFacility)
   const [errors, setErrors] = useState({})
@@ -43,14 +43,9 @@ export default function FacilitiesView({ facilities, programs, units, onCreate, 
   }, [facilities, filterProgram])
 
   const programMap = useMemo(() => Object.fromEntries(programs.map((program) => [program.id, program])), [programs])
-  const unitsMap = useMemo(() => Object.fromEntries(units.map((unit) => [unit.id, unit])), [units])
-  const defaultUnitId = useMemo(
-    () => units.find((unit) => unit.active)?.id ?? units[0]?.id ?? '',
-    [units]
-  )
 
   const openCreateForm = () => {
-    setFormData(createEmptyFacility(defaultUnitId))
+    setFormData(createEmptyFacility())
     setErrors({})
     setShowForm(true)
   }
@@ -74,10 +69,7 @@ export default function FacilitiesView({ facilities, programs, units, onCreate, 
   const addSampleType = () => {
     setFormData((prev) => ({
       ...prev,
-      sampleTypes: [
-        ...prev.sampleTypes,
-        { id: createSampleTypeId(), name: '', unitId: defaultUnitId },
-      ],
+      sampleTypes: [...prev.sampleTypes, { id: createSampleTypeId(), name: '', unit: '' }],
     }))
   }
 
@@ -107,10 +99,10 @@ export default function FacilitiesView({ facilities, programs, units, onCreate, 
     const cleanedSampleTypes = formData.sampleTypes.map((type) => ({
       ...type,
       name: type.name.trim(),
-      unitId: type.unitId,
+      unit: type.unit.trim(),
     }))
 
-    if (cleanedSampleTypes.some((type) => !type.name || !type.unitId)) {
+    if (cleanedSampleTypes.some((type) => !type.name || !type.unit)) {
       nextErrors.sampleTypes = 'Alle Probenarten benötigen Namen und Einheit.'
     }
 
@@ -185,7 +177,7 @@ export default function FacilitiesView({ facilities, programs, units, onCreate, 
                 {facility.sampleTypes.map((type) => (
                   <li key={type.id} className="chip">
                     <span className="chip__label">{type.name}</span>
-                    <span className="chip__unit">{unitsMap[type.unitId]?.symbol ?? '—'}</span>
+                    <span className="chip__unit">{type.unit}</span>
                   </li>
                 ))}
               </ul>
@@ -306,18 +298,11 @@ export default function FacilitiesView({ facilities, programs, units, onCreate, 
                   </label>
                   <label>
                     <span>Einheit</span>
-                    <select
-                      value={type.unitId}
-                      onChange={(event) => updateSampleType(type.id, { unitId: event.target.value })}
-                    >
-                      <option value="">Bitte wählen</option>
-                      {units.map((unit) => (
-                        <option key={unit.id} value={unit.id} disabled={!unit.active && unit.id !== type.unitId}>
-                          {unit.symbol} – {unit.name}
-                          {!unit.active ? ' (inaktiv)' : ''}
-                        </option>
-                      ))}
-                    </select>
+                    <input
+                      value={type.unit}
+                      onChange={(event) => updateSampleType(type.id, { unit: event.target.value })}
+                      placeholder="z. B. mg/dl"
+                    />
                   </label>
                   <div className="form__actions">
                     <button type="button" className="icon-button" onClick={() => removeSampleType(type.id)}>

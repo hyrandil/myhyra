@@ -3,7 +3,6 @@ const MODULES = [
   { id: 'samples', label: 'Proben', icon: '🔬' },
   { id: 'programs', label: 'Programme', icon: '🧪' },
   { id: 'facilities', label: 'Anlagen', icon: '🏭' },
-  { id: 'units', label: 'Messeinheiten', icon: '⚖️' },
   { id: 'employees', label: 'Mitarbeiter', icon: '👥' },
 ]
 
