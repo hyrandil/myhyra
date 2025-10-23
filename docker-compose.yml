@@ -1,0 +1,63 @@
+services:
+  db:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: hvshop
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    volumes:
+      - db-data:/var/lib/postgresql/data
+  api:
+    build:
+      context: ./server
+      dockerfile: src/HvShop.Api/Dockerfile
+    env_file:
+      - ./.env
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      ASPNETCORE_URLS: http://+:8080
+      CONNECTIONSTRINGS__DEFAULT: Host=db;Database=hvshop;Username=postgres;Password=postgres
+    depends_on:
+      - db
+    ports:
+      - "8080:8080"
+  worker:
+    build:
+      context: ./server
+      dockerfile: src/HvShop.Worker/Dockerfile
+    env_file:
+      - ./.env
+    environment:
+      CONNECTIONSTRINGS__DEFAULT: Host=db;Database=hvshop;Username=postgres;Password=postgres
+    depends_on:
+      - db
+  web:
+    build:
+      context: ./web
+      dockerfile: Dockerfile
+    env_file:
+      - ./.env
+    environment:
+      NODE_ENV: production
+    depends_on:
+      - api
+    ports:
+      - "3000:3000"
+  proxy:
+    image: caddy:2
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./ops/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      - api
+      - web
+volumes:
+  db-data:
+  caddy-data:
+  caddy-config:
