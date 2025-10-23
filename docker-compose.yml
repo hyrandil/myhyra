@@ -1,0 +1,58 @@
+version: "3.9"
+services:
+  db:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: hvshop
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    volumes:
+      - db-data:/var/lib/postgresql/data
+  api:
+    build: ./server/src/HvShop.Api
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      ASPNETCORE_URLS: https://+:8080
+      ASPNETCORE_Kestrel__Certificates__Default__Path: /https/devcert.pfx
+      ASPNETCORE_Kestrel__Certificates__Default__Password: development
+      CONNECTIONSTRINGS__DEFAULT: Host=db;Database=hvshop;Username=postgres;Password=postgres
+      JWT_SECRET: super-secret-key
+    volumes:
+      - ./server/src/HvShop.Api/appsettings.json:/app/appsettings.json
+      - ./ops/devcert.pfx:/https/devcert.pfx:ro
+    depends_on:
+      - db
+    ports:
+      - "8080:8080"
+  worker:
+    build: ./server/src/HvShop.Worker
+    environment:
+      CONNECTIONSTRINGS__DEFAULT: Host=db;Database=hvshop;Username=postgres;Password=postgres
+    depends_on:
+      - db
+  web:
+    build: ./web
+    environment:
+      NEXT_PUBLIC_API_URL: https://localhost:8080
+    depends_on:
+      - api
+    ports:
+      - "3000:3000"
+  proxy:
+    image: caddy:2
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./ops/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      - api
+      - web
+volumes:
+  db-data:
+  caddy-data:
+  caddy-config:
