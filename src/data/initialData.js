@@ -100,6 +100,9 @@ export const initialFacilities = [
       { id: 'temp', name: 'Temperatur', unitId: 'unit-temp-c' },
       { id: 'druck', name: 'Druck', unitId: 'unit-pressure-bar' },
       { id: 'ethanol', name: 'Ethanolgehalt', unitId: 'unit-percent' },
+      { id: 'temp', name: 'Temperatur', unit: '°C' },
+      { id: 'druck', name: 'Druck', unit: 'bar' },
+      { id: 'ethanol', name: 'Ethanolgehalt', unit: '%' },
     ],
   },
   {
@@ -113,6 +116,9 @@ export const initialFacilities = [
       { id: 'temp', name: 'Temperatur', unitId: 'unit-temp-c' },
       { id: 'druck', name: 'Druck', unitId: 'unit-pressure-bar' },
       { id: 'methanol', name: 'Methanol-Restgehalt', unitId: 'unit-mg-l' },
+      { id: 'temp', name: 'Temperatur', unit: '°C' },
+      { id: 'druck', name: 'Druck', unit: 'bar' },
+      { id: 'methanol', name: 'Methanol-Restgehalt', unit: 'mg/l' },
     ],
   },
   {
@@ -126,6 +132,9 @@ export const initialFacilities = [
       { id: 'ph', name: 'pH-Wert', unitId: 'unit-ph' },
       { id: 'glucose', name: 'Glucose', unitId: 'unit-mg-dl' },
       { id: 'temperatur', name: 'Temperatur', unitId: 'unit-temp-c' },
+      { id: 'ph', name: 'pH-Wert', unit: 'pH' },
+      { id: 'glucose', name: 'Glucose', unit: 'mg/dl' },
+      { id: 'temperatur', name: 'Temperatur', unit: '°C' },
     ],
   },
   {
@@ -139,6 +148,9 @@ export const initialFacilities = [
       { id: 'ph', name: 'pH-Wert', unitId: 'unit-ph' },
       { id: 'laktat', name: 'Laktat', unitId: 'unit-mmol-l' },
       { id: 'co2', name: 'CO₂-Volumenstrom', unitId: 'unit-nl-h' },
+      { id: 'ph', name: 'pH-Wert', unit: 'pH' },
+      { id: 'laktat', name: 'Laktat', unit: 'mmol/l' },
+      { id: 'co2', name: 'CO₂-Volumenstrom', unit: 'Nl/h' },
     ],
   },
   {
@@ -152,6 +164,9 @@ export const initialFacilities = [
       { id: 'druck', name: 'Druck', unitId: 'unit-pressure-bar' },
       { id: 'viskositaet', name: 'Viskosität', unitId: 'unit-mpa-s' },
       { id: 'ausbeute', name: 'Ausbeute', unitId: 'unit-percent' },
+      { id: 'druck', name: 'Druck', unit: 'bar' },
+      { id: 'viskositaet', name: 'Viskosität', unit: 'mPa·s' },
+      { id: 'ausbeute', name: 'Ausbeute', unit: '%' },
     ],
   },
 ]

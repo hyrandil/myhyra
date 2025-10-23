@@ -21,6 +21,7 @@ const createSampleTypeId = () => {
 }
 
 const createEmptyFacility = (defaultUnitId = '') => ({
+const createEmptyFacility = () => ({
   id: null,
   name: '',
   programId: '',
@@ -33,6 +34,11 @@ const createEmptyFacility = (defaultUnitId = '') => ({
 })
 
 export default function FacilitiesView({ facilities, programs, units, onCreate, onUpdate }) {
+    { id: createSampleTypeId(), name: '', unit: '' },
+  ],
+})
+
+export default function FacilitiesView({ facilities, programs, onCreate, onUpdate }) {
   const [showForm, setShowForm] = useState(false)
   const [formData, setFormData] = useState(createEmptyFacility)
   const [errors, setErrors] = useState({})
@@ -52,6 +58,9 @@ export default function FacilitiesView({ facilities, programs, units, onCreate, 
 
   const openCreateForm = () => {
     setFormData(createEmptyFacility(defaultUnitId))
+
+  const openCreateForm = () => {
+    setFormData(createEmptyFacility())
     setErrors({})
     setShowForm(true)
   }
@@ -79,6 +88,7 @@ export default function FacilitiesView({ facilities, programs, units, onCreate, 
         ...prev.sampleTypes,
         { id: createSampleTypeId(), name: '', unitId: defaultUnitId },
       ],
+      sampleTypes: [...prev.sampleTypes, { id: createSampleTypeId(), name: '', unit: '' }],
     }))
   }
 
@@ -112,6 +122,10 @@ export default function FacilitiesView({ facilities, programs, units, onCreate, 
     }))
 
     if (cleanedSampleTypes.some((type) => !type.name || !type.unitId)) {
+      unit: type.unit.trim(),
+    }))
+
+    if (cleanedSampleTypes.some((type) => !type.name || !type.unit)) {
       nextErrors.sampleTypes = 'Alle Probenarten benötigen Namen und Einheit.'
     }
 
@@ -187,6 +201,7 @@ export default function FacilitiesView({ facilities, programs, units, onCreate, 
                   <li key={type.id} className="chip">
                     <span className="chip__label">{type.name}</span>
                     <span className="chip__unit">{unitsMap[type.unitId]?.symbol ?? '—'}</span>
+                    <span className="chip__unit">{type.unit}</span>
                   </li>
                 ))}
               </ul>
@@ -319,6 +334,11 @@ export default function FacilitiesView({ facilities, programs, units, onCreate, 
                         </option>
                       ))}
                     </select>
+                    <input
+                      value={type.unit}
+                      onChange={(event) => updateSampleType(type.id, { unit: event.target.value })}
+                      placeholder="z. B. mg/dl"
+                    />
                   </label>
                   <div className="form__actions">
                     <button type="button" className="icon-button" onClick={() => removeSampleType(type.id)}>

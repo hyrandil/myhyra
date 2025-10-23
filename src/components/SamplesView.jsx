@@ -27,6 +27,11 @@ const formatDateTime = (value) => {
 const createEmptyForm = (employeeId) => ({
   id: null,
   capturedAt: toLocalDateTimeInput(new Date()),
+import Modal from './Modal'
+
+const createEmptyForm = () => ({
+  id: null,
+  date: new Date().toISOString().slice(0, 10),
   programId: '',
   facilityId: '',
   sampleTypeId: '',
@@ -36,6 +41,11 @@ const createEmptyForm = (employeeId) => ({
 })
 
 const createSampleId = () => {
+  employeeId: '',
+  note: '',
+})
+
+const createId = () => {
   const { crypto } = globalThis
   if (crypto?.randomUUID) {
     return crypto.randomUUID()
@@ -55,6 +65,10 @@ const validateSample = (data, availableSampleTypes) => {
   const errors = {}
   if (!data.capturedAt) {
     errors.capturedAt = 'Bitte Datum und Uhrzeit angeben.'
+const validateSample = (data, availableSampleTypes) => {
+  const errors = {}
+  if (!data.date) {
+    errors.date = 'Bitte Datum angeben.'
   }
   if (!data.programId) {
     errors.programId = 'Programm auswählen.'
@@ -74,6 +88,14 @@ const validateSample = (data, availableSampleTypes) => {
   }
   return errors
 }
+
+  if (!data.employeeId) {
+    errors.employeeId = 'Mitarbeiter auswählen.'
+  }
+  return errors
+}
+
+const formatDate = (value) => new Date(value).toLocaleDateString('de-DE')
 
 export default function SamplesView({
   programs,
@@ -99,6 +121,9 @@ export default function SamplesView({
   const [errors, setErrors] = useState({})
   const [editingSampleId, setEditingSampleId] = useState(null)
   const [drafts, setDrafts] = useState([])
+  const [formData, setFormData] = useState(createEmptyForm)
+  const [errors, setErrors] = useState({})
+  const [editingSampleId, setEditingSampleId] = useState(null)
 
   const programMap = useMemo(() => Object.fromEntries(programs.map((p) => [p.id, p])), [programs])
   const facilityMap = useMemo(() => Object.fromEntries(facilities.map((f) => [f.id, f])), [facilities])
@@ -128,6 +153,29 @@ export default function SamplesView({
       const sampleDateKey = sample.date ?? (sample.capturedAt ? toDateKey(sample.capturedAt) : '')
       if (filters.dateFrom && sampleDateKey < filters.dateFrom) return false
       if (filters.dateTo && sampleDateKey > filters.dateTo) return false
+
+  const activeEmployees = useMemo(() => employees.filter((employee) => employee.active), [employees])
+
+  const filteredSamples = useMemo(() => {
+    return samples.filter((sample) => {
+      if (filters.programId && sample.programId !== filters.programId) {
+        return false
+      }
+      if (filters.facilityId && sample.facilityId !== filters.facilityId) {
+        return false
+      }
+      if (filters.sampleTypeId && sample.sampleTypeId !== filters.sampleTypeId) {
+        return false
+      }
+      if (filters.employeeId && sample.employeeId !== filters.employeeId) {
+        return false
+      }
+      if (filters.dateFrom && new Date(sample.date) < new Date(filters.dateFrom)) {
+        return false
+      }
+      if (filters.dateTo && new Date(sample.date) > new Date(filters.dateTo)) {
+        return false
+      }
       return true
     })
   }, [samples, filters])
@@ -135,6 +183,7 @@ export default function SamplesView({
   const sortedSamples = useMemo(() => {
     return [...filteredSamples].sort((a, b) => {
       const dateDiff = new Date(b.capturedAt ?? b.date) - new Date(a.capturedAt ?? a.date)
+      const dateDiff = new Date(b.date) - new Date(a.date)
       if (dateDiff !== 0) return dateDiff
       return new Date(b.createdAt) - new Date(a.createdAt)
     })
@@ -152,6 +201,7 @@ export default function SamplesView({
 
   const resetForm = () => {
     setFormData(createEmptyForm(currentEmployeeId))
+    setFormData(createEmptyForm())
     setErrors({})
     setEditingSampleId(null)
   }
@@ -165,11 +215,13 @@ export default function SamplesView({
     setFormData({
       id: sample.id,
       capturedAt: toLocalDateTimeInput(sample.capturedAt ?? sample.date),
+      date: sample.date,
       programId: sample.programId,
       facilityId: sample.facilityId,
       sampleTypeId: sample.sampleTypeId,
       value: sample.value.toString(),
       employeeId: sample.employeeId ?? currentEmployeeId,
+      employeeId: sample.employeeId,
       note: sample.note || '',
     })
     setEditingSampleId(sample.id)
@@ -206,11 +258,15 @@ export default function SamplesView({
       id: formData.id ?? createSampleId(),
       capturedAt: capturedAtIso,
       date: toDateKey(formData.capturedAt),
+    const payload = {
+      id: formData.id ?? createId(),
+      date: formData.date,
       programId: formData.programId,
       facilityId: formData.facilityId,
       sampleTypeId: formData.sampleTypeId,
       value: Number(formData.value),
       employeeId: formData.employeeId || currentEmployeeId,
+      employeeId: formData.employeeId,
       note: formData.note?.trim() || '',
       createdAt: formData.id
         ? samples.find((sample) => sample.id === formData.id)?.createdAt
@@ -230,6 +286,7 @@ export default function SamplesView({
   const handleDelete = (sample) => {
     const timestamp = sample.capturedAt ?? sample.date
     if (window.confirm(`Probe vom ${formatDateTime(timestamp)} wirklich löschen?`)) {
+    if (window.confirm(`Probe vom ${formatDate(sample.date)} wirklich löschen?`)) {
       onDelete(sample.id)
     }
   }
@@ -276,6 +333,9 @@ export default function SamplesView({
   const exportCsv = () => {
     const header = [
       'Datum & Uhrzeit',
+  const exportCsv = () => {
+    const header = [
+      'Datum',
       'Programm',
       'Anlage',
       'Probenart',
@@ -293,11 +353,16 @@ export default function SamplesView({
       const employee = employeeMap[sample.employeeId]
       return [
         formatDateTime(sample.capturedAt ?? sample.date),
+      const employee = employeeMap[sample.employeeId]
+      const unit = sampleType?.unit ?? ''
+      return [
+        formatDate(sample.date),
         program?.name ?? '',
         facility?.name ?? '',
         sampleType?.name ?? '',
         String(sample.value).replace('.', ','),
         unitSymbol,
+        unit,
         employee ? `${employee.name}` : '',
         sample.note ?? '',
       ]
@@ -472,6 +537,7 @@ export default function SamplesView({
             <thead>
               <tr>
                 <th>Datum & Uhrzeit</th>
+                <th>Datum</th>
                 <th>Programm</th>
                 <th>Anlage</th>
                 <th>Probenart</th>
@@ -498,6 +564,10 @@ export default function SamplesView({
                   return (
                     <tr key={sample.id}>
                       <td>{formatDateTime(sample.capturedAt ?? sample.date)}</td>
+                  const employee = employeeMap[sample.employeeId]
+                  return (
+                    <tr key={sample.id}>
+                      <td>{formatDate(sample.date)}</td>
                       <td>
                         <span
                           className="badge badge--program"
@@ -515,11 +585,13 @@ export default function SamplesView({
                         <div className="badge-group">
                           <span className="badge badge--outlined">{sampleType?.name ?? 'Gelöscht'}</span>
                           <span className="badge badge--unit">{sampleUnit}</span>
+                          <span className="badge badge--unit">{sampleType?.unit ?? ''}</span>
                         </div>
                       </td>
                       <td>
                         <strong>{sample.value}</strong>
                         {sampleUnit ? <span className="value-unit"> {sampleUnit}</span> : null}
+                        {sampleType?.unit ? <span className="value-unit"> {sampleType.unit}</span> : null}
                       </td>
                       <td>{employee?.name ?? 'Unbekannt'}</td>
                       <td>{sample.note || '—'}</td>
@@ -572,6 +644,9 @@ export default function SamplesView({
                   onChange={handleChange}
                 />
                 {errors.capturedAt ? <span className="form__error">{errors.capturedAt}</span> : null}
+                <span>Eingabedatum</span>
+                <input type="date" name="date" value={formData.date} onChange={handleChange} />
+                {errors.date ? <span className="form__error">{errors.date}</span> : null}
               </label>
               <label>
                 <span>Programm</span>
@@ -618,6 +693,22 @@ export default function SamplesView({
                 <span>Erfasst durch</span>
                 <strong>{currentEmployee ? currentEmployee.name : 'Unbekannt'}</strong>
               </div>
+                <span>Messwert {selectedSampleType ? `(${selectedSampleType.unit})` : ''}</span>
+                <input type="number" name="value" value={formData.value} onChange={handleChange} step="any" />
+                {errors.value ? <span className="form__error">{errors.value}</span> : null}
+              </label>
+              <label>
+                <span>Mitarbeiter</span>
+                <select name="employeeId" value={formData.employeeId} onChange={handleChange}>
+                  <option value="">Bitte wählen</option>
+                  {activeEmployees.map((employee) => (
+                    <option key={employee.id} value={employee.id}>
+                      {employee.name} – {employee.department}
+                    </option>
+                  ))}
+                </select>
+                {errors.employeeId ? <span className="form__error">{errors.employeeId}</span> : null}
+              </label>
               <label className="form__full">
                 <span>Notiz (optional)</span>
                 <textarea name="note" rows={3} value={formData.note} onChange={handleChange} placeholder="Zusätzliche Beobachtungen"></textarea>

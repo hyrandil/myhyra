@@ -8,6 +8,7 @@ import EmployeesView from './components/EmployeesView'
 import DashboardView from './components/DashboardView'
 import MeasurementUnitsView from './components/MeasurementUnitsView'
 import { initialPrograms, initialFacilities, initialEmployees, initialUnits } from './data/initialData'
+import { initialPrograms, initialFacilities, initialEmployees } from './data/initialData'
 
 const MODULES = {
   dashboard: 'Auswertungen',
@@ -28,6 +29,7 @@ export default function App() {
   const [currentEmployeeId] = useState(
     initialEmployees.find((employee) => employee.active)?.id ?? initialEmployees[0]?.id ?? null
   )
+  const [samples, setSamples] = useState([])
 
   const sortedPrograms = useMemo(
     () => [...programs].sort((a, b) => a.name.localeCompare(b.name, 'de-DE')),
