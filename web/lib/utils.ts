@@ -21,7 +21,7 @@ export function deriveHostStatus(status?: string, lastSeenAt?: string | null, th
   }
 
   if (normalized === "online" || normalized === "offline") {
-    return normalized as const;
+    return normalized === "online" ? "online" : "offline";
   }
 
   return normalized.length > 0 ? normalized : "unknown";
