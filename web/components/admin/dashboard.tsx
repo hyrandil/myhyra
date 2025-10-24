@@ -16,9 +16,13 @@ import { Input } from "../ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../ui/table";
 
 function useHostData(token: string | null) {
-  return useSWR<HostSummary[]>(token ? ["hosts", token] : null, ([, t]) => getHosts(t), {
-    refreshInterval: 10_000,
-  });
+  return useSWR<HostSummary[]>(
+    token ? ["hosts", token] : null,
+    ([, authToken]: readonly [string, string]) => getHosts(authToken),
+    {
+      refreshInterval: 10_000,
+    },
+  );
 }
 
 function usePricingData() {
