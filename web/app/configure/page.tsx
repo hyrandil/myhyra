@@ -5,7 +5,7 @@ import useSWR from "swr";
 
 import type { HostSummary, PricingRule } from "../../lib/api";
 import { ApiError, CheckoutSessionPayload, createCheckoutSession, getPricing, getPublicHosts } from "../../lib/api";
-import { deriveHostStatus } from "../../lib/utils";
+import { deriveHostStatus, formatRelativeLastSeen } from "../../lib/utils";
 import { useAuth } from "../../components/auth-context";
 import { Button } from "../../components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../../components/ui/card";
@@ -21,7 +21,17 @@ function usePricing() {
   return useSWR<PricingRule>("pricing", getPricing);
 }
 
-type ConfiguratorHost = HostSummary & { computedStatus: string };
+type ConfiguratorHost = HostSummary & {
+  computedStatus: string;
+  telemetrySnapshot: {
+    cpuPct: number | null;
+    memPct: number | null;
+    memUsedMb: number | null;
+    storageUsedGb: number | null;
+    storagePct: number | null;
+    sampledAt?: string | null;
+  };
+};
 
 export default function ConfigurePage() {
   const { token } = useAuth();
@@ -39,10 +49,31 @@ export default function ConfigurePage() {
 
   const hostsWithStatus: ConfiguratorHost[] = useMemo(
     () =>
-      (hosts ?? []).map((host) => ({
-        ...host,
-        computedStatus: deriveHostStatus(host.status, host.lastSeenAt),
-      })),
+      (hosts ?? []).map((host) => {
+        const computedStatus = deriveHostStatus(host.status, host.lastSeenAt);
+        const cpuPct = host.telemetry?.cpuPct ?? null;
+        const memUsedMb = host.telemetry?.memUsedMb ?? null;
+        const memPct = host.telemetry?.memPct ?? (memUsedMb != null && host.totalRamMb > 0
+          ? Math.round((memUsedMb / host.totalRamMb) * 1000) / 10
+          : null);
+        const storageUsedGb = host.telemetry?.storageUsedGb ?? null;
+        const storagePct = storageUsedGb != null && host.totalStorageGb > 0
+          ? Math.round((storageUsedGb / host.totalStorageGb) * 1000) / 10
+          : null;
+
+        return {
+          ...host,
+          computedStatus,
+          telemetrySnapshot: {
+            cpuPct,
+            memPct,
+            memUsedMb,
+            storageUsedGb,
+            storagePct,
+            sampledAt: host.telemetry?.sampledAt ?? host.lastSeenAt,
+          },
+        };
+      }),
     [hosts],
   );
 
@@ -279,6 +310,11 @@ export default function ConfigurePage() {
             const availableRam = host.totalRamMb - host.capacity.usedRamMb;
             const availableStorage = host.totalStorageGb - host.capacity.usedStorageGb;
             const disabled = host.computedStatus.toLowerCase() !== "online";
+            const totalRamGb = host.totalRamMb / 1024;
+            const usedRamGb = host.telemetrySnapshot.memUsedMb != null
+              ? host.telemetrySnapshot.memUsedMb / 1024
+              : host.capacity.usedRamMb / 1024;
+            const usedStorageGb = host.telemetrySnapshot.storageUsedGb ?? host.capacity.usedStorageGb;
 
             return (
               <button
@@ -294,37 +330,40 @@ export default function ConfigurePage() {
                     <h3 className="text-lg font-semibold text-slate-800">{host.hostname}</h3>
                     <p className="text-xs text-slate-500">{host.ip}</p>
                   </div>
-                  <HostStatusBadge status={host.computedStatus} lastSeenAt={host.lastSeenAt} />
+                  <HostStatusBadge status={host.status} lastSeenAt={host.lastSeenAt} />
                 </div>
                 <dl className="mt-4 space-y-2 text-sm text-slate-600">
                   <div className="flex items-center justify-between">
-                    <dt>CPU</dt>
+                    <dt>CPU load</dt>
                     <dd>
-                      {host.capacity.usedCpuCores}/{host.totalCpuCores} used
+                      {host.telemetrySnapshot.cpuPct != null
+                        ? `${host.telemetrySnapshot.cpuPct.toFixed(1)}%`
+                        : `${host.capacity.cpuUtilizationPct.toFixed(1)}% (allocated)`}
                     </dd>
                   </div>
                   <div className="flex items-center justify-between">
-                    <dt>Memory</dt>
-                    <dd>
-                      {(host.capacity.usedRamMb / 1024).toFixed(1)}/{(host.totalRamMb / 1024).toFixed(1)} GB used
-                    </dd>
+                    <dt>Memory in use</dt>
+                    <dd>{`${usedRamGb.toFixed(1)}/${totalRamGb.toFixed(1)} GB`}</dd>
                   </div>
                   <div className="flex items-center justify-between">
-                    <dt>Storage</dt>
-                    <dd>
-                      {host.capacity.usedStorageGb}/{host.totalStorageGb} GB used
-                    </dd>
+                    <dt>Storage in use</dt>
+                    <dd>{`${usedStorageGb.toFixed(1)}/${host.totalStorageGb} GB`}</dd>
                   </div>
                 </dl>
                 <div className="mt-4">
                   <CapacityBar
-                    cpuPct={host.capacity.cpuUtilizationPct}
-                    ramPct={host.capacity.ramUtilizationPct}
-                    storagePct={host.capacity.storageUtilizationPct}
+                    cpuPct={host.telemetrySnapshot.cpuPct ?? host.capacity.cpuUtilizationPct}
+                    ramPct={host.telemetrySnapshot.memPct ?? host.capacity.ramUtilizationPct}
+                    storagePct={host.telemetrySnapshot.storagePct ?? host.capacity.storageUtilizationPct}
                   />
                 </div>
                 <div className="mt-4 rounded-xl bg-slate-50 p-3 text-xs text-slate-500">
                   <p>Available: {availableCpu} cores, {(availableRam / 1024).toFixed(1)} GB RAM, {availableStorage} GB storage</p>
+                  {host.telemetrySnapshot.sampledAt && (
+                    <p className="mt-1">
+                      Last heartbeat {formatRelativeLastSeen(host.telemetrySnapshot.sampledAt) ?? "just now"}
+                    </p>
+                  )}
                 </div>
               </button>
             );

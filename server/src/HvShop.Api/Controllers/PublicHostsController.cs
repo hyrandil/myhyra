@@ -32,7 +32,25 @@ public class PublicHostsController : ControllerBase
             .OrderByDescending(h => h.LastSeenAt)
             .ToListAsync(cancellationToken);
 
-        var summaries = hosts.Select(h => HostDtoMapper.ToSummary(h, utcNow)).ToList();
+        var hostIds = hosts.Select(h => h.Id).ToList();
+
+        var latestMetrics = await _db.HostMetrics
+            .AsNoTracking()
+            .Where(m => hostIds.Contains(m.HostId))
+            .OrderByDescending(m => m.Ts)
+            .ToListAsync(cancellationToken);
+
+        var metricLookup = latestMetrics
+            .DistinctBy(m => m.HostId)
+            .ToDictionary(m => m.HostId, m => m);
+
+        var summaries = hosts
+            .Select(h =>
+            {
+                metricLookup.TryGetValue(h.Id, out var metric);
+                return HostDtoMapper.ToSummary(h, utcNow, metric);
+            })
+            .ToList();
 
         return Ok(summaries);
     }

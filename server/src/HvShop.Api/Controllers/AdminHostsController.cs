@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using HvShop.Api.Models.Hosts;
+using HvShop.Domain.Entities;
 using HvShop.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -32,7 +33,15 @@ public class AdminHostsController : ControllerBase
             .OrderBy(h => h.Hostname)
             .ToListAsync(cancellationToken);
 
-        var summaries = hosts.Select(host => HostDtoMapper.ToSummary(host, utcNow)).ToList();
+        var latestMetrics = await LoadLatestMetricsAsync(hosts.Select(h => h.Id).ToList(), cancellationToken);
+
+        var summaries = hosts
+            .Select(host =>
+            {
+                latestMetrics.TryGetValue(host.Id, out var metric);
+                return HostDtoMapper.ToSummary(host, utcNow, metric);
+            })
+            .ToList();
 
         return Ok(summaries);
     }
@@ -52,15 +61,18 @@ public class AdminHostsController : ControllerBase
             return NotFound();
         }
 
-        var summary = HostDtoMapper.ToSummary(host, utcNow);
-
-        var metrics = await _db.HostMetrics
+        var metricEntities = await _db.HostMetrics
             .AsNoTracking()
             .Where(m => m.HostId == id)
             .OrderByDescending(m => m.Ts)
             .Take(50)
-            .Select(m => new HostMetricDto(m.Ts, m.CpuPct, m.MemPct, m.MemUsedMb, m.StorageUsedGb))
             .ToListAsync(cancellationToken);
+
+        var summary = HostDtoMapper.ToSummary(host, utcNow, metricEntities.FirstOrDefault());
+
+        var metrics = metricEntities
+            .Select(m => new HostMetricDto(m.Ts, m.CpuPct, m.MemPct, m.MemUsedMb, m.StorageUsedGb))
+            .ToList();
 
         var vms = host.Vms
             .OrderBy(vm => vm.Name)
@@ -100,5 +112,22 @@ public class AdminHostsController : ControllerBase
             .ToListAsync(cancellationToken);
 
         return Ok(metrics);
+    }
+    private async Task<Dictionary<Guid, HostMetric>> LoadLatestMetricsAsync(IReadOnlyCollection<Guid> hostIds, CancellationToken cancellationToken)
+    {
+        if (hostIds.Count == 0)
+        {
+            return new Dictionary<Guid, HostMetric>();
+        }
+
+        var metrics = await _db.HostMetrics
+            .AsNoTracking()
+            .Where(m => hostIds.Contains(m.HostId))
+            .OrderByDescending(m => m.Ts)
+            .ToListAsync(cancellationToken);
+
+        return metrics
+            .DistinctBy(m => m.HostId)
+            .ToDictionary(m => m.HostId, m => m);
     }
 }

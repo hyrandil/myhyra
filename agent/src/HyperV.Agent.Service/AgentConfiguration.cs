@@ -9,6 +9,7 @@ public class AgentConfiguration
     public string Hostname { get; set; } = Environment.MachineName;
     public string ConfigPath { get; set; } = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "HyperVAgent", "agent.json");
     public string LogFilePath { get; set; } = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "HyperVAgent", "logs", "agent.log");
+    public string SystemDrive { get; set; } = "C";
 
     public static AgentConfiguration Load()
     {

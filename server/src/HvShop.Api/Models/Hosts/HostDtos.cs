@@ -15,6 +15,16 @@ public sealed record HostCapacityDto(
     double RamUtilizationPct,
     double StorageUtilizationPct);
 
+public sealed record HostTelemetryDto(
+    double? CpuPct,
+    double? MemPct,
+    int? MemUsedMb,
+    double? StorageUsedGb,
+    DateTimeOffset? SampledAt)
+{
+    public static HostTelemetryDto Empty { get; } = new(null, null, null, null, null);
+}
+
 public sealed record HostSummaryDto(
     Guid Id,
     string Hostname,
@@ -29,7 +39,8 @@ public sealed record HostSummaryDto(
     int TotalRamMb,
     int TotalStorageGb,
     int VmCount,
-    HostCapacityDto Capacity);
+    HostCapacityDto Capacity,
+    HostTelemetryDto Telemetry);
 
 public sealed record HostMetricDto(
     DateTimeOffset Ts,
@@ -58,7 +69,7 @@ public sealed record HostDetailDto(
 
 public static class HostDtoMapper
 {
-    public static HostSummaryDto ToSummary(HostEntity host, DateTimeOffset utcNow)
+    public static HostSummaryDto ToSummary(HostEntity host, DateTimeOffset utcNow, HostMetric? latestMetric)
     {
         var vmCount = host.Vms?.Count ?? 0;
         var usedCpu = host.Vms?.Sum(vm => vm.CpuCores) ?? 0;
@@ -79,6 +90,15 @@ public static class HostDtoMapper
 
         var status = HostStatusOptions.ComputeStatus(host.LastSeenAt, utcNow);
 
+        var telemetry = latestMetric is null
+            ? HostTelemetryDto.Empty
+            : new HostTelemetryDto(
+                Math.Round(latestMetric.CpuPct, 1),
+                Math.Round(latestMetric.MemPct, 1),
+                latestMetric.MemUsedMb,
+                Math.Round(latestMetric.StorageUsedGb, 1),
+                latestMetric.Ts);
+
         return new HostSummaryDto(
             host.Id,
             host.Hostname,
@@ -93,6 +113,7 @@ public static class HostDtoMapper
             host.TotalRamMb,
             host.TotalStorageGb,
             vmCount,
-            capacity);
+            capacity,
+            telemetry);
     }
 }

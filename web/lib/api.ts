@@ -7,6 +7,14 @@ export type HostCapacity = {
   storageUtilizationPct: number;
 };
 
+export type HostTelemetry = {
+  cpuPct?: number | null;
+  memPct?: number | null;
+  memUsedMb?: number | null;
+  storageUsedGb?: number | null;
+  sampledAt?: string | null;
+};
+
 export type HostSummary = {
   id: string;
   hostname: string;
@@ -22,6 +30,7 @@ export type HostSummary = {
   totalStorageGb: number;
   vmCount: number;
   capacity: HostCapacity;
+  telemetry: HostTelemetry;
 };
 
 export type HostMetric = {
@@ -135,8 +144,8 @@ export function getPublicHosts() {
   return apiFetch<HostSummary[]>("/api/public/hosts");
 }
 
-export function getPricing() {
-  return apiFetch<PricingRule>("/api/pricing");
+export function getPricing(token?: string | null) {
+  return apiFetch<PricingRule>("/api/pricing", token ? { token } : undefined);
 }
 
 export function createCheckoutSession(payload: CheckoutSessionPayload, token: string) {
