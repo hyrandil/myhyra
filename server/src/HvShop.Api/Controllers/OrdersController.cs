@@ -2,6 +2,7 @@ using System;
 using System.Security.Claims;
 using HvShop.Domain.Entities;
 using HvShop.Infrastructure.Persistence;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Stripe.Checkout;
@@ -10,6 +11,7 @@ namespace HvShop.Api.Controllers;
 
 [ApiController]
 [Route("api/orders")]
+[Authorize]
 public class OrdersController : ControllerBase
 {
     private readonly ApplicationDbContext _db;

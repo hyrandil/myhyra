@@ -90,14 +90,22 @@ type ApiRequestOptions = RequestInit & { token?: string | null };
 
 async function apiFetch<T>(path: string, options: ApiRequestOptions = {}): Promise<T> {
   const { token, headers, ...init } = options;
-  const response = await fetch(`${API_URL}${path}`, {
-    ...init,
-    headers: {
-      "Content-Type": "application/json",
-      ...(headers ?? {}),
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    },
-  });
+  let response: Response;
+
+  try {
+    response = await fetch(`${API_URL}${path}`, {
+      ...init,
+      cache: init.cache ?? "no-store",
+      headers: {
+        "Content-Type": "application/json",
+        ...(headers ?? {}),
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Network request failed";
+    throw new ApiError(message, 0, null);
+  }
 
   if (response.status === 204) {
     return undefined as T;

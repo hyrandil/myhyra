@@ -1,3 +1,4 @@
+using System.Security.Claims;
 using System.Text;
 using System.Text.Json.Serialization;
 using HvShop.Domain.Entities;
@@ -46,7 +47,9 @@ builder.Services.AddAuthentication(options =>
         ValidateAudience = false,
         ValidateIssuerSigningKey = true,
         IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(builder.Configuration["JWT_SECRET"] ?? "change-me")),
-        ValidateLifetime = true
+        ValidateLifetime = true,
+        NameClaimType = ClaimTypes.NameIdentifier,
+        RoleClaimType = "role"
     };
 
     options.Events = new JwtBearerEvents
@@ -59,6 +62,13 @@ builder.Services.AddAuthentication(options =>
 
             var payload = JsonSerializer.Serialize(new { message = "Unauthorized" });
             return context.Response.WriteAsync(payload);
+        },
+        OnForbidden = context =>
+        {
+            context.Response.StatusCode = StatusCodes.Status403Forbidden;
+            context.Response.ContentType = "application/json";
+            var payload = JsonSerializer.Serialize(new { message = "Forbidden" });
+            return context.Response.WriteAsync(payload);
         }
     };
 });
@@ -69,7 +79,7 @@ builder.Services.AddAuthorization(options =>
         .RequireAuthenticatedUser()
         .Build();
 
-    options.AddPolicy("AdminOnly", policy => policy.RequireClaim("role", "admin"));
+    options.AddPolicy("AdminOnly", policy => policy.RequireRole("admin"));
 });
 
 builder.Services.AddEndpointsApiExplorer();

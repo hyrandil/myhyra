@@ -1,7 +1,7 @@
 "use client";
 
 import { formatDistanceToNow } from "date-fns";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import useSWR from "swr";
 
 import type { HostSummary, PricingRule } from "../../lib/api";
@@ -14,6 +14,9 @@ import { Button } from "../ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../ui/card";
 import { Input } from "../ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../ui/table";
+import { deriveHostStatus } from "../../lib/utils";
+
+type HostWithStatus = HostSummary & { computedStatus: string };
 
 function useHostData(token: string | null) {
   return useSWR<HostSummary[]>(
@@ -50,43 +53,54 @@ export default function AdminDashboard() {
     return <AdminLogin />;
   }
 
-  if (hostsError instanceof ApiError && hostsError.status === 401) {
+  useEffect(() => {
+    if (ready && token) {
+      void mutate();
+    }
+  }, [ready, token, mutate]);
+
+  if (hostsError instanceof ApiError && (hostsError.status === 401 || hostsError.status === 403)) {
     logout();
     return <AdminLogin />;
   }
 
+  const normalizedHosts: HostWithStatus[] | undefined = hosts?.map((host) => ({
+    ...host,
+    computedStatus: deriveHostStatus(host.status, host.lastSeenAt),
+  }));
+
   const filteredHosts = useMemo(() => {
-    if (!hosts) {
-      return [] as HostSummary[];
+    if (!normalizedHosts) {
+      return [] as HostWithStatus[];
     }
-    return hosts.filter((host) => {
+    return normalizedHosts.filter((host) => {
       const matchesStatus =
-        statusFilter === "all" || host.status.toLowerCase() === statusFilter;
+        statusFilter === "all" || host.computedStatus.toLowerCase() === statusFilter;
       const matchesSearch =
         search.trim().length === 0 ||
         host.hostname.toLowerCase().includes(search.toLowerCase()) ||
         (host.ip?.toLowerCase().includes(search.toLowerCase()) ?? false);
       return matchesStatus && matchesSearch;
     });
-  }, [hosts, search, statusFilter]);
+  }, [normalizedHosts, search, statusFilter]);
 
   const aggregates = useMemo(() => {
-    const totalHosts = hosts?.length ?? 0;
-    const online = hosts?.filter((h) => h.status.toLowerCase() === "online").length ?? 0;
+    const totalHosts = normalizedHosts?.length ?? 0;
+    const online = normalizedHosts?.filter((h) => h.computedStatus === "online").length ?? 0;
     const offline = totalHosts - online;
 
-    const totalCpu = hosts?.reduce((sum, host) => sum + host.totalCpuCores, 0) ?? 0;
-    const usedCpu = hosts?.reduce((sum, host) => sum + host.capacity.usedCpuCores, 0) ?? 0;
-    const totalRam = hosts?.reduce((sum, host) => sum + host.totalRamMb, 0) ?? 0;
-    const usedRam = hosts?.reduce((sum, host) => sum + host.capacity.usedRamMb, 0) ?? 0;
-    const totalStorage = hosts?.reduce((sum, host) => sum + host.totalStorageGb, 0) ?? 0;
-    const usedStorage = hosts?.reduce((sum, host) => sum + host.capacity.usedStorageGb, 0) ?? 0;
+    const totalCpu = normalizedHosts?.reduce((sum, host) => sum + host.totalCpuCores, 0) ?? 0;
+    const usedCpu = normalizedHosts?.reduce((sum, host) => sum + host.capacity.usedCpuCores, 0) ?? 0;
+    const totalRam = normalizedHosts?.reduce((sum, host) => sum + host.totalRamMb, 0) ?? 0;
+    const usedRam = normalizedHosts?.reduce((sum, host) => sum + host.capacity.usedRamMb, 0) ?? 0;
+    const totalStorage = normalizedHosts?.reduce((sum, host) => sum + host.totalStorageGb, 0) ?? 0;
+    const usedStorage = normalizedHosts?.reduce((sum, host) => sum + host.capacity.usedStorageGb, 0) ?? 0;
 
     const fleetCpuPct = totalCpu > 0 ? (usedCpu / totalCpu) * 100 : 0;
     const fleetRamPct = totalRam > 0 ? (usedRam / totalRam) * 100 : 0;
     const fleetStoragePct = totalStorage > 0 ? (usedStorage / totalStorage) * 100 : 0;
 
-    const recentActivity = [...(hosts ?? [])]
+    const recentActivity = [...(normalizedHosts ?? [])]
       .filter((h) => h.lastSeenAt)
       .sort((a, b) => new Date(b.lastSeenAt ?? 0).getTime() - new Date(a.lastSeenAt ?? 0).getTime())
       .slice(0, 10);
@@ -106,9 +120,13 @@ export default function AdminDashboard() {
       fleetStoragePct,
       recentActivity,
     };
-  }, [hosts]);
+  }, [normalizedHosts]);
 
-  const errorMessage = hostsError ? (hostsError instanceof ApiError ? hostsError.message : "Failed to load hosts.") : null;
+  const errorMessage = hostsError
+    ? hostsError instanceof ApiError
+      ? hostsError.message || "Failed to load hosts."
+      : "Failed to load hosts."
+    : null;
 
   return (
     <div className="space-y-8">
@@ -243,7 +261,7 @@ export default function AdminDashboard() {
                   {filteredHosts.map((host) => (
                     <TableRow key={host.id} className="cursor-pointer">
                       <TableCell>
-                        <HostStatusBadge status={host.status} lastSeenAt={host.lastSeenAt} />
+                        <HostStatusBadge status={host.computedStatus} lastSeenAt={host.lastSeenAt} />
                       </TableCell>
                       <TableCell className="font-medium text-slate-700">{host.hostname}</TableCell>
                       <TableCell>

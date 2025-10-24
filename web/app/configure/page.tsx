@@ -5,6 +5,7 @@ import useSWR from "swr";
 
 import type { HostSummary, PricingRule } from "../../lib/api";
 import { ApiError, CheckoutSessionPayload, createCheckoutSession, getPricing, getPublicHosts } from "../../lib/api";
+import { deriveHostStatus } from "../../lib/utils";
 import { useAuth } from "../../components/auth-context";
 import { Button } from "../../components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../../components/ui/card";
@@ -20,6 +21,8 @@ function usePricing() {
   return useSWR<PricingRule>("pricing", getPricing);
 }
 
+type ConfiguratorHost = HostSummary & { computedStatus: string };
+
 export default function ConfigurePage() {
   const { token } = useAuth();
   const { data: hosts, isLoading: hostsLoading, error: hostsError } = useConfiguratorHosts();
@@ -34,9 +37,18 @@ export default function ConfigurePage() {
   const [submitting, setSubmitting] = useState(false);
   const [feedback, setFeedback] = useState<string | null>(null);
 
+  const hostsWithStatus: ConfiguratorHost[] = useMemo(
+    () =>
+      (hosts ?? []).map((host) => ({
+        ...host,
+        computedStatus: deriveHostStatus(host.status, host.lastSeenAt),
+      })),
+    [hosts],
+  );
+
   const selectedHost = useMemo(
-    () => hosts?.find((host) => host.id === selectedHostId) ?? null,
-    [hosts, selectedHostId],
+    () => hostsWithStatus.find((host) => host.id === selectedHostId) ?? null,
+    [hostsWithStatus, selectedHostId],
   );
 
   const availableCapacity = useMemo(() => {
@@ -261,12 +273,12 @@ export default function ConfigurePage() {
         )}
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           {hostsLoading && <HostSkeleton />}
-          {hosts?.map((host) => {
+          {hostsWithStatus.map((host) => {
             const isSelected = host.id === selectedHostId;
             const availableCpu = host.totalCpuCores - host.capacity.usedCpuCores;
             const availableRam = host.totalRamMb - host.capacity.usedRamMb;
             const availableStorage = host.totalStorageGb - host.capacity.usedStorageGb;
-            const disabled = host.status.toLowerCase() !== "online";
+            const disabled = host.computedStatus.toLowerCase() !== "online";
 
             return (
               <button
@@ -282,7 +294,7 @@ export default function ConfigurePage() {
                     <h3 className="text-lg font-semibold text-slate-800">{host.hostname}</h3>
                     <p className="text-xs text-slate-500">{host.ip}</p>
                   </div>
-                  <HostStatusBadge status={host.status} lastSeenAt={host.lastSeenAt} />
+                  <HostStatusBadge status={host.computedStatus} lastSeenAt={host.lastSeenAt} />
                 </div>
                 <dl className="mt-4 space-y-2 text-sm text-slate-600">
                   <div className="flex items-center justify-between">
@@ -318,7 +330,7 @@ export default function ConfigurePage() {
             );
           })}
         </div>
-        {hosts && hosts.length === 0 && !hostsLoading && (
+        {hostsWithStatus.length === 0 && !hostsLoading && (
           <p className="text-sm text-slate-500">No hosts reported yet. Install an agent to begin provisioning.</p>
         )}
       </section>
