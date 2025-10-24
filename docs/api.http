@@ -1,0 +1,25 @@
+### Login
+POST https://localhost:8080/api/auth/login
+Content-Type: application/json
+
+{
+  "email": "admin@example.com",
+  "password": "ChangeMe123!"
+}
+
+### Get Hosts
+GET https://localhost:8080/api/hosts
+Authorization: Bearer {{token}}
+
+### Create VM
+POST https://localhost:8080/api/vms
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "name": "vm-sample",
+  "cpuCores": 2,
+  "memoryMb": 4096,
+  "storageGb": 50,
+  "osImage": "win2022-core"
+}
