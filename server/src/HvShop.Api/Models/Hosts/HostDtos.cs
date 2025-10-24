@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using HvShop.Domain;
 using HvShop.Domain.Entities;
+using HostEntity = HvShop.Domain.Entities.Host;
 
 namespace HvShop.Api.Models.Hosts;
 
@@ -57,7 +58,7 @@ public sealed record HostDetailDto(
 
 public static class HostDtoMapper
 {
-    public static HostSummaryDto ToSummary(Host host, DateTimeOffset utcNow)
+    public static HostSummaryDto ToSummary(HostEntity host, DateTimeOffset utcNow)
     {
         var vmCount = host.Vms?.Count ?? 0;
         var usedCpu = host.Vms?.Sum(vm => vm.CpuCores) ?? 0;

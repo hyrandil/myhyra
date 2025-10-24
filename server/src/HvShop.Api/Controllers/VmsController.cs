@@ -8,6 +8,7 @@ using HvShop.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using HostEntity = HvShop.Domain.Entities.Host;
 
 namespace HvShop.Api.Controllers;
 
@@ -61,7 +62,7 @@ public class VmsController : ControllerBase
             .Include(h => h.Vms)
             .AsQueryable();
 
-        Host? host = null;
+        HostEntity? host = null;
 
         if (request.HostId.HasValue)
         {
@@ -181,7 +182,7 @@ public class VmsController : ControllerBase
         return Guid.TryParse(sub, out var guid) ? guid : Guid.Empty;
     }
 
-    private static bool HasCapacity(Host host, CreateVmRequest request, out object capacity)
+    private static bool HasCapacity(HostEntity host, CreateVmRequest request, out object capacity)
     {
         var vms = host.Vms ?? new List<VirtualMachine>();
 
