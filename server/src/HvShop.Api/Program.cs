@@ -6,9 +6,11 @@ using HvShop.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Diagnostics.EntityFrameworkCore;
+using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
+using System.Text.Json;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -45,6 +47,19 @@ builder.Services.AddAuthentication(options =>
         ValidateIssuerSigningKey = true,
         IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(builder.Configuration["JWT_SECRET"] ?? "change-me")),
         ValidateLifetime = true
+    };
+
+    options.Events = new JwtBearerEvents
+    {
+        OnChallenge = context =>
+        {
+            context.HandleResponse();
+            context.Response.StatusCode = StatusCodes.Status401Unauthorized;
+            context.Response.ContentType = "application/json";
+
+            var payload = JsonSerializer.Serialize(new { message = "Unauthorized" });
+            return context.Response.WriteAsync(payload);
+        }
     };
 });
 
@@ -106,6 +121,22 @@ await using (var scope = app.Services.CreateAsyncScope())
             Email = adminSeedOptions.Value.Email,
             PasswordHash = BCrypt.Net.BCrypt.HashPassword(adminSeedOptions.Value.Password),
             Role = "admin"
+        });
+
+        await dbContext.SaveChangesAsync();
+    }
+
+    if (!await dbContext.PricingRules.AnyAsync(r => r.Active))
+    {
+        dbContext.PricingRules.Add(new PricingRule
+        {
+            Id = Guid.NewGuid(),
+            Name = "Default",
+            CpuPriceCents = 1500,
+            RamPriceCentsPerGb = 700,
+            StoragePriceCentsPerGb = 150,
+            Currency = "EUR",
+            Active = true
         });
 
         await dbContext.SaveChangesAsync();

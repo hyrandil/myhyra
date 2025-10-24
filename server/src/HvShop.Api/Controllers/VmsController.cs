@@ -1,9 +1,13 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Security.Claims;
+using HvShop.Domain;
 using HvShop.Domain.Entities;
 using HvShop.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
-using System.Security.Claims;
 
 namespace HvShop.Api.Controllers;
 
@@ -51,13 +55,52 @@ public class VmsController : ControllerBase
     public async Task<IActionResult> CreateAsync([FromBody] CreateVmRequest request, CancellationToken cancellationToken)
     {
         var ownerId = GetUserId();
-        var host = request.HostId.HasValue
-            ? await _db.Hosts.FirstOrDefaultAsync(h => h.Id == request.HostId.Value, cancellationToken)
-            : await _db.Hosts.OrderBy(h => h.LastSeenAt).FirstOrDefaultAsync(cancellationToken);
+        var utcNow = DateTimeOffset.UtcNow;
 
-        if (host == null)
+        var hostsQuery = _db.Hosts
+            .Include(h => h.Vms)
+            .AsQueryable();
+
+        Host? host = null;
+
+        if (request.HostId.HasValue)
         {
-            return BadRequest(new { message = "No host available" });
+            host = await hostsQuery.FirstOrDefaultAsync(h => h.Id == request.HostId.Value, cancellationToken);
+            if (host == null)
+            {
+                return NotFound(new { message = "Requested host not found" });
+            }
+
+            var status = HostStatusOptions.ComputeStatus(host.LastSeenAt, utcNow);
+            if (!string.Equals(status, "online", StringComparison.OrdinalIgnoreCase))
+            {
+                return UnprocessableEntity(new { message = "Requested host is offline" });
+            }
+
+            if (!HasCapacity(host, request, out var capacity))
+            {
+                return UnprocessableEntity(new
+                {
+                    message = "Insufficient capacity on requested host",
+                    capacity
+                });
+            }
+        }
+        else
+        {
+            var candidateHosts = await hostsQuery
+                .OrderByDescending(h => h.LastSeenAt)
+                .ToListAsync(cancellationToken);
+
+            host = candidateHosts
+                .FirstOrDefault(h =>
+                    string.Equals(HostStatusOptions.ComputeStatus(h.LastSeenAt, utcNow), "online", StringComparison.OrdinalIgnoreCase)
+                    && HasCapacity(h, request, out _));
+
+            if (host == null)
+            {
+                return UnprocessableEntity(new { message = "No host has sufficient capacity for the requested VM" });
+            }
         }
 
         var vm = new VirtualMachine
@@ -136,6 +179,30 @@ public class VmsController : ControllerBase
     {
         var sub = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? User.FindFirstValue("sub");
         return Guid.TryParse(sub, out var guid) ? guid : Guid.Empty;
+    }
+
+    private static bool HasCapacity(Host host, CreateVmRequest request, out object capacity)
+    {
+        var vms = host.Vms ?? new List<VirtualMachine>();
+
+        var usedCpu = vms.Sum(vm => vm.CpuCores);
+        var usedRam = vms.Sum(vm => vm.MemoryMb);
+        var usedStorage = vms.Sum(vm => vm.StorageGb);
+
+        var availableCpu = host.TotalCpuCores - usedCpu;
+        var availableRam = host.TotalRamMb - usedRam;
+        var availableStorage = host.TotalStorageGb - usedStorage;
+
+        capacity = new
+        {
+            availableCpuCores = Math.Max(availableCpu, 0),
+            availableRamMb = Math.Max(availableRam, 0),
+            availableStorageGb = Math.Max(availableStorage, 0)
+        };
+
+        return availableCpu >= request.CpuCores
+            && availableRam >= request.MemoryMb
+            && availableStorage >= request.StorageGb;
     }
 }
 

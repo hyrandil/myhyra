@@ -1,3 +1,4 @@
+using HvShop.Domain.Entities;
 using HvShop.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -18,9 +19,19 @@ public class PricingController : ControllerBase
     }
 
     [HttpGet]
-    public async Task<IActionResult> GetPricingAsync(CancellationToken cancellationToken)
+    public async Task<ActionResult<PricingRule>> GetPricingAsync(CancellationToken cancellationToken)
     {
-        var rules = await _db.PricingRules.Where(r => r.Active).ToListAsync(cancellationToken);
-        return Ok(rules);
+        var rule = await _db.PricingRules
+            .AsNoTracking()
+            .Where(r => r.Active)
+            .OrderBy(r => r.Name)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        if (rule is null)
+        {
+            return NotFound(new { message = "No active pricing rule configured" });
+        }
+
+        return Ok(rule);
     }
 }

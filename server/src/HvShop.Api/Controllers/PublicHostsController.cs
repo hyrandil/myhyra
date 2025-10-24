@@ -1,4 +1,7 @@
+using System;
+using System.Collections.Generic;
 using System.Linq;
+using HvShop.Api.Models.Hosts;
 using HvShop.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -19,22 +22,18 @@ public class PublicHostsController : ControllerBase
     }
 
     [HttpGet]
-    public async Task<IActionResult> GetHostsAsync(CancellationToken cancellationToken)
+    public async Task<ActionResult<IEnumerable<HostSummaryDto>>> GetHostsAsync(CancellationToken cancellationToken)
     {
+        var utcNow = DateTimeOffset.UtcNow;
+
         var hosts = await _db.Hosts
+            .AsNoTracking()
+            .Include(h => h.Vms)
             .OrderByDescending(h => h.LastSeenAt)
-            .Select(h => new
-            {
-                h.Id,
-                h.Hostname,
-                h.Status,
-                h.TotalCpuCores,
-                h.TotalRamMb,
-                h.TotalStorageGb,
-                h.LastSeenAt
-            })
             .ToListAsync(cancellationToken);
 
-        return Ok(hosts);
+        var summaries = hosts.Select(h => HostDtoMapper.ToSummary(h, utcNow)).ToList();
+
+        return Ok(summaries);
     }
 }

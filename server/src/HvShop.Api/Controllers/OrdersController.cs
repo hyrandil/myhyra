@@ -1,9 +1,10 @@
+using System;
+using System.Security.Claims;
 using HvShop.Domain.Entities;
 using HvShop.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Stripe.Checkout;
-using System.Security.Claims;
 
 namespace HvShop.Api.Controllers;
 
@@ -68,6 +69,7 @@ public class OrdersController : ControllerBase
             MemoryMb = request.MemoryMb,
             StorageGb = request.StorageGb,
             OsImage = request.OsImage,
+            HostId = request.HostId,
             Quantity = 1,
             UnitPriceCents = total
         });
@@ -120,6 +122,6 @@ public class OrdersController : ControllerBase
     }
 }
 
-public sealed record CheckoutSessionRequest(int CpuCores, int MemoryMb, int StorageGb, string OsImage);
+public sealed record CheckoutSessionRequest(int CpuCores, int MemoryMb, int StorageGb, string OsImage, Guid? HostId);
 
 public sealed record CheckoutSessionResponse(string CheckoutUrl, Guid OrderId);

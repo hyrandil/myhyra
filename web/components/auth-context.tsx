@@ -1,6 +1,5 @@
 "use client";
 
-import axios, { AxiosError } from "axios";
 import {
   PropsWithChildren,
   createContext,
@@ -52,11 +51,23 @@ export function AuthProvider({ children }: PropsWithChildren) {
 
   const login = useCallback(async (email: string, password: string): Promise<LoginResult> => {
     try {
-      const response = await axios.post<{ accessToken: string }>(`${API_BASE_URL}/api/auth/login`, {
-        email,
-        password,
+      const response = await fetch(`${API_BASE_URL}/api/auth/login`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password }),
       });
-      const accessToken = response.data?.accessToken;
+
+      if (!response.ok) {
+        if (response.status === 401) {
+          return { success: false, message: "Invalid email or password." };
+        }
+
+        const errorBody = await response.text();
+        return { success: false, message: errorBody || "Login failed. Please try again." };
+      }
+
+      const payload = (await response.json()) as { accessToken?: string };
+      const accessToken = payload.accessToken;
       if (!accessToken) {
         return { success: false, message: "Server returned an empty access token." };
       }
@@ -66,14 +77,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
       setToken(accessToken);
       return { success: true };
     } catch (error) {
-      let message = "Login failed. Please verify your credentials.";
-      if (error instanceof AxiosError) {
-        if (error.response?.status === 401) {
-          message = "Invalid email or password.";
-        } else if (error.message) {
-          message = error.message;
-        }
-      }
+      const message = error instanceof Error ? error.message : "Login failed. Please verify your credentials.";
       return { success: false, message };
     }
   }, []);

@@ -1,3 +1,7 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using HvShop.Api.Models.Hosts;
 using HvShop.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -18,25 +22,63 @@ public class AdminHostsController : ControllerBase
     }
 
     [HttpGet]
-    public async Task<IActionResult> GetHostsAsync(CancellationToken cancellationToken)
+    public async Task<ActionResult<IEnumerable<HostSummaryDto>>> GetHostsAsync(CancellationToken cancellationToken)
     {
+        var utcNow = DateTimeOffset.UtcNow;
+
         var hosts = await _db.Hosts
-            .Select(h => new
-            {
-                h.Id,
-                h.Hostname,
-                h.Ip,
-                h.Status,
-                h.AgentVersion,
-                h.Os,
-                h.TotalCpuCores,
-                h.TotalRamMb,
-                h.TotalStorageGb,
-                h.LastSeenAt
-            })
+            .AsNoTracking()
+            .Include(h => h.Vms)
+            .OrderBy(h => h.Hostname)
             .ToListAsync(cancellationToken);
 
-        return Ok(hosts);
+        var summaries = hosts.Select(host => HostDtoMapper.ToSummary(host, utcNow)).ToList();
+
+        return Ok(summaries);
+    }
+
+    [HttpGet("{id:guid}")]
+    public async Task<ActionResult<HostDetailDto>> GetHostAsync(Guid id, CancellationToken cancellationToken)
+    {
+        var utcNow = DateTimeOffset.UtcNow;
+
+        var host = await _db.Hosts
+            .AsNoTracking()
+            .Include(h => h.Vms)
+            .FirstOrDefaultAsync(h => h.Id == id, cancellationToken);
+
+        if (host is null)
+        {
+            return NotFound();
+        }
+
+        var summary = HostDtoMapper.ToSummary(host, utcNow);
+
+        var metrics = await _db.HostMetrics
+            .AsNoTracking()
+            .Where(m => m.HostId == id)
+            .OrderByDescending(m => m.Ts)
+            .Take(50)
+            .Select(m => new HostMetricDto(m.Ts, m.CpuPct, m.MemPct, m.MemUsedMb, m.StorageUsedGb))
+            .ToListAsync(cancellationToken);
+
+        var vms = host.Vms
+            .OrderBy(vm => vm.Name)
+            .Select(vm => new HostVmDto(
+                vm.Id,
+                vm.Name,
+                vm.CpuCores,
+                vm.MemoryMb,
+                vm.StorageGb,
+                vm.State,
+                vm.OsImage,
+                vm.Ip,
+                vm.CreatedAt,
+                vm.UpdatedAt,
+                vm.OwnerId))
+            .ToList();
+
+        return Ok(new HostDetailDto(summary, metrics, vms));
     }
 
     [HttpGet("{id:guid}/metrics")]
