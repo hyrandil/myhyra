@@ -15,6 +15,23 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddInfrastructure(builder.Configuration);
 builder.Services.AddDatabaseDeveloperPageExceptionFilter();
 
+builder.Services.AddCors(options =>
+{
+    var configuredOrigins = builder.Configuration.GetValue<string>("Cors:Origins")
+        ?.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+
+    var origins = configuredOrigins is { Length: > 0 }
+        ? configuredOrigins
+        : new[] { "http://localhost:3000", "https://localhost:3000" };
+
+    options.AddPolicy("Frontend", policy =>
+    {
+        policy.WithOrigins(origins)
+            .AllowAnyHeader()
+            .AllowAnyMethod();
+    });
+});
+
 builder.Services.AddAuthentication(options =>
 {
     options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
@@ -59,7 +76,15 @@ if (app.Environment.IsDevelopment())
 app.UseSwagger();
 app.UseSwaggerUI();
 
-app.UseHttpsRedirection();
+var forceHttpsRedirect = builder.Configuration.GetValue<bool?>("ForceHttpsRedirect")
+    ?? !app.Environment.IsDevelopment();
+
+if (forceHttpsRedirect)
+{
+    app.UseHttpsRedirection();
+}
+
+app.UseCors("Frontend");
 app.UseAuthentication();
 app.UseAuthorization();
 

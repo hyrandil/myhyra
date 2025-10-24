@@ -33,6 +33,8 @@ The following walkthrough assumes you are on Windows, macOS, or Linux with Docke
    - `JWT_SECRET`: random string (e.g. generated via `openssl rand -base64 32`).
    - `STRIPE_*` keys: use Stripe test keys or leave the defaults if you only want to explore the UI.
    - `PUBLIC_URL`: leave as `http://localhost` for local testing.
+   - `CORS__ORIGINS`: comma-separated list of frontend origins allowed to call the API (defaults cover local Docker: `http://localhost:3000,http://127.0.0.1:3000`).
+   - `FORCEHTTPSREDIRECT`: set to `true` when the API is deployed behind TLS termination and you want HTTP traffic to redirect automatically. Keep it `false` for local Docker to avoid browser "network error" messages.
 4. **Start the stack.** Build and launch all services in the background:
    ```bash
    docker compose up -d --build

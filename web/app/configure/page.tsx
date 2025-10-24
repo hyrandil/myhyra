@@ -32,7 +32,7 @@ export default function ConfigurePage() {
     const baseUrl = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
     axios.get(`${baseUrl}/api/pricing`).then((res) => setPricing(res.data)).catch(() => setPricing([]));
     axios
-      .get(`${baseUrl}/api/hosts`, { headers: { Authorization: "Bearer placeholder" } })
+      .get(`${baseUrl}/api/public/hosts`)
       .then((res) => setHosts(res.data))
       .catch(() => setHosts([]));
   }, []);
