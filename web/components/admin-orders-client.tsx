@@ -1,7 +1,10 @@
 "use client";
 
-import axios from "axios";
+import axios, { AxiosError } from "axios";
 import { useEffect, useState } from "react";
+
+import AdminLogin from "./admin-login";
+import { useAuth } from "./auth-context";
 
 type Order = {
   id: string;
@@ -13,15 +16,53 @@ type Order = {
 };
 
 export default function AdminOrdersClient() {
+  const { token, ready, logout } = useAuth();
   const [orders, setOrders] = useState<Order[]>([]);
+  const [error, setError] = useState<string | null>(null);
+  const baseUrl = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
 
   useEffect(() => {
-    const baseUrl = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
+    if (!ready || !token) {
+      if (ready) {
+        setOrders([]);
+      }
+      return;
+    }
+
+    let cancelled = false;
+    setError(null);
     axios
-      .get(`${baseUrl}/api/orders`, { headers: { Authorization: "Bearer placeholder" } })
-      .then((res) => setOrders(res.data))
-      .catch(() => setOrders([]));
-  }, []);
+      .get<Order[]>(`${baseUrl}/api/orders`, { headers: { Authorization: `Bearer ${token}` } })
+      .then((res) => {
+        if (!cancelled) {
+          setOrders(res.data);
+        }
+      })
+      .catch((err) => {
+        if (cancelled) {
+          return;
+        }
+        if (err instanceof AxiosError && err.response?.status === 401) {
+          logout();
+          setError("Session expired. Please sign in again.");
+        } else {
+          setError("Failed to load orders.");
+        }
+        setOrders([]);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [baseUrl, logout, ready, token]);
+
+  if (!ready) {
+    return <p className="text-sm text-slate-500">Loading admin console…</p>;
+  }
+
+  if (!token) {
+    return <AdminLogin />;
+  }
 
   return (
     <div className="space-y-6">
@@ -29,6 +70,7 @@ export default function AdminOrdersClient() {
         <h1 className="text-2xl font-semibold">Orders</h1>
         <p className="text-sm text-slate-500">Overview of customer purchases and payment states.</p>
       </header>
+      {error && <p className="rounded border border-rose-100 bg-rose-50 p-3 text-sm text-rose-600">{error}</p>}
       <div className="rounded-lg bg-white shadow">
         <table className="min-w-full divide-y divide-slate-200">
           <thead className="bg-slate-50">

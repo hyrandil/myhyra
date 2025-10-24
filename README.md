@@ -47,6 +47,10 @@ The following walkthrough assumes you are on Windows, macOS, or Linux with Docke
 6. **Open the applications.**
    - API (Swagger UI): <http://localhost:8080/swagger>
    - Webshop / Admin UI: <http://localhost:3000>
+   - The first time you open an admin page, sign in with the seeded credentials
+     (`admin@example.com` / the password configured in `ADMINSEED__PASSWORD`).
+     You can prefill the login form by setting `NEXT_PUBLIC_ADMIN_DEFAULT_EMAIL`
+     (and optionally `NEXT_PUBLIC_ADMIN_DEFAULT_PASSWORD`) in your `.env` file.
 7. **Shut everything down.** When you are done testing, stop the containers with:
    ```bash
    docker compose down

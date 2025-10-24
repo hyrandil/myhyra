@@ -1,7 +1,10 @@
 "use client";
 
-import axios from "axios";
+import axios, { AxiosError } from "axios";
 import { useEffect, useState } from "react";
+
+import AdminLogin from "./admin-login";
+import { useAuth } from "./auth-context";
 import { Area, AreaChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 
 type Host = {
@@ -21,31 +24,95 @@ type HostMetric = {
 };
 
 export default function AdminHostsClient() {
+  const { token, ready, logout } = useAuth();
   const [hosts, setHosts] = useState<Host[]>([]);
   const [selectedHost, setSelectedHost] = useState<string | null>(null);
   const [metrics, setMetrics] = useState<HostMetric[]>([]);
+  const [error, setError] = useState<string | null>(null);
+  const baseUrl = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
 
   useEffect(() => {
-    const baseUrl = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
+    if (!ready || !token) {
+      if (ready) {
+        setHosts([]);
+        setSelectedHost(null);
+      }
+      return;
+    }
+
+    let cancelled = false;
+    setError(null);
     axios
-      .get(`${baseUrl}/api/hosts`, { headers: { Authorization: "Bearer placeholder" } })
+      .get<Host[]>(`${baseUrl}/api/hosts`, { headers: { Authorization: `Bearer ${token}` } })
       .then((res) => {
+        if (cancelled) {
+          return;
+        }
         setHosts(res.data);
         if (res.data.length > 0) {
           setSelectedHost(res.data[0].id);
+        } else {
+          setSelectedHost(null);
         }
       })
-      .catch(() => setHosts([]));
-  }, []);
+      .catch((err) => {
+        if (cancelled) {
+          return;
+        }
+        if (err instanceof AxiosError && err.response?.status === 401) {
+          logout();
+          setError("Session expired. Please sign in again.");
+        } else {
+          setError("Failed to load hosts.");
+        }
+        setHosts([]);
+        setSelectedHost(null);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [baseUrl, logout, ready, token]);
 
   useEffect(() => {
-    if (!selectedHost) return;
-    const baseUrl = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
+    if (!token || !selectedHost) {
+      setMetrics([]);
+      return;
+    }
+
+    let cancelled = false;
     axios
-      .get(`${baseUrl}/api/hosts/${selectedHost}/metrics`, { headers: { Authorization: "Bearer placeholder" } })
-      .then((res) => setMetrics(res.data))
-      .catch(() => setMetrics([]));
-  }, [selectedHost]);
+      .get<HostMetric[]>(`${baseUrl}/api/hosts/${selectedHost}/metrics`, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      .then((res) => {
+        if (!cancelled) {
+          setMetrics(res.data);
+        }
+      })
+      .catch((err) => {
+        if (cancelled) {
+          return;
+        }
+        if (err instanceof AxiosError && err.response?.status === 401) {
+          logout();
+          setError("Session expired. Please sign in again.");
+        }
+        setMetrics([]);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [baseUrl, logout, selectedHost, token]);
+
+  if (!ready) {
+    return <p className="text-sm text-slate-500">Loading admin console…</p>;
+  }
+
+  if (!token) {
+    return <AdminLogin />;
+  }
 
   return (
     <div className="space-y-6">
@@ -53,6 +120,7 @@ export default function AdminHostsClient() {
         <h1 className="text-2xl font-semibold">Hosts</h1>
         <p className="text-sm text-slate-500">Monitor connected Hyper-V hosts.</p>
       </header>
+      {error && <p className="rounded border border-rose-100 bg-rose-50 p-3 text-sm text-rose-600">{error}</p>}
       <div className="grid gap-4 md:grid-cols-2">
         {hosts.map((host) => (
           <article
