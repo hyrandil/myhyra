@@ -5,7 +5,6 @@ using HvShop.Infrastructure;
 using HvShop.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
-using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Diagnostics.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
@@ -49,7 +48,6 @@ builder.Services.AddControllers().AddJsonOptions(options =>
 });
 
 builder.Services.Configure<AdminSeedOptions>(builder.Configuration.GetSection(AdminSeedOptions.SectionName));
-builder.Services.AddHostedService<AdminSeedHostedService>();
 
 var app = builder.Build();
 
@@ -72,6 +70,21 @@ await using (var scope = app.Services.CreateAsyncScope())
 {
     var initializer = scope.ServiceProvider.GetRequiredService<IDbInitializer>();
     await initializer.InitializeAsync();
+
+    var adminSeedOptions = scope.ServiceProvider.GetRequiredService<IOptions<AdminSeedOptions>>();
+    var dbContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+
+    if (!await dbContext.Users.AnyAsync(u => u.Email == adminSeedOptions.Value.Email))
+    {
+        dbContext.Users.Add(new User
+        {
+            Email = adminSeedOptions.Value.Email,
+            PasswordHash = BCrypt.Net.BCrypt.HashPassword(adminSeedOptions.Value.Password),
+            Role = "admin"
+        });
+
+        await dbContext.SaveChangesAsync();
+    }
 }
 
 await app.RunAsync();
@@ -83,32 +96,3 @@ public sealed class AdminSeedOptions
     public string Password { get; set; } = "ChangeMe123!";
 }
 
-public sealed class AdminSeedHostedService : IHostedService
-{
-    private readonly IServiceProvider _serviceProvider;
-    private readonly IOptions<AdminSeedOptions> _options;
-
-    public AdminSeedHostedService(IServiceProvider serviceProvider, IOptions<AdminSeedOptions> options)
-    {
-        _serviceProvider = serviceProvider;
-        _options = options;
-    }
-
-    public async Task StartAsync(CancellationToken cancellationToken)
-    {
-        using var scope = _serviceProvider.CreateScope();
-        var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
-        if (!await db.Users.AnyAsync(u => u.Email == _options.Value.Email, cancellationToken))
-        {
-            db.Users.Add(new User
-            {
-                Email = _options.Value.Email,
-                PasswordHash = BCrypt.Net.BCrypt.HashPassword(_options.Value.Password),
-                Role = "admin"
-            });
-            await db.SaveChangesAsync(cancellationToken);
-        }
-    }
-
-    public Task StopAsync(CancellationToken cancellationToken) => Task.CompletedTask;
-}

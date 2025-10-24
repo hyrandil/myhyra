@@ -10,9 +10,11 @@ public static class DependencyInjection
     public static IServiceCollection AddInfrastructure(this IServiceCollection services, IConfiguration configuration)
     {
         var connectionString = configuration.GetConnectionString("Default") ?? configuration["DATABASE_URL"] ?? "Host=localhost;Database=hvshop;Username=postgres;Password=postgres";
+        var migrationsAssembly = typeof(ApplicationDbContext).Assembly.GetName().Name;
+
         services.AddDbContext<ApplicationDbContext>(options =>
         {
-            options.UseNpgsql(connectionString);
+            options.UseNpgsql(connectionString, builder => builder.MigrationsAssembly(migrationsAssembly));
         });
 
         services.AddScoped<IDbInitializer, DbInitializer>();
