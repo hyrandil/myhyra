@@ -1,0 +1,90 @@
+// Prisma schema for MyHyra card inventory system
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Game {
+  YUGIOH
+  POKEMON
+  ONEPIECE
+}
+
+enum OrderStatus {
+  OPEN
+  PICKING
+  PACKED
+  SHIPPED
+}
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  name      String?
+  createdAt DateTime @default(now())
+  items     Item[]
+  orders    Order[]
+}
+
+model Location {
+  id        String   @id @default(cuid())
+  code      String   @unique
+  label     String?
+  note      String?
+  items     Item[]
+  createdAt DateTime @default(now())
+}
+
+model Item {
+  id         String    @id @default(cuid())
+  itemCode   String    @unique
+  game       Game
+  name       String
+  setName    String?
+  number     String?
+  language   String?
+  condition  String?
+  priceCents Int?
+  locationId String?
+  location   Location? @relation(fields: [locationId], references: [id])
+  userId     String
+  user       User      @relation(fields: [userId], references: [id])
+  createdAt  DateTime  @default(now())
+  orderLines OrderLine[]
+}
+
+model Order {
+  id            String      @id @default(cuid())
+  marketplaceId String      @unique
+  buyer         String?
+  createdAt     DateTime    @default(now())
+  status        OrderStatus @default(OPEN)
+  lines         OrderLine[]
+  userId        String
+  user          User        @relation(fields: [userId], references: [id])
+  scanLogs      ScanLog[]
+}
+
+model OrderLine {
+  id        String  @id @default(cuid())
+  orderId   String
+  order     Order   @relation(fields: [orderId], references: [id])
+  itemId    String?
+  item      Item?   @relation(fields: [itemId], references: [id])
+  sku       String?
+  quantity  Int     @default(1)
+  note      String?
+}
+
+model ScanLog {
+  id        String   @id @default(cuid())
+  scannedAt DateTime @default(now())
+  code      String
+  context   String?
+  orderId   String?
+  order     Order?   @relation(fields: [orderId], references: [id])
+}
