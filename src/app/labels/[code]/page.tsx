@@ -1,7 +1,6 @@
 import Image from 'next/image';
 import { notFound } from 'next/navigation';
-import JsBarcode from 'jsbarcode';
-import { createCanvas } from '@napi-rs/canvas';
+import bwipjs from 'bwip-js/node';
 
 import { prisma } from '@/lib/prisma';
 
@@ -21,14 +20,17 @@ export default async function LabelPage({ params }: LabelPageProps) {
     notFound();
   }
 
-  const canvas = createCanvas(360, 140);
-  JsBarcode(canvas as unknown as HTMLCanvasElement, item.itemCode, {
-    format: 'CODE128',
-    displayValue: true,
-    fontSize: 16,
-    margin: 8,
+  const barcodeBuffer = await bwipjs.toBuffer({
+    bcid: 'code128',
+    text: item.itemCode,
+    scale: 3,
+    height: 12,
+    includetext: true,
+    textxalign: 'center',
+    paddingwidth: 10,
+    paddingheight: 8,
   });
-  const dataUrl = canvas.toDataURL('image/png');
+  const dataUrl = `data:image/png;base64,${barcodeBuffer.toString('base64')}`;
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-white p-4 print:min-h-0 print:bg-white print:p-0">

@@ -4,7 +4,6 @@ ARG NODE_VERSION=20
 ARG DATABASE_URL="postgresql://postgres:postgres@localhost:5432/myhyra?schema=public"
 
 FROM node:${NODE_VERSION}-bookworm AS base
-ENV NODE_ENV=production
 
 FROM base AS deps
 WORKDIR /app
@@ -17,6 +16,7 @@ ENV DATABASE_URL=${DATABASE_URL}
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
+ENV NODE_ENV=production
 RUN npx prisma generate
 RUN npm run build
 
@@ -25,12 +25,6 @@ WORKDIR /app
 ENV NODE_ENV=production
 ENV PORT=3000
 ENV NEXT_TELEMETRY_DISABLED=1
-
-RUN apt-get update \
-  && apt-get install -y --no-install-recommends \
-    libjpeg62-turbo \
-    libpng16-16 \
-  && rm -rf /var/lib/apt/lists/*
 
 RUN addgroup --system --gid 1001 nodejs \
   && adduser --system --uid 1001 --ingroup nodejs nextjs

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import pdfParse from 'pdf-parse';
+import { PDFParse } from 'pdf-parse';
 
 import { prisma } from '@/lib/prisma';
 import { getDefaultUser } from '@/lib/users';
@@ -19,7 +19,8 @@ export async function POST(request: NextRequest) {
     }
 
     const buffer = Buffer.from(await file.arrayBuffer());
-    const pdfData = await pdfParse(buffer);
+    const parser = new PDFParse({ data: buffer });
+    const pdfData = await parser.getText();
     const text = pdfData.text;
 
     const orderMatch = text.match(ORDER_NO_RX);
@@ -41,8 +42,9 @@ export async function POST(request: NextRequest) {
       where: { itemCode: { in: Array.from(counts.keys()) } },
       include: { location: true },
     });
+    type ItemWithLocation = (typeof items)[number];
 
-    const orderLines = items.map((item) => ({
+    const orderLines = items.map((item: ItemWithLocation) => ({
       itemId: item.id,
       quantity: counts.get(item.itemCode) ?? 1,
     }));
@@ -99,7 +101,7 @@ export async function POST(request: NextRequest) {
       order,
       matchedItems: items,
       unmatchedCodes: Array.from(counts.keys()).filter(
-        (code) => !items.find((item) => item.itemCode === code),
+        (code) => !items.find((item: ItemWithLocation) => item.itemCode === code),
       ),
     };
 

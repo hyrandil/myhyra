@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import JsBarcode from 'jsbarcode';
-import { createCanvas } from '@napi-rs/canvas';
+import bwipjs from 'bwip-js/node';
 import { z } from 'zod';
 import { Game } from '@prisma/client';
 
@@ -77,15 +76,18 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    const canvas = createCanvas(320, 120);
-    JsBarcode(canvas as unknown as HTMLCanvasElement, code, {
-      format: 'CODE128',
-      displayValue: true,
-      fontSize: 14,
-      margin: 4,
+    const barcodeBuffer = await bwipjs.toBuffer({
+      bcid: 'code128',
+      text: code,
+      scale: 3,
+      height: 12,
+      includetext: true,
+      textxalign: 'center',
+      paddingwidth: 8,
+      paddingheight: 6,
     });
 
-    const barcodePngDataUrl = canvas.toDataURL('image/png');
+    const barcodePngDataUrl = `data:image/png;base64,${barcodeBuffer.toString('base64')}`;
 
     return NextResponse.json({ item, barcodePngDataUrl });
   } catch (error) {

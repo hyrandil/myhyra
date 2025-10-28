@@ -4,8 +4,11 @@ import { prisma } from '@/lib/prisma';
 
 export const runtime = 'nodejs';
 
-export async function GET(_request: NextRequest, context: { params: { orderId: string } }) {
-  const { orderId } = context.params;
+export async function GET(
+  _request: NextRequest,
+  context: { params: Promise<{ orderId: string }> },
+) {
+  const { orderId } = await context.params;
 
   try {
     const order = await prisma.order.findUnique({
