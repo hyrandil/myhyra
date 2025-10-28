@@ -27,6 +27,26 @@ npm run dev
 
 Die Anwendung läuft anschließend unter [http://localhost:3000](http://localhost:3000).
 
+## Betrieb im Docker-Container
+
+### Image lokal bauen
+
+```bash
+docker build -t myhyra:latest .
+```
+
+### Mit Docker Compose starten
+
+```bash
+docker compose up --build
+```
+
+Die Compose-Umgebung startet einen PostgreSQL-Container (`db`) und die Anwendung (`app`). Nach dem erfolgreichen Start ist die App unter [http://localhost:3000](http://localhost:3000) erreichbar. Prisma-Migrationen können im Container ausgeführt werden, z. B. über:
+
+```bash
+docker compose run --rm app npx prisma migrate deploy
+```
+
 ### Umgebungsvariablen
 
 Kopiere `.env.example` zu `.env` und passe mindestens den Datenbank-Zugang an.
