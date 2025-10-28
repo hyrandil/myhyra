@@ -1,6 +1,7 @@
 # syntax=docker/dockerfile:1.7
 
 ARG NODE_VERSION=20
+ARG DATABASE_URL="postgresql://postgres:postgres@localhost:5432/myhyra?schema=public"
 
 FROM node:${NODE_VERSION}-bookworm AS base
 ENV NODE_ENV=production
@@ -11,6 +12,8 @@ COPY package.json package-lock.json ./
 RUN npm ci
 
 FROM base AS builder
+ARG DATABASE_URL
+ENV DATABASE_URL=${DATABASE_URL}
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
