@@ -11,7 +11,7 @@ RUN apt-get update \
 FROM base AS deps
 WORKDIR /app
 COPY package.json package-lock.json ./
-RUN npm ci
+RUN npm ci --include=optional
 
 FROM base AS builder
 ARG DATABASE_URL
@@ -41,6 +41,7 @@ COPY --from=builder /app/.next/standalone ./
 COPY --from=builder /app/.next/static ./.next/static
 COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
 COPY --from=builder /app/node_modules/@prisma ./node_modules/@prisma
+COPY --from=builder /app/node_modules/@napi-rs ./node_modules/@napi-rs
 
 USER nextjs
 
