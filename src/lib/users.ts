@@ -1,10 +1,7 @@
 import { prisma } from '@/lib/prisma';
 
 export async function getDefaultUser() {
-  const email = process.env.DEFAULT_USER_EMAIL;
-  if (!email) {
-    throw new Error('DEFAULT_USER_EMAIL is not configured');
-  }
+  const email = process.env.DEFAULT_USER_EMAIL?.trim() || 'demo@example.com';
 
   const user = await prisma.user.upsert({
     where: { email },
