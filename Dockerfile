@@ -4,6 +4,9 @@ ARG NODE_VERSION=20
 ARG DATABASE_URL="postgresql://postgres:postgres@localhost:5432/myhyra?schema=public"
 
 FROM node:${NODE_VERSION}-bookworm AS base
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends openssl \
+  && rm -rf /var/lib/apt/lists/*
 
 FROM base AS deps
 WORKDIR /app
@@ -21,6 +24,9 @@ RUN npx prisma generate
 RUN npm run build
 
 FROM node:${NODE_VERSION}-bookworm-slim AS runner
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends openssl \
+  && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 ENV NODE_ENV=production
 ENV PORT=3000
