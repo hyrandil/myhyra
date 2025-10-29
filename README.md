@@ -14,7 +14,7 @@ MyHyra ist eine schlanke Web-App zur Lager- und Versandverwaltung für Sammelkar
 
 - **Frontend & API**: Next.js 14 (App Router) mit TypeScript, Tailwind CSS und shadcn-inspirierten UI-Patterns.
 - **Datenbank**: PostgreSQL mit Prisma ORM.
-- **Barcode & Scan**: `@napi-rs/canvas` + `jsbarcode` für Druck, `@zxing/browser` für Kamerascans.
+- **Barcode & Scan**: `bwip-js` für Etiketten, `@zxing/browser` für Kamerascans.
 - **Validierung**: Zod für API-Validierungen.
 - **PDF-Verarbeitung**: `pdf-parse` für serverseitige Textextraktion.
 
@@ -41,11 +41,7 @@ docker build -t myhyra:latest .
 docker compose up --build
 ```
 
-Die Compose-Umgebung startet einen PostgreSQL-Container (`db`) und die Anwendung (`app`). Nach dem erfolgreichen Start ist die App unter [http://localhost:3000](http://localhost:3000) erreichbar. Prisma-Migrationen können im Container ausgeführt werden, z. B. über:
-
-```bash
-docker compose run --rm app npx prisma migrate deploy
-```
+Die Compose-Umgebung startet einen PostgreSQL-Container (`db`) und die Anwendung (`app`). Beim Start führt der `app`-Container automatisch `prisma migrate deploy` aus, sodass Schemaänderungen direkt angewendet werden. Nach dem erfolgreichen Start ist die App unter [http://localhost:3000](http://localhost:3000) erreichbar.
 
 ### Umgebungsvariablen
 
@@ -56,7 +52,7 @@ DATABASE_URL="postgresql://USER:PASSWORD@localhost:5432/myhyra?schema=public"
 DEFAULT_USER_EMAIL="demo@example.com"
 ```
 
-> Hinweis: Prisma-Migrationen wurden noch nicht ausgeführt. Lege die Datenbank an und führe bei Bedarf `npx prisma migrate dev` aus.
+> Hinweis: Wenn `DEFAULT_USER_EMAIL` nicht gesetzt ist, legt die Anwendung automatisch einen Demo-Benutzer (`demo@example.com`) an.
 
 ## Kern-Workflows
 
