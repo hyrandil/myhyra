@@ -22,13 +22,20 @@ const bookingEditSchema = z
 
 const manualBookingSchema = z
   .object({
-    clock_in: z.string().datetime(),
+    clock_in: z.string().datetime().optional(),
     clock_out: z.string().datetime().optional(),
-    clock_in_location: locationSchema,
+    clock_in_location: locationSchema.optional(),
     clock_out_location: locationSchema.optional(),
   })
-  .refine((data) => !data.clock_out || Boolean(data.clock_out_location), {
-    message: 'Für eine Gehen-Zeit muss auch ein Standort angegeben werden',
+  .refine((data) => Boolean(data.clock_in) || Boolean(data.clock_out), {
+    message: 'Mindestens eine Zeit muss angegeben werden',
+  })
+  .refine((data) => !data.clock_in_location || Boolean(data.clock_in), {
+    message: 'Standortdaten für Kommen erfordern eine Zeitangabe',
+    path: ['clock_in_location'],
+  })
+  .refine((data) => !data.clock_out_location || Boolean(data.clock_out), {
+    message: 'Standortdaten für Gehen erfordern eine Zeitangabe',
     path: ['clock_out_location'],
   });
 
@@ -117,20 +124,38 @@ router.post('/user/:userId/manual', authorize(['admin']), (req, res) => {
     return res.status(400).json({ errors: parsed.error.format() });
   }
   const { clock_in, clock_out, clock_in_location, clock_out_location } = parsed.data;
-  const stmt = db.prepare(
-    'INSERT INTO bookings (user_id, clock_in, clock_out, clock_in_lat, clock_in_lng, clock_out_lat, clock_out_lng) VALUES (?, ?, ?, ?, ?, ?, ?)'
-  );
-  const result = stmt.run(
-    userId,
-    clock_in,
-    clock_out ?? null,
-    clock_in_location.lat,
-    clock_in_location.lng,
-    clock_out ? clock_out_location!.lat : null,
-    clock_out ? clock_out_location!.lng : null
-  );
-  const created = db.prepare('SELECT * FROM bookings WHERE id = ?').get(result.lastInsertRowid) as Booking;
-  res.status(201).json(created);
+  if (clock_in) {
+    const stmt = db.prepare(
+      'INSERT INTO bookings (user_id, clock_in, clock_out, clock_in_lat, clock_in_lng, clock_out_lat, clock_out_lng) VALUES (?, ?, ?, ?, ?, ?, ?)'
+    );
+    const result = stmt.run(
+      userId,
+      clock_in,
+      clock_out ?? null,
+      clock_in_location?.lat ?? null,
+      clock_in_location?.lng ?? null,
+      clock_out ? clock_out_location?.lat ?? null : null,
+      clock_out ? clock_out_location?.lng ?? null : null
+    );
+    const created = db.prepare('SELECT * FROM bookings WHERE id = ?').get(result.lastInsertRowid) as Booking;
+    return res.status(201).json(created);
+  }
+
+  if (!clock_out) {
+    return res.status(400).json({ message: 'Eine Gehen-Zeit ist erforderlich.' });
+  }
+
+  const openBooking = db
+    .prepare('SELECT * FROM bookings WHERE user_id = ? AND clock_out IS NULL ORDER BY clock_in DESC LIMIT 1')
+    .get(userId) as Booking | undefined;
+  if (!openBooking) {
+    return res.status(409).json({ message: 'Keine offene Kommen-Buchung zum Ergänzen gefunden.' });
+  }
+  db.prepare(
+    'UPDATE bookings SET clock_out = ?, clock_out_lat = ?, clock_out_lng = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?'
+  ).run(clock_out, clock_out_location?.lat ?? null, clock_out_location?.lng ?? null, openBooking.id);
+  const updated = db.prepare('SELECT * FROM bookings WHERE id = ?').get(openBooking.id) as Booking;
+  return res.json(updated);
 });
 
 router.patch('/:bookingId', authorize(['admin']), (req, res) => {

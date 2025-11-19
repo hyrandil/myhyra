@@ -18,8 +18,12 @@ export function AdminTable() {
   const [passwordValue, setPasswordValue] = useState('');
   const [passwordMessage, setPasswordMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [statusMessage, setStatusMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [editMessage, setEditMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [manualMessage, setManualMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [manualOpen, setManualOpen] = useState(false);
   const [manualBooking, setManualBooking] = useState({
+    includeClockIn: true,
+    includeClockOut: false,
     clockIn: '',
     clockOut: '',
     clockInLat: '',
@@ -27,6 +31,7 @@ export function AdminTable() {
     clockOutLat: '',
     clockOutLng: '',
   });
+  const [editUser, setEditUser] = useState({ name: '', email: '', role: 'user' as EmployeeSummary['role'] });
 
   useEffect(() => {
     if (!selectedUserId && employees && employees.length > 0) {
@@ -38,6 +43,7 @@ export function AdminTable() {
     setPasswordMessage(null);
     setStatusMessage(null);
     setManualMessage(null);
+    setEditMessage(null);
   }, [selectedUserId]);
 
   const {
@@ -70,6 +76,21 @@ export function AdminTable() {
     },
   });
 
+  const updateUserMutation = useMutation({
+    mutationFn: async ({
+      userId,
+      payload,
+    }: {
+      userId: number;
+      payload: { name: string; email: string; role: EmployeeSummary['role'] };
+    }) => {
+      await api.patch(`/users/${userId}`, payload);
+    },
+    onSuccess: () => {
+      refetchEmployees();
+    },
+  });
+
   const updateBookingMutation = useMutation({
     mutationFn: async ({ bookingId, payload }: { bookingId: number; payload: { clock_in?: string; clock_out?: string | null } }) => {
       await api.patch(`/bookings/${bookingId}`, payload);
@@ -83,9 +104,9 @@ export function AdminTable() {
     }: {
       userId: number;
       payload: {
-        clock_in: string;
+        clock_in?: string;
         clock_out?: string;
-        clock_in_location: { lat: number; lng: number };
+        clock_in_location?: { lat: number; lng: number };
         clock_out_location?: { lat: number; lng: number };
       };
     }) => {
@@ -97,6 +118,18 @@ export function AdminTable() {
     () => employees?.find((employee) => employee.id === selectedUserId) || null,
     [employees, selectedUserId]
   );
+
+  useEffect(() => {
+    if (selectedEmployee) {
+      setEditUser({
+        name: selectedEmployee.name,
+        email: selectedEmployee.email,
+        role: selectedEmployee.role,
+      });
+    } else {
+      setEditUser({ name: '', email: '', role: 'user' });
+    }
+  }, [selectedEmployee]);
 
   const handleCreateUser = async (event: FormEvent) => {
     event.preventDefault();
@@ -131,6 +164,23 @@ export function AdminTable() {
     }
   };
 
+  const handleUpdateUser = async (event: FormEvent) => {
+    event.preventDefault();
+    if (!selectedUserId) {
+      return;
+    }
+    setEditMessage(null);
+    try {
+      await updateUserMutation.mutateAsync({ userId: selectedUserId, payload: editUser });
+      setEditMessage({ type: 'success', text: 'Profildaten aktualisiert.' });
+    } catch (error: any) {
+      setEditMessage({
+        type: 'error',
+        text: error?.response?.data?.message || 'Profil konnte nicht aktualisiert werden.',
+      });
+    }
+  };
+
   const handleToggleStatus = async () => {
     if (!selectedUserId || !selectedEmployee) {
       return;
@@ -156,31 +206,57 @@ export function AdminTable() {
       return;
     }
     setManualMessage(null);
-    const toNumber = (value: string) => Number.parseFloat(value);
-    const latIn = toNumber(manualBooking.clockInLat);
-    const lngIn = toNumber(manualBooking.clockInLng);
-    const latOut = manualBooking.clockOut ? toNumber(manualBooking.clockOutLat) : null;
-    const lngOut = manualBooking.clockOut ? toNumber(manualBooking.clockOutLng) : null;
-    if (Number.isNaN(latIn) || Number.isNaN(lngIn) || (manualBooking.clockOut && (Number.isNaN(latOut!) || Number.isNaN(lngOut!)))) {
-      setManualMessage({ type: 'error', text: 'Bitte gültige Koordinaten eingeben.' });
+    if (!manualBooking.includeClockIn && !manualBooking.includeClockOut) {
+      setManualMessage({ type: 'error', text: 'Bitte Kommen, Gehen oder beides auswählen.' });
       return;
     }
+    if (manualBooking.includeClockIn && !manualBooking.clockIn) {
+      setManualMessage({ type: 'error', text: 'Bitte eine Kommen-Zeit auswählen.' });
+      return;
+    }
+    if (manualBooking.includeClockOut && !manualBooking.clockOut) {
+      setManualMessage({ type: 'error', text: 'Bitte eine Gehen-Zeit auswählen.' });
+      return;
+    }
+    const buildLocation = (lat: string, lng: string, label: string) => {
+      if (!lat && !lng) {
+        return undefined;
+      }
+      if (!lat || !lng) {
+        throw new Error(`${label}: Breite und Länge müssen gemeinsam befüllt werden.`);
+      }
+      const latValue = Number.parseFloat(lat);
+      const lngValue = Number.parseFloat(lng);
+      if (Number.isNaN(latValue) || Number.isNaN(lngValue)) {
+        throw new Error(`${label}: Bitte gültige Koordinaten eingeben.`);
+      }
+      return { lat: latValue, lng: lngValue };
+    };
     try {
       const payload: {
-        clock_in: string;
+        clock_in?: string;
         clock_out?: string;
-        clock_in_location: { lat: number; lng: number };
+        clock_in_location?: { lat: number; lng: number };
         clock_out_location?: { lat: number; lng: number };
-      } = {
-        clock_in: new Date(manualBooking.clockIn).toISOString(),
-        clock_in_location: { lat: latIn, lng: lngIn },
-      };
-      if (manualBooking.clockOut) {
+      } = {};
+      if (manualBooking.includeClockIn) {
+        payload.clock_in = new Date(manualBooking.clockIn).toISOString();
+        const inLoc = buildLocation(manualBooking.clockInLat, manualBooking.clockInLng, 'Kommen');
+        if (inLoc) {
+          payload.clock_in_location = inLoc;
+        }
+      }
+      if (manualBooking.includeClockOut) {
         payload.clock_out = new Date(manualBooking.clockOut).toISOString();
-        payload.clock_out_location = { lat: latOut!, lng: lngOut! };
+        const outLoc = buildLocation(manualBooking.clockOutLat, manualBooking.clockOutLng, 'Gehen');
+        if (outLoc) {
+          payload.clock_out_location = outLoc;
+        }
       }
       await manualBookingMutation.mutateAsync({ userId: selectedUserId, payload });
       setManualBooking({
+        includeClockIn: manualBooking.includeClockIn,
+        includeClockOut: manualBooking.includeClockOut,
         clockIn: '',
         clockOut: '',
         clockInLat: '',
@@ -191,9 +267,10 @@ export function AdminTable() {
       setManualMessage({ type: 'success', text: 'Buchung angelegt.' });
       refetch();
     } catch (error: any) {
+      const message = error?.message || error?.response?.data?.message;
       setManualMessage({
         type: 'error',
-        text: error?.response?.data?.message || 'Buchung konnte nicht angelegt werden.',
+        text: message || 'Buchung konnte nicht angelegt werden.',
       });
     }
   };
@@ -224,6 +301,9 @@ export function AdminTable() {
                     {!employee.active && (
                       <span className="text-[10px] uppercase tracking-wide text-rose-600">deaktiviert</span>
                     )}
+                    <span className="text-[10px] uppercase tracking-wide text-slate-400">
+                      {employee.role === 'admin' ? 'Admin' : 'Mitarbeiter'}
+                    </span>
                   </p>
                   <p className="text-xs text-slate-500">{employee.email}</p>
                 </button>
@@ -309,6 +389,50 @@ export function AdminTable() {
           )}
         </form>
         {selectedEmployee && (
+          <form className="space-y-2" onSubmit={handleUpdateUser}>
+            <h4 className="text-sm font-semibold text-slate-600">Stammdaten bearbeiten</h4>
+            <input
+              type="text"
+              value={editUser.name}
+              onChange={(event) => setEditUser((prev) => ({ ...prev, name: event.target.value }))}
+              placeholder="Name"
+              className="w-full rounded border border-slate-300 px-2 py-1"
+              required
+              disabled={updateUserMutation.isPending}
+            />
+            <input
+              type="email"
+              value={editUser.email}
+              onChange={(event) => setEditUser((prev) => ({ ...prev, email: event.target.value }))}
+              placeholder="E-Mail"
+              className="w-full rounded border border-slate-300 px-2 py-1"
+              required
+              disabled={updateUserMutation.isPending}
+            />
+            <select
+              value={editUser.role}
+              onChange={(event) => setEditUser((prev) => ({ ...prev, role: event.target.value as EmployeeSummary['role'] }))}
+              className="w-full rounded border border-slate-300 px-2 py-1"
+              disabled={updateUserMutation.isPending}
+            >
+              <option value="user">Mitarbeiter</option>
+              <option value="admin">Admin</option>
+            </select>
+            <button
+              type="submit"
+              className="w-full rounded bg-blue-600 py-2 text-white font-semibold disabled:opacity-50"
+              disabled={updateUserMutation.isPending}
+            >
+              {updateUserMutation.isPending ? 'Aktualisiere...' : 'Änderungen speichern'}
+            </button>
+            {editMessage && (
+              <p className={`text-xs ${editMessage.type === 'success' ? 'text-emerald-600' : 'text-rose-600'}`}>
+                {editMessage.text}
+              </p>
+            )}
+          </form>
+        )}
+        {selectedEmployee && (
           <div className="space-y-2">
             <h4 className="text-sm font-semibold text-slate-600">Login-Status</h4>
             <p className="text-xs text-slate-500">
@@ -357,102 +481,134 @@ export function AdminTable() {
             updateBookingMutation.mutateAsync({ bookingId, payload }).then(() => refetch())
           }
         />
-        <form className="bg-white rounded-md shadow p-4 space-y-3 text-sm" onSubmit={handleManualBooking}>
-          <div>
-            <h4 className="text-base font-semibold text-slate-800">Manuelle Buchung erfassen</h4>
-            <p className="text-xs text-slate-500">
-              Erfasst Kommen/Gehen inklusive Standort – perfekt für Nachträge im Monatsabschluss.
-            </p>
-          </div>
-          <div className="grid gap-3 md:grid-cols-2">
-            <label className="text-xs font-semibold text-slate-600">
-              Kommen
-              <input
-                type="datetime-local"
-                value={manualBooking.clockIn}
-                onChange={(event) => setManualBooking((prev) => ({ ...prev, clockIn: event.target.value }))}
-                className="mt-1 w-full rounded border border-slate-300 px-2 py-1"
-                required
-                disabled={!selectedUserId}
-              />
-            </label>
-            <label className="text-xs font-semibold text-slate-600">
-              Gehen
-              <input
-                type="datetime-local"
-                value={manualBooking.clockOut}
-                onChange={(event) => setManualBooking((prev) => ({ ...prev, clockOut: event.target.value }))}
-                className="mt-1 w-full rounded border border-slate-300 px-2 py-1"
-                disabled={!selectedUserId}
-              />
-            </label>
-          </div>
-          <div className="grid gap-3 md:grid-cols-2">
-            <label className="text-xs font-semibold text-slate-600">
-              Kommen Breite (LAT)
-              <input
-                type="number"
-                step="0.00001"
-                value={manualBooking.clockInLat}
-                onChange={(event) => setManualBooking((prev) => ({ ...prev, clockInLat: event.target.value }))}
-                className="mt-1 w-full rounded border border-slate-300 px-2 py-1"
-                required
-                disabled={!selectedUserId}
-              />
-            </label>
-            <label className="text-xs font-semibold text-slate-600">
-              Kommen Länge (LNG)
-              <input
-                type="number"
-                step="0.00001"
-                value={manualBooking.clockInLng}
-                onChange={(event) => setManualBooking((prev) => ({ ...prev, clockInLng: event.target.value }))}
-                className="mt-1 w-full rounded border border-slate-300 px-2 py-1"
-                required
-                disabled={!selectedUserId}
-              />
-            </label>
-          </div>
-          <div className="grid gap-3 md:grid-cols-2">
-            <label className="text-xs font-semibold text-slate-600">
-              Gehen Breite (LAT)
-              <input
-                type="number"
-                step="0.00001"
-                value={manualBooking.clockOutLat}
-                onChange={(event) => setManualBooking((prev) => ({ ...prev, clockOutLat: event.target.value }))}
-                className="mt-1 w-full rounded border border-slate-300 px-2 py-1"
-                required={Boolean(manualBooking.clockOut)}
-                disabled={!selectedUserId}
-              />
-            </label>
-            <label className="text-xs font-semibold text-slate-600">
-              Gehen Länge (LNG)
-              <input
-                type="number"
-                step="0.00001"
-                value={manualBooking.clockOutLng}
-                onChange={(event) => setManualBooking((prev) => ({ ...prev, clockOutLng: event.target.value }))}
-                className="mt-1 w-full rounded border border-slate-300 px-2 py-1"
-                required={Boolean(manualBooking.clockOut)}
-                disabled={!selectedUserId}
-              />
-            </label>
-          </div>
+        <div className="bg-white rounded-md shadow">
           <button
-            type="submit"
-            className="w-full rounded bg-blue-600 py-2 text-white font-semibold disabled:opacity-50"
-            disabled={!selectedUserId || manualBookingMutation.isPending}
+            type="button"
+            onClick={() => setManualOpen((prev) => !prev)}
+            className="flex w-full items-center justify-between px-4 py-3 text-left"
           >
-            {manualBookingMutation.isPending ? 'Speichere...' : 'Buchung hinzufügen'}
+            <div>
+              <h4 className="text-base font-semibold text-slate-800">Manuelle Buchung erfassen</h4>
+              <p className="text-xs text-slate-500">
+                Erfasse einzelne Kommen- oder Gehen-Buchungen – mit optionalen Koordinaten.
+              </p>
+            </div>
+            <span className={`text-lg transition-transform ${manualOpen ? 'rotate-180' : ''}`}>⌄</span>
           </button>
-          {manualMessage && (
-            <p className={`text-xs ${manualMessage.type === 'success' ? 'text-emerald-600' : 'text-rose-600'}`}>
-              {manualMessage.text}
-            </p>
+          {manualOpen && (
+            <form className="border-t border-slate-100 p-4 space-y-3 text-sm" onSubmit={handleManualBooking}>
+              <div className="flex flex-wrap gap-4 text-xs font-semibold text-slate-600">
+                <label className="inline-flex items-center gap-2 text-sm text-slate-700">
+                  <input
+                    type="checkbox"
+                    checked={manualBooking.includeClockIn}
+                    onChange={(event) =>
+                      setManualBooking((prev) => ({ ...prev, includeClockIn: event.target.checked }))
+                    }
+                    disabled={!selectedUserId}
+                  />
+                  Kommen erfassen
+                </label>
+                <label className="inline-flex items-center gap-2 text-sm text-slate-700">
+                  <input
+                    type="checkbox"
+                    checked={manualBooking.includeClockOut}
+                    onChange={(event) =>
+                      setManualBooking((prev) => ({ ...prev, includeClockOut: event.target.checked }))
+                    }
+                    disabled={!selectedUserId}
+                  />
+                  Gehen erfassen
+                </label>
+              </div>
+              <div className="grid gap-3 md:grid-cols-2">
+                <label className="text-xs font-semibold text-slate-600">
+                  Kommen
+                  <input
+                    type="datetime-local"
+                    value={manualBooking.clockIn}
+                    onChange={(event) => setManualBooking((prev) => ({ ...prev, clockIn: event.target.value }))}
+                    className="mt-1 w-full rounded border border-slate-300 px-2 py-1"
+                    required={manualBooking.includeClockIn}
+                    disabled={!selectedUserId || !manualBooking.includeClockIn}
+                  />
+                </label>
+                <label className="text-xs font-semibold text-slate-600">
+                  Gehen
+                  <input
+                    type="datetime-local"
+                    value={manualBooking.clockOut}
+                    onChange={(event) => setManualBooking((prev) => ({ ...prev, clockOut: event.target.value }))}
+                    className="mt-1 w-full rounded border border-slate-300 px-2 py-1"
+                    required={manualBooking.includeClockOut}
+                    disabled={!selectedUserId || !manualBooking.includeClockOut}
+                  />
+                </label>
+              </div>
+              <div className="grid gap-3 md:grid-cols-2">
+                <label className="text-xs font-semibold text-slate-600">
+                  Kommen Breite (LAT)
+                  <input
+                    type="number"
+                    step="0.00001"
+                    value={manualBooking.clockInLat}
+                    onChange={(event) => setManualBooking((prev) => ({ ...prev, clockInLat: event.target.value }))}
+                    className="mt-1 w-full rounded border border-slate-300 px-2 py-1"
+                    disabled={!selectedUserId || !manualBooking.includeClockIn}
+                  />
+                </label>
+                <label className="text-xs font-semibold text-slate-600">
+                  Kommen Länge (LNG)
+                  <input
+                    type="number"
+                    step="0.00001"
+                    value={manualBooking.clockInLng}
+                    onChange={(event) => setManualBooking((prev) => ({ ...prev, clockInLng: event.target.value }))}
+                    className="mt-1 w-full rounded border border-slate-300 px-2 py-1"
+                    disabled={!selectedUserId || !manualBooking.includeClockIn}
+                  />
+                </label>
+              </div>
+              <div className="grid gap-3 md:grid-cols-2">
+                <label className="text-xs font-semibold text-slate-600">
+                  Gehen Breite (LAT)
+                  <input
+                    type="number"
+                    step="0.00001"
+                    value={manualBooking.clockOutLat}
+                    onChange={(event) => setManualBooking((prev) => ({ ...prev, clockOutLat: event.target.value }))}
+                    className="mt-1 w-full rounded border border-slate-300 px-2 py-1"
+                    disabled={!selectedUserId || !manualBooking.includeClockOut}
+                  />
+                </label>
+                <label className="text-xs font-semibold text-slate-600">
+                  Gehen Länge (LNG)
+                  <input
+                    type="number"
+                    step="0.00001"
+                    value={manualBooking.clockOutLng}
+                    onChange={(event) => setManualBooking((prev) => ({ ...prev, clockOutLng: event.target.value }))}
+                    className="mt-1 w-full rounded border border-slate-300 px-2 py-1"
+                    disabled={!selectedUserId || !manualBooking.includeClockOut}
+                  />
+                </label>
+              </div>
+              <button
+                type="submit"
+                className="w-full rounded bg-blue-600 py-2 text-white font-semibold disabled:opacity-50"
+                disabled={!selectedUserId || manualBookingMutation.isPending}
+              >
+                {manualBookingMutation.isPending ? 'Speichere...' : 'Buchung hinzufügen'}
+              </button>
+              {manualMessage && (
+                <p className={`text-xs ${manualMessage.type === 'success' ? 'text-emerald-600' : 'text-rose-600'}`}>
+                  {manualMessage.text}
+                </p>
+              )}
+              {!selectedUserId && <p className="text-xs text-slate-500">Bitte zuerst eine Person auswählen.</p>}
+            </form>
           )}
-          {!selectedUserId && <p className="text-xs text-slate-500">Bitte zuerst eine Person auswählen.</p>}
-        </form>
+        </div>
       </div>
     </div>
   );

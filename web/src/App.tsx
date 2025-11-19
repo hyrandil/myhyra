@@ -3,6 +3,7 @@ import { LoginCard } from './components/LoginCard';
 import { BookingList } from './components/BookingList';
 import { ActionsCard } from './components/ActionsCard';
 import { AdminTable } from './components/AdminTable';
+import { PasswordChangeCard } from './components/PasswordChangeCard';
 import { useAuth } from './hooks/useAuth';
 
 type AuthContext = ReturnType<typeof useAuth>;
@@ -44,6 +45,7 @@ function Dashboard({ auth }: { auth: AuthContext }) {
         <div className="space-y-4">
           <ActionsCard />
           <BookingList />
+          <PasswordChangeCard />
         </div>
       )}
       {view === 'admin' && user?.role === 'admin' && <AdminTable />}

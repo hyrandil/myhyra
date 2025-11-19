@@ -13,8 +13,9 @@ Vollständiges Beispiel einer Zeiterfassungslösung bestehend aus drei Projekten
 - Kommen/Gehen-Stempelung inkl. verpflichtender Standortübermittlung (Browser/App fragen die Freigabe aktiv an).
 - Kompakte Kalenderansicht pro Nutzer mit Tageszusammenfassung (Arbeits- & Pausenzeit) und Google-Maps-Vorschau der Standorte.
 - Admin-Inspector: Liste aller Mitarbeitenden, Auswahl eines Profils öffnet dieselbe Kalenderansicht.
-- Admin-Werkzeuge zum Anlegen neuer Nutzer:innen, Zurücksetzen von Passwörtern, De-/Aktivieren von Logins sowie manuellen Korrekturen oder Ergänzungen einzelner Buchungen.
+- Admin-Werkzeuge zum Anlegen neuer Nutzer:innen, Bearbeiten von Stammdaten/Rollen, Zurücksetzen von Passwörtern, De-/Aktivieren von Logins sowie manuellen Korrekturen oder Ergänzungen einzelner Buchungen.
 - Expo-App speichert Token sicher, fragt Standortberechtigungen an und erlaubt Map-Aufrufe aus den Buchungsdetails.
+- Mitarbeitende können ihr eigenes Passwort direkt im Dashboard mit alter Kennwortprüfung ändern.
 
 ## Schnellstart
 
@@ -54,12 +55,14 @@ Passe die `extra.apiUrl` in `mobile/app.json` oder `EXPO_PUBLIC_API_URL` an, dam
 | POST | `/api/bookings/clock-in` | Kommen buchen – verweigert Requests ohne GPS. |
 | POST | `/api/bookings/clock-out` | Gehen buchen – ebenfalls mit Standortpflicht. |
 | PATCH | `/api/bookings/:id` | (Admin) Buchungszeiten anpassen. |
-| POST | `/api/bookings/user/:id/manual` | (Admin) Neue Buchung mit manuellen Zeiten & GPS anlegen. |
+| POST | `/api/bookings/user/:id/manual` | (Admin) Kommen/Gehen manuell erfassen – optional mit Standort, auch einzeln zum Nachpflegen. |
 | GET | `/api/bookings` | (Admin) Gesamtliste aller Buchungen. |
 | GET | `/api/users` | (Admin) Mitarbeitendenliste für den Inspector. |
 | POST | `/api/users` | (Admin) Neue Mitarbeitende inkl. Rollen anlegen. |
 | PATCH | `/api/users/:id/password` | (Admin) Passwort zurücksetzen. |
 | PATCH | `/api/users/:id/status` | (Admin) Login eines Mitarbeitenden de-/aktivieren. |
+| PATCH | `/api/users/:id` | (Admin) Stammdaten/Rolle eines Nutzers anpassen. |
+| PATCH | `/api/users/me/password` | Mitarbeitende ändern ihr eigenes Passwort nach alter Kennwortprüfung. |
 
 ## Mobile & Browser Standortnachweis
 
