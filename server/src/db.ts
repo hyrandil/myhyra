@@ -1,8 +1,13 @@
 import Database from 'better-sqlite3';
 import bcrypt from 'bcryptjs';
+import fs from 'fs';
+import path from 'path';
 import { ADMIN_EMAIL, ADMIN_PASSWORD } from './config';
 
-const db = new Database('data/time_tracking.db');
+const dataDir = path.resolve(__dirname, '..', 'data');
+fs.mkdirSync(dataDir, { recursive: true });
+const dbPath = path.join(dataDir, 'time_tracking.db');
+const db = new Database(dbPath);
 
 db.pragma('foreign_keys = ON');
 
