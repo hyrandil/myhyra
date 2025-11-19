@@ -14,8 +14,10 @@ export interface Booking {
   user_id: number;
   clock_in: string;
   clock_out?: string | null;
-  location_lat?: number | null;
-  location_lng?: number | null;
+  clock_in_lat?: number | null;
+  clock_in_lng?: number | null;
+  clock_out_lat?: number | null;
+  clock_out_lng?: number | null;
   created_at: string;
   updated_at: string;
 }

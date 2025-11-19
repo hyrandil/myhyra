@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { StyleSheet, Text, View, TouchableOpacity, FlatList } from 'react-native';
+import { StyleSheet, Text, View, TouchableOpacity, FlatList, Linking } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import * as Location from 'expo-location';
 import * as SecureStore from 'expo-secure-store';
@@ -8,8 +8,10 @@ interface Booking {
   id: number;
   clock_in: string;
   clock_out?: string | null;
-  location_lat?: number | null;
-  location_lng?: number | null;
+  clock_in_lat?: number | null;
+  clock_in_lng?: number | null;
+  clock_out_lat?: number | null;
+  clock_out_lng?: number | null;
 }
 
 interface User {
@@ -26,6 +28,7 @@ export default function App() {
   const [user, setUser] = useState<User | null>(null);
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const openBooking = bookings.find((booking) => !booking.clock_out);
 
   useEffect(() => {
     const bootstrap = async () => {
@@ -42,8 +45,8 @@ export default function App() {
 
   const requestLocation = useCallback(async () => {
     const { status } = await Location.requestForegroundPermissionsAsync();
-    if (status !== 'granted') {
-      return undefined;
+    if (status !== Location.PermissionStatus.GRANTED) {
+      throw new Error('Standortfreigabe ist für jede Buchung erforderlich.');
     }
     const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High });
     return { lat: loc.coords.latitude, lng: loc.coords.longitude };
@@ -79,18 +82,34 @@ export default function App() {
     setBookings(data);
   };
 
-  const sendPunch = async (path: 'clock-in' | 'clock-out') => {
+  const sendPunch = async () => {
     if (!token) return;
-    const location = await requestLocation();
-    await fetch(`${API_URL}/bookings/${path}`, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ location }),
-    });
-    fetchBookings();
+    try {
+      setError(null);
+      const location = await requestLocation();
+      const openBooking = bookings.find((booking) => !booking.clock_out);
+      const path: 'clock-in' | 'clock-out' = openBooking ? 'clock-out' : 'clock-in';
+      const response = await fetch(`${API_URL}/bookings/${path}`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ location }),
+      });
+      if (!response.ok) {
+        const message = await response.text();
+        throw new Error(message || 'Serverfehler beim Stempeln');
+      }
+      fetchBookings();
+    } catch (err: any) {
+      setError(err?.message ?? 'Standort konnte nicht erfasst werden.');
+    }
+  };
+
+  const openMap = (lat?: number | null, lng?: number | null) => {
+    if (lat == null || lng == null) return;
+    Linking.openURL(`https://www.google.com/maps?q=${lat},${lng}`);
   };
 
   if (!token) {
@@ -110,29 +129,47 @@ export default function App() {
     <View style={styles.container}>
       <StatusBar style="dark" />
       <Text style={styles.title}>Hallo {user?.name}</Text>
-      <View style={styles.row}>
-        <TouchableOpacity style={[styles.primaryButton, styles.success]} onPress={() => sendPunch('clock-in')}>
-          <Text style={styles.primaryButtonText}>Kommen</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={[styles.primaryButton, styles.danger]} onPress={() => sendPunch('clock-out')}>
-          <Text style={styles.primaryButtonText}>Gehen</Text>
-        </TouchableOpacity>
-      </View>
+      <TouchableOpacity style={[styles.primaryButton, openBooking ? styles.danger : styles.success]} onPress={sendPunch}>
+        <Text style={styles.primaryButtonText}>{openBooking ? 'Gehen' : 'Kommen'}</Text>
+      </TouchableOpacity>
+      <Text style={styles.helperText}>
+        Standortfreigabe ist Pflicht – der Button ist nur erfolgreich, wenn GPS-Daten erfasst wurden.
+      </Text>
       <FlatList
         style={{ width: '100%' }}
         data={bookings}
         keyExtractor={(item) => item.id.toString()}
         renderItem={({ item }) => (
           <View style={styles.bookingCard}>
-            <Text style={styles.bookingTitle}>{new Date(item.clock_in).toLocaleString()}</Text>
+            <Text style={styles.bookingTitle}>{new Date(item.clock_in).toLocaleDateString()}</Text>
             <Text style={styles.bookingSubtitle}>
-              {item.clock_out ? `Gehen: ${new Date(item.clock_out).toLocaleString()}` : 'Noch aktiv'}
+              Kommen: {new Date(item.clock_in).toLocaleTimeString()}
             </Text>
-            {item.location_lat && item.location_lng && (
-              <Text style={styles.bookingSubtitle}>
-                Standort: {item.location_lat.toFixed(5)}, {item.location_lng.toFixed(5)}
+            <Text style={styles.bookingSubtitle}>
+              Gehen: {item.clock_out ? new Date(item.clock_out).toLocaleTimeString() : 'Noch offen'}
+            </Text>
+            <TouchableOpacity
+              style={styles.linkButton}
+              onPress={() => openMap(item.clock_in_lat, item.clock_in_lng)}
+            >
+              <Text style={styles.linkText}>
+                Standort Kommen:{' '}
+                {item.clock_in_lat && item.clock_in_lng
+                  ? `${item.clock_in_lat.toFixed(5)}, ${item.clock_in_lng.toFixed(5)}`
+                  : 'Keine Daten'}
               </Text>
-            )}
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.linkButton}
+              onPress={() => openMap(item.clock_out_lat, item.clock_out_lng)}
+            >
+              <Text style={styles.linkText}>
+                Standort Gehen:{' '}
+                {item.clock_out_lat && item.clock_out_lng
+                  ? `${item.clock_out_lat.toFixed(5)}, ${item.clock_out_lng.toFixed(5)}`
+                  : 'Keine Daten'}
+              </Text>
+            </TouchableOpacity>
           </View>
         )}
       />
@@ -161,16 +198,12 @@ const styles = StyleSheet.create({
     fontSize: 24,
     fontWeight: '600',
   },
-  row: {
-    flexDirection: 'row',
-    gap: 12,
-  },
   primaryButton: {
-    flex: 1,
     backgroundColor: '#2563eb',
     paddingVertical: 14,
     borderRadius: 999,
     alignItems: 'center',
+    width: '100%',
   },
   success: { backgroundColor: '#059669' },
   danger: { backgroundColor: '#dc2626' },
@@ -197,5 +230,17 @@ const styles = StyleSheet.create({
     color: '#475569',
     fontSize: 12,
   },
+  linkButton: {
+    marginTop: 6,
+  },
+  linkText: {
+    color: '#2563eb',
+    fontSize: 12,
+  },
   error: { color: '#dc2626' },
+  helperText: {
+    fontSize: 12,
+    color: '#475569',
+    textAlign: 'center',
+  },
 });

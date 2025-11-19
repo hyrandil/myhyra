@@ -7,8 +7,8 @@ import type { Booking } from '../types';
 const router = Router();
 
 const locationSchema = z.object({
-  lat: z.number().min(-90).max(90).nullable().optional(),
-  lng: z.number().min(-180).max(180).nullable().optional(),
+  lat: z.number().min(-90).max(90),
+  lng: z.number().min(-180).max(180),
 });
 
 router.use(authenticate);
@@ -35,9 +35,9 @@ router.post('/clock-in', (req: AuthRequest, res) => {
   }
   const { lat, lng } = parsed.data;
   const stmt = db.prepare(
-    "INSERT INTO bookings (user_id, clock_in, location_lat, location_lng) VALUES (?, datetime('now'), ?, ?)"
+    "INSERT INTO bookings (user_id, clock_in, clock_in_lat, clock_in_lng) VALUES (?, datetime('now'), ?, ?)"
   );
-  const result = stmt.run(req.user!.id, lat ?? null, lng ?? null);
+  const result = stmt.run(req.user!.id, lat, lng);
   res.json({ id: result.lastInsertRowid });
 });
 
@@ -54,8 +54,8 @@ router.post('/clock-out', (req: AuthRequest, res) => {
   }
   const { lat, lng } = parsed.data;
   db.prepare(
-    "UPDATE bookings SET clock_out = datetime('now'), location_lat = COALESCE(?, location_lat), location_lng = COALESCE(?, location_lng), updated_at = CURRENT_TIMESTAMP WHERE id = ?"
-  ).run(lat ?? null, lng ?? null, openBooking.id);
+    "UPDATE bookings SET clock_out = datetime('now'), clock_out_lat = ?, clock_out_lng = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?"
+  ).run(lat, lng, openBooking.id);
   res.json({ message: 'Ausgestempelt' });
 });
 
@@ -66,6 +66,17 @@ router.get('/', authorize(['admin']), (_req, res) => {
       JOIN users u ON u.id = b.user_id ORDER BY b.clock_in DESC`
     )
     .all();
+  res.json(bookings);
+});
+
+router.get('/user/:userId', authorize(['admin']), (req, res) => {
+  const userId = Number(req.params.userId);
+  if (Number.isNaN(userId)) {
+    return res.status(400).json({ message: 'Ungültige Nutzer-ID' });
+  }
+  const bookings = db
+    .prepare('SELECT * FROM bookings WHERE user_id = ? ORDER BY clock_in DESC')
+    .all(userId) as Booking[];
   res.json(bookings);
 });
 

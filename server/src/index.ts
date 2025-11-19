@@ -4,6 +4,7 @@ import bodyParser from 'body-parser';
 import { PORT } from './config';
 import authRoutes from './routes/authRoutes';
 import bookingRoutes from './routes/bookingRoutes';
+import userRoutes from './routes/userRoutes';
 import './db';
 
 const app = express();
@@ -19,6 +20,7 @@ app.get('/', (_req, res) => {
 
 app.use('/api/auth', authRoutes);
 app.use('/api/bookings', bookingRoutes);
+app.use('/api/users', userRoutes);
 
 app.listen(PORT, () => {
   console.log(`API läuft auf Port ${PORT}`);

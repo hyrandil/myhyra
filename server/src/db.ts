@@ -25,13 +25,29 @@ CREATE TABLE IF NOT EXISTS bookings (
   user_id INTEGER NOT NULL,
   clock_in DATETIME NOT NULL,
   clock_out DATETIME,
-  location_lat REAL,
-  location_lng REAL,
+  clock_in_lat REAL,
+  clock_in_lng REAL,
+  clock_out_lat REAL,
+  clock_out_lng REAL,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY(user_id) REFERENCES users(id)
 );
 `);
+
+type TableColumn = { name: string };
+const bookingColumns = db.prepare("PRAGMA table_info('bookings')").all() as TableColumn[];
+const ensureColumn = (name: string, definition: string) => {
+  const exists = bookingColumns.some((column) => column.name === name);
+  if (!exists) {
+    db.exec(`ALTER TABLE bookings ADD COLUMN ${definition}`);
+  }
+};
+
+ensureColumn('clock_in_lat', 'REAL');
+ensureColumn('clock_in_lng', 'REAL');
+ensureColumn('clock_out_lat', 'REAL');
+ensureColumn('clock_out_lng', 'REAL');
 
 function ensureAdminUser() {
   const existing = db.prepare('SELECT id FROM users WHERE email = ?').get(ADMIN_EMAIL);

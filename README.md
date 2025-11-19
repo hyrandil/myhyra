@@ -9,10 +9,11 @@ Vollständiges Beispiel einer Zeiterfassungslösung bestehend aus drei Projekten
 ## Features
 
 - Nutzerbasierte Logins (Admin + Mitarbeitende) mit JWT.
-- Kommen/Gehen-Stempelung inkl. Standort (mobil via Browser-Geolocation/App).
-- Persönliche Übersicht aller Buchungen.
-- Adminansicht mit allen Buchungen inkl. Koordinaten.
-- Expo-App speichert Token sicher und fragt Standortberechtigungen an.
+- Zentraler Kommen/Gehen-Button, der automatisch den nächsten Schritt anbietet.
+- Kommen/Gehen-Stempelung inkl. verpflichtender Standortübermittlung (Browser/App fragen die Freigabe aktiv an).
+- Kalenderansicht pro Nutzer mit Tageszusammenfassung (Arbeits- & Pausenzeit) und Google-Maps-Vorschau der Standorte.
+- Admin-Inspector: Liste aller Mitarbeitenden, Auswahl eines Profils öffnet dieselbe Kalenderansicht.
+- Expo-App speichert Token sicher, fragt Standortberechtigungen an und erlaubt Map-Aufrufe aus den Buchungsdetails.
 
 ## Schnellstart
 
@@ -48,15 +49,17 @@ Passe die `extra.apiUrl` in `mobile/app.json` oder `EXPO_PUBLIC_API_URL` an, dam
 |--------|----------|--------------|
 | POST | `/api/auth/login` | Login, liefert JWT. |
 | POST | `/api/auth/register` | (Admin) Benutzer anlegen. |
-| GET | `/api/bookings/me` | Eigene Buchungen. |
-| POST | `/api/bookings/clock-in` | Kommen buchen inkl. Standort. |
-| POST | `/api/bookings/clock-out` | Gehen buchen. |
-| GET | `/api/bookings` | (Admin) Alle Buchungen. |
+| GET | `/api/bookings/me` | Eigene Buchungen (für Kalender & Button-State). |
+| GET | `/api/bookings/user/:id` | (Admin) Buchungen für ausgewählten Mitarbeitenden. |
+| POST | `/api/bookings/clock-in` | Kommen buchen – verweigert Requests ohne GPS. |
+| POST | `/api/bookings/clock-out` | Gehen buchen – ebenfalls mit Standortpflicht. |
+| GET | `/api/bookings` | (Admin) Gesamtliste aller Buchungen. |
+| GET | `/api/users` | (Admin) Mitarbeitendenliste für den Inspector. |
 
-## Mobile Standortnachweis
+## Mobile & Browser Standortnachweis
 
-- Web/Browser: `navigator.geolocation` (freiwillig, fallback ohne Koordinaten).
-- Expo-App: nutzt `expo-location`, fordert Berechtigung bei jeder Stempelung an und sendet Koordinaten in die API.
+- Web/Browser: Der große Punch-Button funktioniert nur mit aktiver Geofreigabe (`navigator.geolocation`). Wird sie verweigert, zeigt das UI eine Fehlermeldung.
+- Expo-App: nutzt `expo-location`, fordert Berechtigung bei jeder Stempelung an und öffnet Google Maps für gespeicherte Koordinaten.
 
 ## Sicherheit & Weiteres
 

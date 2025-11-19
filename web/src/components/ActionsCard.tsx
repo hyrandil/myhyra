@@ -1,61 +1,71 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useState } from 'react';
 import api from '../api';
+import { useMyBookings } from '../hooks/useBookings';
 
-async function requestLocation(): Promise<{ lat: number; lng: number } | undefined> {
+async function requestLocation(): Promise<{ lat: number; lng: number }> {
   if (!('geolocation' in navigator)) {
-    return undefined;
+    throw new Error('Dieses Gerät liefert keine Geodaten.');
   }
-  return new Promise((resolve) => {
+  return new Promise((resolve, reject) => {
     navigator.geolocation.getCurrentPosition(
       (pos) => resolve({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
-      () => resolve(undefined),
-      { enableHighAccuracy: true, timeout: 5000 }
+      () => reject(new Error('Standortfreigabe ist für jede Buchung erforderlich.')),
+      { enableHighAccuracy: true, timeout: 8000 }
     );
   });
 }
 
 export function ActionsCard() {
   const queryClient = useQueryClient();
+  const { data: bookings } = useMyBookings();
+  const activeBooking = bookings?.find((booking) => !booking.clock_out);
+  const [error, setError] = useState<string | null>(null);
 
-  const clockIn = useMutation({
+  const punch = useMutation({
     mutationFn: async () => {
+      setError(null);
       const location = await requestLocation();
-      await api.post('/bookings/clock-in', { location });
+      const action = activeBooking ? 'clock-out' : 'clock-in';
+      await api.post(`/bookings/${action}`, { location });
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['bookings', 'me'] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['bookings', 'me'] });
+    },
+    onError: (err: any) => {
+      setError(err?.message ?? 'Aktion fehlgeschlagen.');
+    },
   });
 
-  const clockOut = useMutation({
-    mutationFn: async () => {
-      const location = await requestLocation();
-      await api.post('/bookings/clock-out', { location });
-    },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['bookings', 'me'] }),
-  });
+  const isClockedIn = Boolean(activeBooking);
+  const label = punch.isPending ? 'Speichere...' : isClockedIn ? 'Gehen' : 'Kommen';
+  const statusText = isClockedIn
+    ? `Seit ${new Date(activeBooking!.clock_in).toLocaleTimeString('de-DE', {
+        hour: '2-digit',
+        minute: '2-digit',
+      })} eingestempelt`
+    : 'Bereit für den nächsten Arbeitstag';
 
   return (
-    <div className="bg-white rounded shadow p-4 space-y-3">
-      <h2 className="text-lg font-semibold">Schnellaktionen</h2>
-      <p className="text-sm text-slate-500">
-        Beim mobilen Zugriff wird automatisch dein Standort angefordert. Wenn du ihn nicht freigibst, wird die Buchung ohne
-        Koordinaten gespeichert.
-      </p>
-      <div className="flex gap-3">
-        <button
-          onClick={() => clockIn.mutate()}
-          className="flex-1 bg-emerald-600 text-white py-2 rounded disabled:opacity-50"
-          disabled={clockIn.isPending}
-        >
-          {clockIn.isPending ? 'Stempeln...' : 'Kommen'}
-        </button>
-        <button
-          onClick={() => clockOut.mutate()}
-          className="flex-1 bg-rose-600 text-white py-2 rounded disabled:opacity-50"
-          disabled={clockOut.isPending}
-        >
-          {clockOut.isPending ? 'Stempeln...' : 'Gehen'}
-        </button>
+    <div className="bg-white rounded shadow p-6 space-y-4">
+      <div className="space-y-1">
+        <p className="text-sm text-slate-500 uppercase tracking-wide">Status</p>
+        <p className="text-lg font-semibold">{statusText}</p>
       </div>
+      <button
+        onClick={() => punch.mutate()}
+        disabled={punch.isPending}
+        className={`w-full rounded-full py-4 text-white text-lg font-semibold transition-all ${
+          isClockedIn ? 'bg-rose-600 hover:bg-rose-700' : 'bg-emerald-600 hover:bg-emerald-700'
+        } disabled:opacity-50`}
+      >
+        {label}
+      </button>
+      <p className="text-xs text-slate-500">
+        Jede Buchung speichert den Standort aus dem Browser bzw. der App. Bitte erlaube den Zugriff auf die Geoposition, damit die
+        Kommen- und Gehen-Zeit gültig gespeichert werden kann.
+      </p>
+      {error && <p className="text-sm text-rose-600">{error}</p>}
     </div>
   );
 }
