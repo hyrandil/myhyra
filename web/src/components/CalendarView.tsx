@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { FormEvent, useEffect, useMemo, useState } from 'react';
 import type { Booking } from '../types';
 import { buildCalendarDays, formatMinutes, getDateKey, groupBookingsByDay } from '../utils/time';
 
@@ -12,7 +12,16 @@ interface CalendarViewProps {
   onRefresh?: () => void;
   emptyState?: string;
   dataKey?: string | number | null;
+  onUpdateBooking?: (bookingId: number, payload: { clock_in?: string; clock_out?: string | null }) => Promise<unknown>;
 }
+
+const toInputValue = (value?: string | null) => {
+  if (!value) {
+    return '';
+  }
+  const date = new Date(value);
+  return new Date(date.getTime() - date.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+};
 
 function MapPreview({ lat, lng }: { lat?: number | null; lng?: number | null }) {
   if (lat == null || lng == null) {
@@ -22,7 +31,7 @@ function MapPreview({ lat, lng }: { lat?: number | null; lng?: number | null }) 
   return (
     <div className="space-y-1">
       <p className="text-xs text-slate-500">Koordinaten: {lat.toFixed(5)}, {lng.toFixed(5)}</p>
-      <div className="h-48 w-full overflow-hidden rounded-lg border border-slate-200 bg-slate-50">
+      <div className="h-36 w-full overflow-hidden rounded-md border border-slate-200 bg-slate-50">
         <iframe
           title="Google Maps Vorschau"
           src={src}
@@ -44,16 +53,22 @@ export function CalendarView({
   onRefresh,
   emptyState = 'Keine Buchungen für diesen Tag.',
   dataKey,
+  onUpdateBooking,
 }: CalendarViewProps) {
   const todayKey = getDateKey(new Date());
   const [selectedDate, setSelectedDate] = useState(todayKey);
   const [currentMonth, setCurrentMonth] = useState(() => new Date());
   const [expandedBookingId, setExpandedBookingId] = useState<number | null>(null);
+  const [editingBookingId, setEditingBookingId] = useState<number | null>(null);
+  const [editValues, setEditValues] = useState<{ clock_in: string; clock_out: string } | null>(null);
+  const [editError, setEditError] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
     setSelectedDate(todayKey);
     setCurrentMonth(new Date());
     setExpandedBookingId(null);
+    setEditingBookingId(null);
   }, [dataKey]);
 
   const grouped = useMemo(() => groupBookingsByDay(bookings), [bookings]);
@@ -67,8 +82,34 @@ export function CalendarView({
     year: 'numeric',
   });
 
+  const handleEditSubmit = async (event: FormEvent) => {
+    event.preventDefault();
+    if (!editingBookingId || !editValues || !onUpdateBooking) {
+      return;
+    }
+    setIsSaving(true);
+    setEditError(null);
+    try {
+      const payload: { clock_in?: string; clock_out?: string | null } = {};
+      if (editValues.clock_in) {
+        payload.clock_in = new Date(editValues.clock_in).toISOString();
+      }
+      if (editValues.clock_out) {
+        payload.clock_out = new Date(editValues.clock_out).toISOString();
+      } else {
+        payload.clock_out = null;
+      }
+      await onUpdateBooking(editingBookingId, payload);
+      setEditingBookingId(null);
+    } catch (error: any) {
+      setEditError(error?.response?.data?.message || 'Speichern fehlgeschlagen');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   return (
-    <div className="bg-white rounded shadow p-6 space-y-5">
+    <div className="bg-white rounded-md shadow p-4 space-y-4 text-sm">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h2 className="text-xl font-semibold">{title}</h2>
@@ -102,7 +143,7 @@ export function CalendarView({
         <p>Lade Buchungen...</p>
       ) : (
         <>
-          <div className="grid grid-cols-7 gap-1 text-center text-xs font-semibold text-slate-500">
+          <div className="grid grid-cols-7 gap-1 text-center text-[11px] font-semibold text-slate-500">
             {weekdayLabels.map((label) => (
               <span key={label}>{label}</span>
             ))}
@@ -117,11 +158,12 @@ export function CalendarView({
                   onClick={() => {
                     setSelectedDate(day.key);
                     setExpandedBookingId(null);
+                    setEditingBookingId(null);
                     if (!day.isCurrentMonth) {
                       setCurrentMonth(new Date(day.date.getFullYear(), day.date.getMonth(), 1));
                     }
                   }}
-                  className={`aspect-square rounded-lg border text-sm transition-all ${
+                  className={`h-12 rounded-md border text-xs transition-all ${
                     isSelected
                       ? 'border-blue-500 bg-blue-50 text-blue-700'
                       : hasEntries
@@ -136,7 +178,7 @@ export function CalendarView({
             })}
           </div>
 
-          <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
+          <div className="rounded-md border border-slate-200 bg-slate-50 p-3">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div>
                 <p className="text-sm uppercase text-slate-500">Ausgewählter Tag</p>
@@ -161,6 +203,7 @@ export function CalendarView({
             ) : (
               selectedBookings.map((booking) => {
                 const isExpanded = expandedBookingId === booking.id;
+                const isEditing = editingBookingId === booking.id;
                 return (
                   <div key={booking.id} className="rounded border border-slate-200 p-4 bg-white">
                     <div className="flex flex-wrap items-center justify-between gap-2">
@@ -190,6 +233,25 @@ export function CalendarView({
                       >
                         {isExpanded ? 'Standort verbergen' : 'Standort anzeigen'}
                       </button>
+                      {onUpdateBooking && (
+                        <button
+                          onClick={() => {
+                            if (isEditing) {
+                              setEditingBookingId(null);
+                              return;
+                            }
+                            setEditValues({
+                              clock_in: toInputValue(booking.clock_in),
+                              clock_out: toInputValue(booking.clock_out),
+                            });
+                            setEditingBookingId(booking.id);
+                            setEditError(null);
+                          }}
+                          className="text-sm text-slate-500 underline"
+                        >
+                          {isEditing ? 'Bearbeitung abbrechen' : 'Zeiten bearbeiten'}
+                        </button>
+                      )}
                     </div>
                     {isExpanded && (
                       <div className="mt-4 grid gap-4 md:grid-cols-2">
@@ -202,6 +264,52 @@ export function CalendarView({
                           <MapPreview lat={booking.clock_out_lat} lng={booking.clock_out_lng} />
                         </div>
                       </div>
+                    )}
+                    {isEditing && onUpdateBooking && editValues && (
+                      <form onSubmit={handleEditSubmit} className="mt-4 space-y-2 rounded-md bg-slate-50 p-3">
+                        <div className="grid gap-3 md:grid-cols-2">
+                          <label className="text-xs font-semibold text-slate-500">
+                            Kommen
+                            <input
+                              type="datetime-local"
+                              value={editValues.clock_in}
+                              onChange={(event) =>
+                                setEditValues((prev) => {
+                                  const base = prev ?? { clock_in: '', clock_out: '' };
+                                  return { ...base, clock_in: event.target.value };
+                                })
+                              }
+                              className="mt-1 w-full rounded border border-slate-300 px-2 py-1 text-sm"
+                              required
+                            />
+                          </label>
+                          <label className="text-xs font-semibold text-slate-500">
+                            Gehen
+                            <input
+                              type="datetime-local"
+                              value={editValues.clock_out}
+                              onChange={(event) =>
+                                setEditValues((prev) => {
+                                  const base = prev ?? { clock_in: '', clock_out: '' };
+                                  return { ...base, clock_out: event.target.value };
+                                })
+                              }
+                              className="mt-1 w-full rounded border border-slate-300 px-2 py-1 text-sm"
+                            />
+                          </label>
+                        </div>
+                        {editError && <p className="text-xs text-rose-600">{editError}</p>}
+                        <div className="flex items-center gap-2 text-xs text-slate-500">
+                          <button
+                            type="submit"
+                            disabled={isSaving}
+                            className="rounded bg-blue-600 px-3 py-1 text-white text-sm font-semibold disabled:opacity-50"
+                          >
+                            {isSaving ? 'Speichere...' : 'Änderungen sichern'}
+                          </button>
+                          <span>Leeres Gehen-Feld speichert eine offene Buchung.</span>
+                        </div>
+                      </form>
                     )}
                   </div>
                 );

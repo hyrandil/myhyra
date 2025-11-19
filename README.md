@@ -11,8 +11,9 @@ Vollständiges Beispiel einer Zeiterfassungslösung bestehend aus drei Projekten
 - Nutzerbasierte Logins (Admin + Mitarbeitende) mit JWT.
 - Zentraler Kommen/Gehen-Button, der automatisch den nächsten Schritt anbietet.
 - Kommen/Gehen-Stempelung inkl. verpflichtender Standortübermittlung (Browser/App fragen die Freigabe aktiv an).
-- Kalenderansicht pro Nutzer mit Tageszusammenfassung (Arbeits- & Pausenzeit) und Google-Maps-Vorschau der Standorte.
+- Kompakte Kalenderansicht pro Nutzer mit Tageszusammenfassung (Arbeits- & Pausenzeit) und Google-Maps-Vorschau der Standorte.
 - Admin-Inspector: Liste aller Mitarbeitenden, Auswahl eines Profils öffnet dieselbe Kalenderansicht.
+- Admin-Werkzeuge zum Anlegen neuer Nutzer:innen, Zurücksetzen von Passwörtern und manuellen Korrekturen einzelner Buchungen.
 - Expo-App speichert Token sicher, fragt Standortberechtigungen an und erlaubt Map-Aufrufe aus den Buchungsdetails.
 
 ## Schnellstart
@@ -48,13 +49,15 @@ Passe die `extra.apiUrl` in `mobile/app.json` oder `EXPO_PUBLIC_API_URL` an, dam
 | Methode | Endpoint | Beschreibung |
 |--------|----------|--------------|
 | POST | `/api/auth/login` | Login, liefert JWT. |
-| POST | `/api/auth/register` | (Admin) Benutzer anlegen. |
 | GET | `/api/bookings/me` | Eigene Buchungen (für Kalender & Button-State). |
 | GET | `/api/bookings/user/:id` | (Admin) Buchungen für ausgewählten Mitarbeitenden. |
 | POST | `/api/bookings/clock-in` | Kommen buchen – verweigert Requests ohne GPS. |
 | POST | `/api/bookings/clock-out` | Gehen buchen – ebenfalls mit Standortpflicht. |
+| PATCH | `/api/bookings/:id` | (Admin) Buchungszeiten anpassen. |
 | GET | `/api/bookings` | (Admin) Gesamtliste aller Buchungen. |
 | GET | `/api/users` | (Admin) Mitarbeitendenliste für den Inspector. |
+| POST | `/api/users` | (Admin) Neue Mitarbeitende inkl. Rollen anlegen. |
+| PATCH | `/api/users/:id/password` | (Admin) Passwort zurücksetzen. |
 
 ## Mobile & Browser Standortnachweis
 

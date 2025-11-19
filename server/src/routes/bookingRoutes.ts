@@ -11,6 +11,15 @@ const locationSchema = z.object({
   lng: z.number().min(-180).max(180),
 });
 
+const bookingEditSchema = z
+  .object({
+    clock_in: z.string().datetime().optional(),
+    clock_out: z.union([z.string().datetime(), z.null()]).optional(),
+  })
+  .refine((data) => 'clock_in' in data || 'clock_out' in data, {
+    message: 'Mindestens ein Feld muss gesetzt sein',
+  });
+
 router.use(authenticate);
 
 router.get('/me', (req: AuthRequest, res) => {
@@ -78,6 +87,37 @@ router.get('/user/:userId', authorize(['admin']), (req, res) => {
     .prepare('SELECT * FROM bookings WHERE user_id = ? ORDER BY clock_in DESC')
     .all(userId) as Booking[];
   res.json(bookings);
+});
+
+router.patch('/:bookingId', authorize(['admin']), (req, res) => {
+  const bookingId = Number(req.params.bookingId);
+  if (Number.isNaN(bookingId)) {
+    return res.status(400).json({ message: 'Ungültige Buchungs-ID' });
+  }
+  const parsed = bookingEditSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ errors: parsed.error.format() });
+  }
+  const updates: string[] = [];
+  const values: (string | null)[] = [];
+  if ('clock_in' in parsed.data && parsed.data.clock_in) {
+    updates.push('clock_in = ?');
+    values.push(parsed.data.clock_in);
+  }
+  if ('clock_out' in parsed.data) {
+    updates.push('clock_out = ?');
+    values.push(parsed.data.clock_out ?? null);
+  }
+  if (updates.length === 0) {
+    return res.status(400).json({ message: 'Keine Änderungen übergeben' });
+  }
+  const stmt = db.prepare(`UPDATE bookings SET ${updates.join(', ')}, updated_at = CURRENT_TIMESTAMP WHERE id = ?`);
+  const result = stmt.run(...values, bookingId);
+  if (result.changes === 0) {
+    return res.status(404).json({ message: 'Buchung nicht gefunden' });
+  }
+  const updated = db.prepare('SELECT * FROM bookings WHERE id = ?').get(bookingId) as Booking;
+  res.json(updated);
 });
 
 export default router;

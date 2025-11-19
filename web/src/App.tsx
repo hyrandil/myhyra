@@ -5,8 +5,10 @@ import { ActionsCard } from './components/ActionsCard';
 import { AdminTable } from './components/AdminTable';
 import { useAuth } from './hooks/useAuth';
 
-function Dashboard() {
-  const { user, logout } = useAuth();
+type AuthContext = ReturnType<typeof useAuth>;
+
+function Dashboard({ auth }: { auth: AuthContext }) {
+  const { user, logout } = auth;
   const [view, setView] = useState<'own' | 'admin'>('own');
 
   return (
@@ -62,7 +64,7 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-slate-100">
-      <Dashboard />
+      <Dashboard auth={auth} />
     </div>
   );
 }
