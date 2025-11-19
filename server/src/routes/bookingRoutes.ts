@@ -35,7 +35,7 @@ router.post('/clock-in', (req: AuthRequest, res) => {
   }
   const { lat, lng } = parsed.data;
   const stmt = db.prepare(
-    'INSERT INTO bookings (user_id, clock_in, location_lat, location_lng) VALUES (?, datetime("now"), ?, ?)'
+    "INSERT INTO bookings (user_id, clock_in, location_lat, location_lng) VALUES (?, datetime('now'), ?, ?)"
   );
   const result = stmt.run(req.user!.id, lat ?? null, lng ?? null);
   res.json({ id: result.lastInsertRowid });
@@ -54,7 +54,7 @@ router.post('/clock-out', (req: AuthRequest, res) => {
   }
   const { lat, lng } = parsed.data;
   db.prepare(
-    'UPDATE bookings SET clock_out = datetime("now"), location_lat = COALESCE(?, location_lat), location_lng = COALESCE(?, location_lng), updated_at = CURRENT_TIMESTAMP WHERE id = ?'
+    "UPDATE bookings SET clock_out = datetime('now'), location_lat = COALESCE(?, location_lat), location_lng = COALESCE(?, location_lng), updated_at = CURRENT_TIMESTAMP WHERE id = ?"
   ).run(lat ?? null, lng ?? null, openBooking.id);
   res.json({ message: 'Ausgestempelt' });
 });
