@@ -3,14 +3,15 @@ import { LoginCard } from './components/LoginCard';
 import { BookingList } from './components/BookingList';
 import { ActionsCard } from './components/ActionsCard';
 import { AdminTable } from './components/AdminTable';
-import { PasswordChangeCard } from './components/PasswordChangeCard';
+import { SettingsPanel } from './components/SettingsPanel';
+import { VacationSummaryCard } from './components/VacationSummaryCard';
 import { useAuth } from './hooks/useAuth';
 
 type AuthContext = ReturnType<typeof useAuth>;
 
 function Dashboard({ auth }: { auth: AuthContext }) {
   const { user, logout } = auth;
-  const [view, setView] = useState<'own' | 'admin'>('own');
+  const [view, setView] = useState<'dashboard' | 'settings' | 'admin'>('dashboard');
 
   return (
     <div className="max-w-5xl mx-auto py-10 space-y-6">
@@ -19,35 +20,42 @@ function Dashboard({ auth }: { auth: AuthContext }) {
           <p className="text-sm text-slate-500">Eingeloggt als</p>
           <p className="font-semibold">{user?.name}</p>
         </div>
-        <div className="flex gap-3">
-          {user?.role === 'admin' && (
-            <div className="bg-slate-100 rounded px-2 py-1 text-sm">
-              <button
-                onClick={() => setView('own')}
-                className={`px-2 ${view === 'own' ? 'text-blue-600 font-semibold' : 'text-slate-500'}`}
-              >
-                Eigene
-              </button>
+        <div className="flex gap-3 items-center">
+          <div className="bg-slate-100 rounded px-2 py-1 text-sm">
+            <button
+              onClick={() => setView('dashboard')}
+              className={`px-2 ${view === 'dashboard' ? 'text-blue-600 font-semibold' : 'text-slate-500'}`}
+            >
+              Übersicht
+            </button>
+            <button
+              onClick={() => setView('settings')}
+              className={`px-2 ${view === 'settings' ? 'text-blue-600 font-semibold' : 'text-slate-500'}`}
+            >
+              Einstellungen
+            </button>
+            {user?.role === 'admin' && (
               <button
                 onClick={() => setView('admin')}
                 className={`px-2 ${view === 'admin' ? 'text-blue-600 font-semibold' : 'text-slate-500'}`}
               >
                 Admin
               </button>
-            </div>
-          )}
+            )}
+          </div>
           <button className="text-sm text-rose-600" onClick={logout}>
             Logout
           </button>
         </div>
       </header>
-      {view === 'own' && (
+      {view === 'dashboard' && (
         <div className="space-y-4">
           <ActionsCard />
           <BookingList />
-          <PasswordChangeCard />
+          <VacationSummaryCard />
         </div>
       )}
+      {view === 'settings' && <SettingsPanel />}
       {view === 'admin' && user?.role === 'admin' && <AdminTable />}
     </div>
   );

@@ -28,6 +28,7 @@ router.post('/register', authenticate, authorize(['admin']), (req: AuthRequest, 
   const passwordHash = bcrypt.hashSync(password, 10);
   const stmt = db.prepare('INSERT INTO users (name, email, password_hash, role, active) VALUES (?, ?, ?, ?, 1)');
   const result = stmt.run(name, email, passwordHash, role);
+  db.prepare('INSERT INTO user_settings (user_id) VALUES (?)').run(Number(result.lastInsertRowid));
   res.json({ id: result.lastInsertRowid, name, email, role });
 });
 

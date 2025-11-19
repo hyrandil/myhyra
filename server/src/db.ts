@@ -34,6 +34,28 @@ CREATE TABLE IF NOT EXISTS bookings (
   updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY(user_id) REFERENCES users(id)
 );
+
+CREATE TABLE IF NOT EXISTS user_settings (
+  user_id INTEGER PRIMARY KEY,
+  daily_target_minutes INTEGER NOT NULL DEFAULT 480,
+  email_notifications INTEGER NOT NULL DEFAULT 1,
+  weekly_summary INTEGER NOT NULL DEFAULT 0,
+  language TEXT NOT NULL DEFAULT 'de',
+  theme TEXT NOT NULL DEFAULT 'system',
+  vacation_allowance REAL NOT NULL DEFAULT 30,
+  FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS absences (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER NOT NULL,
+  date TEXT NOT NULL,
+  type TEXT NOT NULL CHECK(type IN ('vacation','sick','remote','training','other')),
+  duration TEXT NOT NULL CHECK(duration IN ('full','half')),
+  note TEXT,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+);
 `);
 
 type TableColumn = { name: string };
@@ -50,6 +72,7 @@ ensureTableColumn('bookings', 'clock_in_lng', 'REAL');
 ensureTableColumn('bookings', 'clock_out_lat', 'REAL');
 ensureTableColumn('bookings', 'clock_out_lng', 'REAL');
 ensureTableColumn('users', 'active', 'INTEGER NOT NULL DEFAULT 1');
+db.exec(`INSERT OR IGNORE INTO user_settings (user_id) SELECT id FROM users;`);
 
 function ensureAdminUser() {
   const existing = db.prepare('SELECT id FROM users WHERE email = ?').get(ADMIN_EMAIL);
