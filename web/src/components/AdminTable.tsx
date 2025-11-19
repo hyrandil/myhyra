@@ -88,30 +88,32 @@ export function AdminTable() {
     return <p>Lade Mitarbeitende...</p>;
   }
 
-  if (!employees || employees.length === 0) {
-    return <p>Es wurden noch keine Mitarbeitenden angelegt.</p>;
-  }
-
   return (
     <div className="grid gap-6 lg:grid-cols-[320px_1fr]">
       <div className="rounded border border-slate-200 bg-white p-4 space-y-6 text-sm">
         <div>
           <h3 className="text-lg font-semibold mb-3">Mitarbeitende</h3>
           <div className="space-y-2 max-h-[320px] overflow-auto pr-1">
-            {employees.map((employee) => (
-              <button
-                key={employee.id}
-                onClick={() => setSelectedUserId(employee.id)}
-                className={`w-full rounded-lg border px-3 py-2 text-left transition ${
-                  employee.id === selectedUserId
-                    ? 'border-blue-500 bg-blue-50 text-blue-700'
-                    : 'border-slate-200 hover:border-blue-300'
-                }`}
-              >
-                <p className="font-semibold">{employee.name}</p>
-                <p className="text-xs text-slate-500">{employee.email}</p>
-              </button>
-            ))}
+            {employees && employees.length > 0 ? (
+              employees.map((employee) => (
+                <button
+                  key={employee.id}
+                  onClick={() => setSelectedUserId(employee.id)}
+                  className={`w-full rounded-lg border px-3 py-2 text-left transition ${
+                    employee.id === selectedUserId
+                      ? 'border-blue-500 bg-blue-50 text-blue-700'
+                      : 'border-slate-200 hover:border-blue-300'
+                  }`}
+                >
+                  <p className="font-semibold">{employee.name}</p>
+                  <p className="text-xs text-slate-500">{employee.email}</p>
+                </button>
+              ))
+            ) : (
+              <p className="text-sm text-slate-500">
+                Es wurden noch keine Mitarbeitenden angelegt. Verwende das Formular unten, um den ersten Nutzer anzulegen.
+              </p>
+            )}
           </div>
         </div>
         <form className="space-y-2" onSubmit={handleCreateUser}>
@@ -190,12 +192,20 @@ export function AdminTable() {
       </div>
       <CalendarView
         title="Kalenderansicht Mitarbeiter"
-        subtitle={selectedUserId ? employees.find((e) => e.id === selectedUserId)?.name : undefined}
+        subtitle={
+          selectedUserId
+            ? employees?.find((e) => e.id === selectedUserId)?.name
+            : 'Bitte wählen oder erstellen Sie einen Mitarbeitenden'
+        }
         bookings={bookings}
         isLoading={isBookingLoading}
         onRefresh={() => refetch()}
         dataKey={selectedUserId ?? 'none'}
-        emptyState="Für diesen Tag hat der ausgewählte Mitarbeiter keine Buchungen."
+        emptyState={
+          selectedUserId
+            ? 'Für diesen Tag hat der ausgewählte Mitarbeiter keine Buchungen.'
+            : 'Noch kein Mitarbeitender ausgewählt.'
+        }
         onUpdateBooking={(bookingId, payload) => updateBookingMutation.mutateAsync({ bookingId, payload }).then(() => refetch())}
       />
     </div>

@@ -75,6 +75,28 @@ export function CalendarView({
   const monthDays = useMemo(() => buildCalendarDays(currentMonth), [currentMonth]);
   const selectedBookings = grouped[selectedDate]?.bookings ?? [];
   const summary = grouped[selectedDate]?.summary ?? { workMinutes: 0, breakMinutes: 0 };
+  const monthSummary = useMemo(() => {
+    let workMinutes = 0;
+    const attendanceDays = new Set<string>();
+    Object.values(grouped).forEach((bucket) => {
+      const { displayDate, summary } = bucket;
+      if (
+        displayDate.getFullYear() === currentMonth.getFullYear() &&
+        displayDate.getMonth() === currentMonth.getMonth()
+      ) {
+        workMinutes += summary.workMinutes;
+        if (bucket.bookings.length > 0) {
+          attendanceDays.add(bucket.dateKey);
+        }
+      }
+    });
+    return {
+      workMinutes,
+      attendanceCount: attendanceDays.size,
+      averageWorkMinutes:
+        attendanceDays.size > 0 ? Math.round(workMinutes / attendanceDays.size) : 0,
+    };
+  }, [grouped, currentMonth]);
   const selectedDateLabel = new Date(`${selectedDate}T00:00:00`).toLocaleDateString('de-DE', {
     weekday: 'long',
     day: '2-digit',
@@ -142,62 +164,90 @@ export function CalendarView({
       {isLoading ? (
         <p>Lade Buchungen...</p>
       ) : (
-        <>
-          <div className="grid grid-cols-7 gap-1 text-center text-[11px] font-semibold text-slate-500">
-            {weekdayLabels.map((label) => (
-              <span key={label}>{label}</span>
-            ))}
-          </div>
-          <div className="grid grid-cols-7 gap-1">
-            {monthDays.map((day) => {
-              const hasEntries = Boolean(grouped[day.key]);
-              const isSelected = day.key === selectedDate;
-              return (
-                <button
-                  key={day.key}
-                  onClick={() => {
-                    setSelectedDate(day.key);
-                    setExpandedBookingId(null);
-                    setEditingBookingId(null);
-                    if (!day.isCurrentMonth) {
-                      setCurrentMonth(new Date(day.date.getFullYear(), day.date.getMonth(), 1));
-                    }
-                  }}
-                  className={`h-12 rounded-md border text-xs transition-all ${
-                    isSelected
-                      ? 'border-blue-500 bg-blue-50 text-blue-700'
-                      : hasEntries
-                      ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
-                      : 'border-transparent bg-slate-100 text-slate-500'
-                  } ${day.isCurrentMonth ? '' : 'opacity-60'}`}
-                >
-                  <div>{day.date.getDate()}</div>
-                  {hasEntries && <div className="mt-1 h-1 w-1 rounded-full bg-current mx-auto" />}
-                </button>
-              );
-            })}
-          </div>
-
-          <div className="rounded-md border border-slate-200 bg-slate-50 p-3">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <div>
-                <p className="text-sm uppercase text-slate-500">Ausgewählter Tag</p>
-                <p className="text-lg font-semibold">{selectedDateLabel}</p>
+        <div className="flex flex-col gap-4 lg:flex-row">
+          <aside className="lg:w-60 shrink-0 space-y-3 rounded-md border border-slate-200 bg-slate-50 p-3">
+            <div>
+              <p className="text-xs uppercase tracking-wide text-slate-500">Monatsübersicht</p>
+              <p className="text-base font-semibold text-slate-900">
+                {currentMonth.toLocaleDateString('de-DE', { month: 'long', year: 'numeric' })}
+              </p>
+            </div>
+            <div className="space-y-2 text-sm">
+              <div className="rounded bg-white p-3">
+                <p className="text-slate-500">Arbeitszeit gesamt</p>
+                <p className="text-lg font-semibold text-slate-900">{formatMinutes(monthSummary.workMinutes)}</p>
               </div>
-              <div className="flex gap-4 text-sm">
+              <div className="rounded bg-white p-3">
+                <p className="text-slate-500">Anwesende Tage</p>
+                <p className="text-lg font-semibold text-slate-900">{monthSummary.attendanceCount}</p>
+                <p className="text-xs text-slate-500">Tage mit mindestens einer Buchung</p>
+              </div>
+              <div className="rounded bg-white p-3">
+                <p className="text-slate-500">Ø Arbeitszeit pro Tag</p>
+                <p className="text-lg font-semibold text-slate-900">
+                  {monthSummary.attendanceCount > 0
+                    ? formatMinutes(monthSummary.averageWorkMinutes)
+                    : '0h 00m'}
+                </p>
+              </div>
+            </div>
+          </aside>
+          <div className="flex-1 space-y-4">
+            <div className="grid grid-cols-7 gap-1 text-center text-[11px] font-semibold text-slate-500">
+              {weekdayLabels.map((label) => (
+                <span key={label}>{label}</span>
+              ))}
+            </div>
+            <div className="grid grid-cols-7 gap-1">
+              {monthDays.map((day) => {
+                const hasEntries = Boolean(grouped[day.key]);
+                const isSelected = day.key === selectedDate;
+                return (
+                  <button
+                    key={day.key}
+                    onClick={() => {
+                      setSelectedDate(day.key);
+                      setExpandedBookingId(null);
+                      setEditingBookingId(null);
+                      if (!day.isCurrentMonth) {
+                        setCurrentMonth(new Date(day.date.getFullYear(), day.date.getMonth(), 1));
+                      }
+                    }}
+                    className={`h-12 rounded-md border text-xs transition-all ${
+                      isSelected
+                        ? 'border-blue-500 bg-blue-50 text-blue-700'
+                        : hasEntries
+                        ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+                        : 'border-transparent bg-slate-100 text-slate-500'
+                    } ${day.isCurrentMonth ? '' : 'opacity-60'}`}
+                  >
+                    <div>{day.date.getDate()}</div>
+                    {hasEntries && <div className="mt-1 h-1 w-1 rounded-full bg-current mx-auto" />}
+                  </button>
+                );
+              })}
+            </div>
+
+            <div className="rounded-md border border-slate-200 bg-slate-50 p-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
                 <div>
-                  <p className="text-slate-500">Arbeitszeit</p>
-                  <p className="text-base font-semibold text-slate-900">{formatMinutes(summary.workMinutes)}</p>
+                  <p className="text-sm uppercase text-slate-500">Ausgewählter Tag</p>
+                  <p className="text-lg font-semibold">{selectedDateLabel}</p>
                 </div>
-                <div>
-                  <p className="text-slate-500">Pausenzeit</p>
-                  <p className="text-base font-semibold text-slate-900">{formatMinutes(summary.breakMinutes)}</p>
+                <div className="flex gap-4 text-sm">
+                  <div>
+                    <p className="text-slate-500">Arbeitszeit</p>
+                    <p className="text-base font-semibold text-slate-900">{formatMinutes(summary.workMinutes)}</p>
+                  </div>
+                  <div>
+                    <p className="text-slate-500">Pausenzeit</p>
+                    <p className="text-base font-semibold text-slate-900">{formatMinutes(summary.breakMinutes)}</p>
+                  </div>
                 </div>
               </div>
             </div>
-          </div>
 
-          <div className="space-y-3">
+            <div className="space-y-3">
             {selectedBookings.length === 0 ? (
               <p className="text-sm text-slate-500">{emptyState}</p>
             ) : (
@@ -315,8 +365,9 @@ export function CalendarView({
                 );
               })
             )}
+            </div>
           </div>
-        </>
+        </div>
       )}
     </div>
   );
