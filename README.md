@@ -23,7 +23,7 @@ cp .env.example .env   # Werte anpassen
 npm install
 npm run dev            # startet http://localhost:4000
 ```
-Der Server legt automatisch eine SQLite-Datei im Ordner `server/data` an und erzeugt den Admin-User aus der `.env`.
+Der Server legt automatisch eine SQLite-Datei im Ordner `server/data` an und erzeugt den Admin-User aus der `.env`. Über die Variable `DATABASE_FILE` kannst du auch einen anderen Speicherort (z. B. Netzlaufwerk) festlegen; das Verzeichnis wird beim Start automatisch erstellt.
 
 ### 2. Web-Frontend
 ```bash
