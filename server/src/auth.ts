@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
+import db from './db';
 import { JWT_SECRET } from './config';
 import { Role } from './types';
 
@@ -22,7 +23,13 @@ export function authenticate(req: AuthRequest, res: Response, next: NextFunction
   const token = header.replace('Bearer ', '');
   try {
     const decoded = jwt.verify(token, JWT_SECRET) as { id: number; role: Role };
-    req.user = decoded;
+    const user = db
+      .prepare('SELECT id, role, active FROM users WHERE id = ?')
+      .get(decoded.id) as { id: number; role: Role; active: number } | undefined;
+    if (!user || !user.active) {
+      return res.status(401).json({ message: 'Dieser Zugang ist deaktiviert' });
+    }
+    req.user = { id: user.id, role: user.role };
     next();
   } catch (error) {
     return res.status(401).json({ message: 'Ungültiges Token' });

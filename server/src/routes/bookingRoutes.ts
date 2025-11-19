@@ -20,6 +20,18 @@ const bookingEditSchema = z
     message: 'Mindestens ein Feld muss gesetzt sein',
   });
 
+const manualBookingSchema = z
+  .object({
+    clock_in: z.string().datetime(),
+    clock_out: z.string().datetime().optional(),
+    clock_in_location: locationSchema,
+    clock_out_location: locationSchema.optional(),
+  })
+  .refine((data) => !data.clock_out || Boolean(data.clock_out_location), {
+    message: 'Für eine Gehen-Zeit muss auch ein Standort angegeben werden',
+    path: ['clock_out_location'],
+  });
+
 router.use(authenticate);
 
 router.get('/me', (req: AuthRequest, res) => {
@@ -87,6 +99,38 @@ router.get('/user/:userId', authorize(['admin']), (req, res) => {
     .prepare('SELECT * FROM bookings WHERE user_id = ? ORDER BY clock_in DESC')
     .all(userId) as Booking[];
   res.json(bookings);
+});
+
+router.post('/user/:userId/manual', authorize(['admin']), (req, res) => {
+  const userId = Number(req.params.userId);
+  if (Number.isNaN(userId)) {
+    return res.status(400).json({ message: 'Ungültige Nutzer-ID' });
+  }
+  const user = db
+    .prepare('SELECT id FROM users WHERE id = ?')
+    .get(userId) as { id: number } | undefined;
+  if (!user) {
+    return res.status(404).json({ message: 'Nutzer nicht gefunden' });
+  }
+  const parsed = manualBookingSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ errors: parsed.error.format() });
+  }
+  const { clock_in, clock_out, clock_in_location, clock_out_location } = parsed.data;
+  const stmt = db.prepare(
+    'INSERT INTO bookings (user_id, clock_in, clock_out, clock_in_lat, clock_in_lng, clock_out_lat, clock_out_lng) VALUES (?, ?, ?, ?, ?, ?, ?)'
+  );
+  const result = stmt.run(
+    userId,
+    clock_in,
+    clock_out ?? null,
+    clock_in_location.lat,
+    clock_in_location.lng,
+    clock_out ? clock_out_location!.lat : null,
+    clock_out ? clock_out_location!.lng : null
+  );
+  const created = db.prepare('SELECT * FROM bookings WHERE id = ?').get(result.lastInsertRowid) as Booking;
+  res.status(201).json(created);
 });
 
 router.patch('/:bookingId', authorize(['admin']), (req, res) => {

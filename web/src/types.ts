@@ -16,5 +16,6 @@ export interface EmployeeSummary {
   name: string;
   email: string;
   role: 'user' | 'admin';
+  active: boolean;
   created_at?: string;
 }

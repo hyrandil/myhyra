@@ -26,7 +26,7 @@ router.post('/register', authenticate, authorize(['admin']), (req: AuthRequest, 
     return res.status(409).json({ message: 'E-Mail bereits vorhanden' });
   }
   const passwordHash = bcrypt.hashSync(password, 10);
-  const stmt = db.prepare('INSERT INTO users (name, email, password_hash, role) VALUES (?, ?, ?, ?)');
+  const stmt = db.prepare('INSERT INTO users (name, email, password_hash, role, active) VALUES (?, ?, ?, ?, 1)');
   const result = stmt.run(name, email, passwordHash, role);
   res.json({ id: result.lastInsertRowid, name, email, role });
 });
@@ -42,6 +42,9 @@ router.post('/login', (req, res) => {
   const user = db.prepare('SELECT * FROM users WHERE email = ?').get(email) as User | undefined;
   if (!user) {
     return res.status(401).json({ message: 'Ungültige Zugangsdaten' });
+  }
+  if (!user.active) {
+    return res.status(403).json({ message: 'Dieser Zugang wurde deaktiviert' });
   }
   const valid = bcrypt.compareSync(password, user.password_hash);
   if (!valid) {

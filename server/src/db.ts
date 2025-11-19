@@ -17,6 +17,7 @@ CREATE TABLE IF NOT EXISTS users (
   email TEXT UNIQUE NOT NULL,
   password_hash TEXT NOT NULL,
   role TEXT NOT NULL CHECK(role IN ('user', 'admin')),
+  active INTEGER NOT NULL DEFAULT 1,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -36,25 +37,26 @@ CREATE TABLE IF NOT EXISTS bookings (
 `);
 
 type TableColumn = { name: string };
-const bookingColumns = db.prepare("PRAGMA table_info('bookings')").all() as TableColumn[];
-const ensureColumn = (name: string, definition: string) => {
-  const exists = bookingColumns.some((column) => column.name === name);
+const ensureTableColumn = (table: string, name: string, definition: string) => {
+  const columns = db.prepare(`PRAGMA table_info('${table}')`).all() as TableColumn[];
+  const exists = columns.some((column) => column.name === name);
   if (!exists) {
-    db.exec(`ALTER TABLE bookings ADD COLUMN ${definition}`);
+    db.exec(`ALTER TABLE ${table} ADD COLUMN ${definition}`);
   }
 };
 
-ensureColumn('clock_in_lat', 'REAL');
-ensureColumn('clock_in_lng', 'REAL');
-ensureColumn('clock_out_lat', 'REAL');
-ensureColumn('clock_out_lng', 'REAL');
+ensureTableColumn('bookings', 'clock_in_lat', 'REAL');
+ensureTableColumn('bookings', 'clock_in_lng', 'REAL');
+ensureTableColumn('bookings', 'clock_out_lat', 'REAL');
+ensureTableColumn('bookings', 'clock_out_lng', 'REAL');
+ensureTableColumn('users', 'active', 'INTEGER NOT NULL DEFAULT 1');
 
 function ensureAdminUser() {
   const existing = db.prepare('SELECT id FROM users WHERE email = ?').get(ADMIN_EMAIL);
   if (!existing) {
     const passwordHash = bcrypt.hashSync(ADMIN_PASSWORD, 10);
     db.prepare(
-      'INSERT INTO users (name, email, password_hash, role) VALUES (?, ?, ?, ?)' 
+      'INSERT INTO users (name, email, password_hash, role, active) VALUES (?, ?, ?, ?, 1)'
     ).run('Administrator', ADMIN_EMAIL, passwordHash, 'admin');
   }
 }
