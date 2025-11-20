@@ -9,7 +9,7 @@ const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
 
 const absenceSchema = z.object({
   date: z.string().regex(dateRegex, 'Datum muss im Format YYYY-MM-DD vorliegen'),
-  type: z.enum(['vacation', 'sick', 'remote', 'training', 'other']).default('vacation'),
+  type: z.enum(['vacation', 'sick', 'remote', 'other']).default('vacation'),
   duration: z.enum(['full', 'half']).default('full'),
   note: z.string().max(255).optional().or(z.literal('')).transform((value) => value || undefined),
 });

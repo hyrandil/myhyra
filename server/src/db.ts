@@ -37,11 +37,9 @@ CREATE TABLE IF NOT EXISTS bookings (
 
 CREATE TABLE IF NOT EXISTS user_settings (
   user_id INTEGER PRIMARY KEY,
-  daily_target_minutes INTEGER NOT NULL DEFAULT 480,
-  email_notifications INTEGER NOT NULL DEFAULT 1,
-  weekly_summary INTEGER NOT NULL DEFAULT 0,
   language TEXT NOT NULL DEFAULT 'de',
-  theme TEXT NOT NULL DEFAULT 'system',
+  week_start TEXT NOT NULL DEFAULT 'monday',
+  time_format TEXT NOT NULL DEFAULT '24h',
   vacation_allowance REAL NOT NULL DEFAULT 30,
   FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
 );
@@ -50,7 +48,7 @@ CREATE TABLE IF NOT EXISTS absences (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   user_id INTEGER NOT NULL,
   date TEXT NOT NULL,
-  type TEXT NOT NULL CHECK(type IN ('vacation','sick','remote','training','other')),
+  type TEXT NOT NULL CHECK(type IN ('vacation','sick','remote','other')),
   duration TEXT NOT NULL CHECK(duration IN ('full','half')),
   note TEXT,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -72,6 +70,10 @@ ensureTableColumn('bookings', 'clock_in_lng', 'REAL');
 ensureTableColumn('bookings', 'clock_out_lat', 'REAL');
 ensureTableColumn('bookings', 'clock_out_lng', 'REAL');
 ensureTableColumn('users', 'active', 'INTEGER NOT NULL DEFAULT 1');
+ensureTableColumn('user_settings', 'week_start', "TEXT NOT NULL DEFAULT 'monday'");
+ensureTableColumn('user_settings', 'time_format', "TEXT NOT NULL DEFAULT '24h'");
+db.prepare("UPDATE user_settings SET week_start = 'monday' WHERE week_start IS NULL").run();
+db.prepare("UPDATE user_settings SET time_format = '24h' WHERE time_format IS NULL").run();
 db.exec(`INSERT OR IGNORE INTO user_settings (user_id) SELECT id FROM users;`);
 
 function ensureAdminUser() {

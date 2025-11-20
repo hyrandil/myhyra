@@ -57,26 +57,22 @@ router.patch('/me/password', (req: AuthRequest, res) => {
 });
 
 const selfSettingsSchema = z.object({
-  daily_target_minutes: z.number().min(60).max(720),
-  email_notifications: z.boolean(),
-  weekly_summary: z.boolean(),
   language: z.enum(['de', 'en']),
-  theme: z.enum(['light', 'dark', 'system']),
+  week_start: z.enum(['monday', 'sunday']),
+  time_format: z.enum(['24h', '12h']),
 });
 
 router.get('/me/settings', (req: AuthRequest, res) => {
   ensureSettingsRow(req.user!.id);
   const settings = db
     .prepare(
-      'SELECT daily_target_minutes, email_notifications, weekly_summary, language, theme, vacation_allowance FROM user_settings WHERE user_id = ?'
+      'SELECT language, week_start, time_format, vacation_allowance FROM user_settings WHERE user_id = ?'
     )
     .get(req.user!.id) as
     | {
-        daily_target_minutes: number;
-        email_notifications: number;
-        weekly_summary: number;
         language: string;
-        theme: string;
+        week_start: string | null;
+        time_format: string | null;
         vacation_allowance: number;
       }
     | undefined;
@@ -84,11 +80,9 @@ router.get('/me/settings', (req: AuthRequest, res) => {
     return res.status(404).json({ message: 'Einstellungen nicht gefunden' });
   }
   res.json({
-    daily_target_minutes: settings.daily_target_minutes,
-    email_notifications: Boolean(settings.email_notifications),
-    weekly_summary: Boolean(settings.weekly_summary),
     language: settings.language,
-    theme: settings.theme,
+    week_start: settings.week_start ?? 'monday',
+    time_format: settings.time_format ?? '24h',
     vacation_allowance: settings.vacation_allowance,
   });
 });
@@ -101,16 +95,9 @@ router.patch('/me/settings', (req: AuthRequest, res) => {
   ensureSettingsRow(req.user!.id);
   db.prepare(
     `UPDATE user_settings
-     SET daily_target_minutes = ?, email_notifications = ?, weekly_summary = ?, language = ?, theme = ?
+     SET language = ?, week_start = ?, time_format = ?
      WHERE user_id = ?`
-  ).run(
-    parsed.data.daily_target_minutes,
-    parsed.data.email_notifications ? 1 : 0,
-    parsed.data.weekly_summary ? 1 : 0,
-    parsed.data.language,
-    parsed.data.theme,
-    req.user!.id
-  );
+  ).run(parsed.data.language, parsed.data.week_start, parsed.data.time_format, req.user!.id);
   res.json({ message: 'Einstellungen gespeichert' });
 });
 

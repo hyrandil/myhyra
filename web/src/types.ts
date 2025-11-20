@@ -25,7 +25,7 @@ export interface Absence {
   id: number;
   user_id: number;
   date: string;
-  type: 'vacation' | 'sick' | 'remote' | 'training' | 'other';
+  type: 'vacation' | 'sick' | 'remote' | 'other';
   duration: 'full' | 'half';
   note?: string | null;
 }
@@ -63,10 +63,8 @@ export interface AttendanceReport {
 }
 
 export interface UserSettingsPayload {
-  daily_target_minutes: number;
-  email_notifications: boolean;
-  weekly_summary: boolean;
   language: 'de' | 'en';
-  theme: 'light' | 'dark' | 'system';
+  week_start: 'monday' | 'sunday';
+  time_format: '24h' | '12h';
   vacation_allowance?: number;
 }

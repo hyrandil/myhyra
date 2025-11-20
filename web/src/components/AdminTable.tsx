@@ -770,7 +770,9 @@ export function AdminTable() {
           >
             <div>
               <h4 className="text-base font-semibold text-slate-800">Abwesenheit hinzufügen</h4>
-              <p className="text-xs text-slate-500">Urlaub, Krankheit oder Remote-Tage als halbe oder volle Tage buchen.</p>
+              <p className="text-xs text-slate-500">
+                Nur Admins erfassen Urlaub, Krank-, Remote- oder sonstige Tage für Mitarbeitende.
+              </p>
             </div>
             <span className={`text-lg transition-transform ${absenceOpen ? 'rotate-180' : ''}`}>⌄</span>
           </button>
@@ -799,7 +801,6 @@ export function AdminTable() {
                     <option value="vacation">Urlaub</option>
                     <option value="sick">Krank</option>
                     <option value="remote">Remote</option>
-                    <option value="training">Schulung</option>
                     <option value="other">Sonstiges</option>
                   </select>
                 </label>

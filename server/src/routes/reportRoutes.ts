@@ -70,9 +70,6 @@ router.get('/attendance', (req, res) => {
       case 'remote':
         bucket.remote += days;
         break;
-      case 'training':
-        bucket.other += days;
-        break;
       default:
         bucket.other += days;
     }

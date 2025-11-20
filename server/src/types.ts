@@ -25,11 +25,9 @@ export interface Booking {
 
 export interface UserSettings {
   user_id: number;
-  daily_target_minutes: number;
-  email_notifications: number;
-  weekly_summary: number;
   language: string;
-  theme: string;
+  week_start: string;
+  time_format: string;
   vacation_allowance: number;
 }
 
@@ -37,7 +35,7 @@ export interface Absence {
   id: number;
   user_id: number;
   date: string;
-  type: 'vacation' | 'sick' | 'remote' | 'training' | 'other';
+  type: 'vacation' | 'sick' | 'remote' | 'other';
   duration: 'full' | 'half';
   note?: string | null;
   created_at: string;

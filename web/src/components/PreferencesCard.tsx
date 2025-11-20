@@ -3,32 +3,34 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '../api';
 import { useUserSettings } from '../hooks/useSettings';
 
+type PreferencesForm = {
+  language: 'de' | 'en';
+  week_start: 'monday' | 'sunday';
+  time_format: '24h' | '12h';
+};
+
 export function PreferencesCard() {
   const queryClient = useQueryClient();
   const { data, isLoading } = useUserSettings();
-  const [form, setForm] = useState({
-    daily_target_minutes: 480,
-    email_notifications: true,
-    weekly_summary: false,
-    language: 'de' as 'de' | 'en',
-    theme: 'system' as 'light' | 'dark' | 'system',
+  const [form, setForm] = useState<PreferencesForm>({
+    language: 'de',
+    week_start: 'monday',
+    time_format: '24h',
   });
   const [message, setMessage] = useState<string | null>(null);
 
   useEffect(() => {
     if (data) {
       setForm({
-        daily_target_minutes: data.daily_target_minutes,
-        email_notifications: data.email_notifications,
-        weekly_summary: data.weekly_summary,
         language: data.language,
-        theme: data.theme,
+        week_start: data.week_start,
+        time_format: data.time_format,
       });
     }
   }, [data]);
 
   const mutation = useMutation({
-    mutationFn: async (payload: typeof form) => {
+    mutationFn: async (payload: PreferencesForm) => {
       await api.patch('/users/me/settings', payload);
     },
     onSuccess: () => {
@@ -47,66 +49,26 @@ export function PreferencesCard() {
     }
   };
 
-  const updateForm = (field: keyof typeof form, value: any) => {
+  const updateForm = (field: keyof PreferencesForm, value: PreferencesForm[keyof PreferencesForm]) => {
     setForm((prev) => ({ ...prev, [field]: value }));
   };
 
-  const targets = [360, 420, 450, 480, 510, 540];
-
   return (
     <div className="rounded-md bg-white p-6 shadow">
-      <h3 className="text-lg font-semibold text-slate-900">Arbeitszeit & Mitteilungen</h3>
-      <p className="text-sm text-slate-500">Lege Zielarbeitszeiten fest und bestimme, welche Hinweise du erhalten möchtest.</p>
+      <h3 className="text-lg font-semibold text-slate-900">Persönliche Einstellungen</h3>
+      <p className="text-sm text-slate-500">
+        Lege fest, wie Kalender, Sprachen und Uhrzeiten in deiner Oberfläche dargestellt werden.
+      </p>
       {isLoading ? (
         <p className="mt-4 text-sm text-slate-500">Lade Einstellungen...</p>
       ) : (
         <form onSubmit={handleSubmit} className="mt-4 space-y-4 text-sm">
-          <label className="block text-xs font-semibold uppercase text-slate-500">
-            Tägliche Sollzeit
-            <select
-              value={form.daily_target_minutes}
-              onChange={(event) => updateForm('daily_target_minutes', Number(event.target.value))}
-              className="mt-1 w-full rounded border border-slate-300 px-3 py-2"
-            >
-              {targets.map((minutes) => (
-                <option key={minutes} value={minutes}>
-                  {(minutes / 60).toFixed(1).replace('.0', '')} Stunden
-                </option>
-              ))}
-            </select>
-          </label>
-          <div className="grid gap-3 md:grid-cols-2">
-            <label className="flex items-start gap-2 rounded border border-slate-200 p-3">
-              <input
-                type="checkbox"
-                checked={form.email_notifications}
-                onChange={(event) => updateForm('email_notifications', event.target.checked)}
-              />
-              <span>
-                <span className="block font-semibold text-slate-800">E-Mail-Erinnerungen</span>
-                <span className="text-xs text-slate-500">
-                  Sende mir Hinweise, wenn ich vergesse zu stempeln oder mein Tag offen ist.
-                </span>
-              </span>
-            </label>
-            <label className="flex items-start gap-2 rounded border border-slate-200 p-3">
-              <input
-                type="checkbox"
-                checked={form.weekly_summary}
-                onChange={(event) => updateForm('weekly_summary', event.target.checked)}
-              />
-              <span>
-                <span className="block font-semibold text-slate-800">Wöchentliche Übersicht</span>
-                <span className="text-xs text-slate-500">Sende montags einen Überblick über Arbeits- und Abwesenheitszeiten.</span>
-              </span>
-            </label>
-          </div>
           <div className="grid gap-3 md:grid-cols-2">
             <label className="block text-xs font-semibold uppercase text-slate-500">
               Sprache
               <select
                 value={form.language}
-                onChange={(event) => updateForm('language', event.target.value as 'de' | 'en')}
+                onChange={(event) => updateForm('language', event.target.value as PreferencesForm['language'])}
                 className="mt-1 w-full rounded border border-slate-300 px-3 py-2"
               >
                 <option value="de">Deutsch</option>
@@ -114,18 +76,28 @@ export function PreferencesCard() {
               </select>
             </label>
             <label className="block text-xs font-semibold uppercase text-slate-500">
-              Design
+              Start der Woche
               <select
-                value={form.theme}
-                onChange={(event) => updateForm('theme', event.target.value as 'light' | 'dark' | 'system')}
+                value={form.week_start}
+                onChange={(event) => updateForm('week_start', event.target.value as PreferencesForm['week_start'])}
                 className="mt-1 w-full rounded border border-slate-300 px-3 py-2"
               >
-                <option value="system">System</option>
-                <option value="light">Hell</option>
-                <option value="dark">Dunkel</option>
+                <option value="monday">Montag</option>
+                <option value="sunday">Sonntag</option>
               </select>
             </label>
           </div>
+          <label className="block text-xs font-semibold uppercase text-slate-500">
+            Zeitformat
+            <select
+              value={form.time_format}
+              onChange={(event) => updateForm('time_format', event.target.value as PreferencesForm['time_format'])}
+              className="mt-1 w-full rounded border border-slate-300 px-3 py-2"
+            >
+              <option value="24h">24-Stunden-Anzeige</option>
+              <option value="12h">12-Stunden-Anzeige</option>
+            </select>
+          </label>
           <button
             type="submit"
             disabled={mutation.isPending}
