@@ -64,6 +64,7 @@ export function CalendarView({
   subtitle,
   bookings,
   absences = [],
+  schedule,
   isLoading,
   onRefresh,
   emptyState = 'Keine Buchungen für diesen Tag.',
@@ -88,7 +89,7 @@ export function CalendarView({
 
   const scheduleMap = useMemo(() => {
     const map = new Map<number, number>();
-    schedule?.forEach((day) => map.set(day.weekday, day.minutes));
+    schedule?.forEach((day: WorkScheduleDay) => map.set(day.weekday, day.minutes));
     return map;
   }, [schedule]);
 

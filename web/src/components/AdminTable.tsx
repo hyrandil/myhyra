@@ -1229,6 +1229,7 @@ export function AdminTable() {
               }
               bookings={bookings}
               absences={absences}
+              schedule={scheduleData?.days}
               isLoading={isBookingLoading || isAbsenceLoading}
               onRefresh={() => {
                 refetch();
