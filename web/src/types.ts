@@ -19,6 +19,7 @@ export interface EmployeeSummary {
   active: boolean;
   created_at?: string;
   vacationAllowance?: number;
+  personnelNumber?: string;
 }
 
 export interface Absence {

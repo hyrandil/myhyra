@@ -51,6 +51,13 @@ const scheduleForUser = (userId: number) => {
     .all(userId) as WorkScheduleEntry[];
 };
 
+type AbsenceDayUsage = {
+  vacation: Map<string, number>;
+  sick: Map<string, number>;
+  remote: Map<string, number>;
+  other: Map<string, number>;
+};
+
 router.get('/attendance', (req, res) => {
   const monthParam = typeof req.query.month === 'string' && monthRegex.test(req.query.month)
     ? req.query.month
@@ -109,29 +116,53 @@ router.get('/attendance', (req, res) => {
     other: number;
   };
   const absenceMap = new Map<number, AbsenceBucket>();
+  const absenceUsage = new Map<number, AbsenceDayUsage>();
 
   const scheduleCache = new Map<number, WorkScheduleEntry[]>();
 
-  const addAbsence = (userId: number, type: string, duration: 'full' | 'half', start: string, end: string) => {
+  const addAbsence = (userId: number, type: keyof AbsenceDayUsage, duration: 'full' | 'half', start: string, end: string) => {
     if (!absenceMap.has(userId)) {
       absenceMap.set(userId, { vacation: 0, sick: 0, remote: 0, other: 0 });
+    }
+    if (!absenceUsage.has(userId)) {
+      absenceUsage.set(userId, {
+        vacation: new Map<string, number>(),
+        sick: new Map<string, number>(),
+        remote: new Map<string, number>(),
+        other: new Map<string, number>(),
+      });
     }
     if (!scheduleCache.has(userId)) {
       scheduleCache.set(userId, scheduleForUser(userId));
     }
     const schedule = scheduleCache.get(userId)!;
     const days = workingDatesBetween(start, end, schedule);
-    const bucket = absenceMap.get(userId)!;
     const dayValue = duration === 'half' ? 0.5 : 1;
-    const totalDays = days.length * dayValue;
-    if (totalDays === 0) return;
-    if (type === 'vacation') bucket.vacation += totalDays;
-    else if (type === 'sick') bucket.sick += totalDays;
-    else if (type === 'remote') bucket.remote += totalDays;
-    else bucket.other += totalDays;
+    const perUser = absenceUsage.get(userId)!;
+    days.forEach((day) => {
+      const current = perUser[type].get(day) ?? 0;
+      perUser[type].set(day, Math.max(current, dayValue));
+    });
   };
 
-  absences.forEach((row) => addAbsence(row.user_id, row.type, row.duration, row.start_date, row.end_date));
+  absences.forEach((row) => addAbsence(row.user_id, row.type as keyof AbsenceDayUsage, row.duration, row.start_date, row.end_date));
+
+  const sumDays = (map: Map<string, number>) => {
+    let total = 0;
+    map.forEach((value) => {
+      total += value;
+    });
+    return total;
+  };
+
+  absenceUsage.forEach((usage, userId) => {
+    const bucket = absenceMap.get(userId) ?? { vacation: 0, sick: 0, remote: 0, other: 0 };
+    bucket.vacation = sumDays(usage.vacation);
+    bucket.sick = sumDays(usage.sick);
+    bucket.remote = sumDays(usage.remote);
+    bucket.other = sumDays(usage.other);
+    absenceMap.set(userId, bucket);
+  });
 
   const rows = users.map((user) => {
     const presenceDays = presenceMap.get(user.id)?.size ?? 0;

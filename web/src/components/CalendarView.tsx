@@ -1,14 +1,27 @@
 import { FormEvent, useEffect, useMemo, useState } from 'react';
-import type { Absence, Booking } from '../types';
+import type { Absence, Booking, WorkScheduleDay } from '../types';
 import { buildCalendarDays, formatMinutes, getDateKey, groupBookingsByDay } from '../utils/time';
 
 const weekdayLabels = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'];
+const absenceColors: Record<Absence['type'], string> = {
+  sick: 'bg-rose-600',
+  vacation: 'bg-orange-500',
+  remote: 'bg-sky-600',
+  other: 'bg-slate-500',
+};
+const absenceLabels: Record<Absence['type'], string> = {
+  sick: 'Krank',
+  vacation: 'Urlaub',
+  remote: 'Remote',
+  other: 'Sonstiges',
+};
 
 interface CalendarViewProps {
   title: string;
   subtitle?: string;
   bookings: Booking[];
   absences?: Absence[];
+  schedule?: WorkScheduleDay[];
   isLoading: boolean;
   onRefresh?: () => void;
   emptyState?: string;
@@ -73,6 +86,12 @@ export function CalendarView({
     setEditingBookingId(null);
   }, [dataKey]);
 
+  const scheduleMap = useMemo(() => {
+    const map = new Map<number, number>();
+    schedule?.forEach((day) => map.set(day.weekday, day.minutes));
+    return map;
+  }, [schedule]);
+
   const grouped = useMemo(() => groupBookingsByDay(bookings), [bookings]);
   const absenceMap = useMemo(() => {
     const map: Record<string, Absence[]> = {};
@@ -87,38 +106,62 @@ export function CalendarView({
     });
     return map;
   }, [absences]);
+
+  const plannedMinutesForKey = (key: string) => {
+    const [yearStr, monthStr, dayStr] = key.split('-');
+    const date = new Date(Date.UTC(Number(yearStr), Number(monthStr) - 1, Number(dayStr)));
+    const weekday = (date.getUTCDay() + 6) % 7;
+    return scheduleMap.get(weekday) ?? 0;
+  };
+
+  const getSummaryForDay = (dateKey: string) => {
+    const baseSummary = grouped[dateKey]?.summary ?? { workMinutes: 0, breakMinutes: 0 };
+    const plannedMinutes = plannedMinutesForKey(dateKey);
+    const absencesForDay = absenceMap[dateKey] ?? [];
+    const absenceMinutes = absencesForDay.reduce((max, item) => {
+      const factor = item.duration === 'half' ? 0.5 : 1;
+      return Math.max(max, Math.round(plannedMinutes * factor));
+    }, 0);
+    return {
+      ...baseSummary,
+      workMinutes: Math.max(baseSummary.workMinutes, absenceMinutes),
+    };
+  };
   const monthDays = useMemo(() => buildCalendarDays(currentMonth), [currentMonth]);
   const selectedBookings = grouped[selectedDate]?.bookings ?? [];
-  const summary = grouped[selectedDate]?.summary ?? { workMinutes: 0, breakMinutes: 0 };
+  const summary = getSummaryForDay(selectedDate);
   const selectedAbsences = absenceMap[selectedDate] ?? [];
   const monthSummary = useMemo(() => {
     let workMinutes = 0;
-    const attendanceDays = new Set<string>();
-    Object.values(grouped).forEach((bucket) => {
-      const { displayDate, summary } = bucket;
-      if (
-        displayDate.getFullYear() === currentMonth.getFullYear() &&
-        displayDate.getMonth() === currentMonth.getMonth()
-      ) {
-        workMinutes += summary.workMinutes;
-        if (bucket.bookings.length > 0) {
-          attendanceDays.add(bucket.dateKey);
+    let attendanceCount = 0;
+    monthDays.forEach((day) => {
+      if (day.date.getFullYear() === currentMonth.getFullYear() && day.date.getMonth() === currentMonth.getMonth()) {
+        const summaryForDay = getSummaryForDay(day.key);
+        const hasBookings = (grouped[day.key]?.bookings.length ?? 0) > 0;
+        const hasAbsence = (absenceMap[day.key]?.length ?? 0) > 0;
+        if ((hasBookings || hasAbsence) && summaryForDay.workMinutes > 0) {
+          attendanceCount += 1;
+          workMinutes += summaryForDay.workMinutes;
         }
       }
     });
     return {
       workMinutes,
-      attendanceCount: attendanceDays.size,
-      averageWorkMinutes:
-        attendanceDays.size > 0 ? Math.round(workMinutes / attendanceDays.size) : 0,
+      attendanceCount,
+      averageWorkMinutes: attendanceCount > 0 ? Math.round(workMinutes / attendanceCount) : 0,
     };
-  }, [grouped, currentMonth]);
+  }, [absenceMap, currentMonth, grouped, monthDays, scheduleMap]);
   const selectedDateLabel = new Date(`${selectedDate}T00:00:00`).toLocaleDateString('de-DE', {
     weekday: 'long',
     day: '2-digit',
     month: 'long',
     year: 'numeric',
   });
+  const todayStart = new Date();
+  todayStart.setHours(0, 0, 0, 0);
+  const plannedForSelected = plannedMinutesForKey(selectedDate);
+  const baseSummaryForSelected = grouped[selectedDate]?.summary ?? { workMinutes: 0, breakMinutes: 0 };
+  const absenceCredit = Math.max(summary.workMinutes - baseSummaryForSelected.workMinutes, 0);
 
   const handleEditSubmit = async (event: FormEvent) => {
     event.preventDefault();
@@ -196,7 +239,7 @@ export function CalendarView({
               <div className="rounded bg-white p-3">
                 <p className="text-slate-500">Anwesende Tage</p>
                 <p className="text-lg font-semibold text-slate-900">{monthSummary.attendanceCount}</p>
-                <p className="text-xs text-slate-500">Tage mit mindestens einer Buchung</p>
+                <p className="text-xs text-slate-500">Tage mit Buchung oder Abwesenheit</p>
               </div>
               <div className="rounded bg-white p-3">
                 <p className="text-slate-500">Ø Arbeitszeit pro Tag</p>
@@ -216,16 +259,19 @@ export function CalendarView({
             </div>
             <div className="grid grid-cols-7 gap-1">
               {monthDays.map((day) => {
-                const hasEntries = Boolean(grouped[day.key]);
-                const absencesForDay = absenceMap[day.key]?.length ?? 0;
+                const bucket = grouped[day.key];
+                const absencesForDay = absenceMap[day.key] ?? [];
+                const hasEntries = Boolean(bucket);
+                const hasOpenBooking =
+                  bucket?.bookings.some((booking) => {
+                    const bookingDate = new Date(booking.clock_in);
+                    bookingDate.setHours(0, 0, 0, 0);
+                    return !booking.clock_out && bookingDate.getTime() < todayStart.getTime();
+                  }) ?? false;
                 const isSelected = day.key === selectedDate;
-                const baseClass = isSelected
-                  ? 'border-blue-500 bg-blue-50 text-blue-700'
-                  : hasEntries
-                  ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
-                  : absencesForDay > 0
-                  ? 'border-amber-200 bg-amber-50 text-amber-700'
-                  : 'border-transparent bg-slate-100 text-slate-500';
+                const baseClass = `h-14 rounded-md border text-xs transition ${
+                  isSelected ? 'border-blue-500 bg-blue-50 text-blue-700 shadow-sm' : 'border-slate-200 bg-white text-slate-700'
+                }`;
                 return (
                   <button
                     key={day.key}
@@ -237,20 +283,53 @@ export function CalendarView({
                         setCurrentMonth(new Date(day.date.getFullYear(), day.date.getMonth(), 1));
                       }
                     }}
-                    className={`h-12 rounded-md border text-xs transition-all ${baseClass} ${
-                      day.isCurrentMonth ? '' : 'opacity-60'
-                    }`}
+                    className={`${baseClass} ${day.isCurrentMonth ? '' : 'opacity-60'}`}
                   >
-                    <div>{day.date.getDate()}</div>
-                    {(hasEntries || absencesForDay > 0) && (
+                    <div className="flex items-center justify-between text-[11px] font-semibold">
+                      <span>{day.date.getDate()}</span>
+                      {absencesForDay.length > 0 && (
+                        <span className="text-[10px] text-slate-500">{absencesForDay.length}×</span>
+                      )}
+                    </div>
+                    {(hasEntries || absencesForDay.length > 0) && (
                       <div className="mt-1 flex items-center justify-center gap-1">
-                        {hasEntries && <span className="h-1.5 w-1.5 rounded-full bg-current" />}
-                        {absencesForDay > 0 && <span className="h-1.5 w-1.5 rounded-full bg-amber-600" />}
+                        {hasEntries && <span className="h-1.5 w-1.5 rounded-full bg-black" title="Buchung vorhanden" />}
+                        {hasOpenBooking && <span className="text-[10px] font-black text-rose-600">✕</span>}
+                        {absencesForDay.map((absence) => (
+                          <span
+                            key={`${absence.id}-${absence.type}`}
+                            className={`h-1.5 w-3 rounded-full ${absenceColors[absence.type]}`}
+                            title={absence.type}
+                          />
+                        ))}
                       </div>
                     )}
                   </button>
                 );
               })}
+            </div>
+
+            <div className="flex flex-wrap items-center gap-3 text-[11px] text-slate-600">
+              <span className="flex items-center gap-1">
+                <span className="inline-block h-2 w-2 rounded-full bg-black" />
+                Buchung korrekt
+              </span>
+              <span className="flex items-center gap-1 text-rose-600 font-semibold">
+                <span className="text-[11px]">✕</span>
+                Offene Buchung
+              </span>
+              <span className="flex items-center gap-1">
+                <span className="inline-block h-2 w-3 rounded-full bg-rose-600" /> Krank
+              </span>
+              <span className="flex items-center gap-1">
+                <span className="inline-block h-2 w-3 rounded-full bg-orange-500" /> Urlaub
+              </span>
+              <span className="flex items-center gap-1">
+                <span className="inline-block h-2 w-3 rounded-full bg-sky-600" /> Remote
+              </span>
+              <span className="flex items-center gap-1">
+                <span className="inline-block h-2 w-3 rounded-full bg-slate-500" /> Sonstiges
+              </span>
             </div>
 
             <div className="rounded-md border border-slate-200 bg-slate-50 p-3">
@@ -270,14 +349,20 @@ export function CalendarView({
                   </div>
                 </div>
               </div>
+              {absenceCredit > 0 && (
+                <p className="mt-2 text-xs text-amber-700">
+                  {formatMinutes(absenceCredit)} zählen als Arbeitszeit über Abwesenheit (Plan: {formatMinutes(plannedForSelected)}).
+                </p>
+              )}
               {selectedAbsences.length > 0 && (
                 <div className="mt-3 rounded-md bg-white p-3 text-sm text-slate-700">
                   <p className="text-xs font-semibold uppercase text-amber-700">Abwesenheit</p>
                   <ul className="mt-1 space-y-1">
                     {selectedAbsences.map((absence) => (
                       <li key={absence.id} className="flex items-center justify-between gap-3">
-                        <span className="font-medium">
-                          {absence.type} • {absence.duration === 'half' ? '½ Tag' : 'Ganzer Tag'}
+                        <span className="font-medium flex items-center gap-2">
+                          <span className={`inline-block h-2 w-2 rounded-full ${absenceColors[absence.type]}`} />
+                          {absenceLabels[absence.type]} • {absence.duration === 'half' ? '½ Tag' : 'Ganzer Tag'}
                         </span>
                         <span className="text-xs text-slate-500">
                           {absence.start_date === absence.end_date

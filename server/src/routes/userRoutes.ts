@@ -29,7 +29,11 @@ const ensureSchedule = (userId: number) => {
 };
 
 const toUserPayload = (
-  user: Pick<User, 'id' | 'name' | 'email' | 'role' | 'created_at'> & { active: number; vacation_allowance?: number }
+  user: Pick<User, 'id' | 'name' | 'email' | 'role' | 'created_at'> & {
+    active: number;
+    vacation_allowance?: number;
+    personnel_number?: string | null;
+  }
 ) => ({
   id: user.id,
   name: user.name,
@@ -38,6 +42,7 @@ const toUserPayload = (
   created_at: user.created_at,
   active: Boolean(user.active),
   vacationAllowance: user.vacation_allowance ?? 0,
+  personnelNumber: user.personnel_number ?? undefined,
 });
 
 router.use(authenticate);
@@ -118,6 +123,14 @@ router.patch('/me/settings', (req: AuthRequest, res) => {
   res.json({ message: 'Einstellungen gespeichert' });
 });
 
+router.get('/me/schedule', (req: AuthRequest, res) => {
+  ensureSchedule(req.user!.id);
+  const schedule = db
+    .prepare('SELECT weekday, minutes FROM work_schedules WHERE user_id = ? ORDER BY weekday ASC')
+    .all(req.user!.id);
+  res.json({ days: schedule });
+});
+
 router.use(authorize(['admin']));
 
 const userSchema = z.object({
@@ -144,14 +157,17 @@ router.get('/', (req: AuthRequest, res) => {
   const users = db
     .prepare(
       `SELECT u.id, u.name, u.email, u.role, u.created_at, u.active, IFNULL(us.vacation_allowance, 0) as vacation_allowance
+       , up.personnel_number
        FROM users u
        LEFT JOIN user_settings us ON us.user_id = u.id
+       LEFT JOIN user_profiles up ON up.user_id = u.id
        WHERE u.id != ?
        ORDER BY u.name ASC`
     )
     .all(req.user!.id) as (Pick<User, 'id' | 'name' | 'email' | 'role' | 'created_at'> & {
       active: number;
       vacation_allowance: number;
+      personnel_number?: string | null;
     })[];
   res.json(users.map((user) => toUserPayload(user)));
 });
@@ -195,13 +211,16 @@ router.post('/', (req, res) => {
   const created = db
     .prepare(
       `SELECT u.id, u.name, u.email, u.role, u.created_at, u.active, IFNULL(us.vacation_allowance, 0) as vacation_allowance
+       , up.personnel_number
        FROM users u
        LEFT JOIN user_settings us ON us.user_id = u.id
+       LEFT JOIN user_profiles up ON up.user_id = u.id
        WHERE u.id = ?`
     )
     .get(result.lastInsertRowid) as Pick<User, 'id' | 'name' | 'email' | 'role' | 'created_at'> & {
       active: number;
       vacation_allowance: number;
+      personnel_number?: string | null;
     };
   res.status(201).json(toUserPayload(created));
 });
@@ -245,13 +264,16 @@ router.patch('/:id/status', (req, res) => {
   const updated = db
     .prepare(
       `SELECT u.id, u.name, u.email, u.role, u.created_at, u.active, IFNULL(us.vacation_allowance, 0) as vacation_allowance
+       , up.personnel_number
        FROM users u
        LEFT JOIN user_settings us ON us.user_id = u.id
+       LEFT JOIN user_profiles up ON up.user_id = u.id
        WHERE u.id = ?`
     )
     .get(userId) as Pick<User, 'id' | 'name' | 'email' | 'role' | 'created_at'> & {
       active: number;
       vacation_allowance: number;
+      personnel_number?: string | null;
     };
   res.json(toUserPayload(updated));
 });
@@ -286,13 +308,16 @@ router.patch('/:id', (req, res) => {
   const updated = db
     .prepare(
       `SELECT u.id, u.name, u.email, u.role, u.created_at, u.active, IFNULL(us.vacation_allowance, 0) as vacation_allowance
+       , up.personnel_number
        FROM users u
        LEFT JOIN user_settings us ON us.user_id = u.id
+       LEFT JOIN user_profiles up ON up.user_id = u.id
        WHERE u.id = ?`
     )
     .get(userId) as Pick<User, 'id' | 'name' | 'email' | 'role' | 'created_at'> & {
       active: number;
       vacation_allowance: number;
+      personnel_number?: string | null;
     };
   res.json(toUserPayload(updated));
 });

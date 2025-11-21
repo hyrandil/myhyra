@@ -74,6 +74,16 @@ export function useUserSchedule(userId: number | null) {
   });
 }
 
+export function useMySchedule() {
+  return useQuery({
+    queryKey: ['schedule', 'me'],
+    queryFn: async () => {
+      const { data } = await api.get<WorkSchedulePayload>('/users/me/schedule');
+      return data;
+    },
+  });
+}
+
 export function useVacationSummary() {
   return useQuery({
     queryKey: ['vacation', 'summary'],

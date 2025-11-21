@@ -17,6 +17,7 @@ export function AdminTable() {
   } = useEmployees();
   const [adminMenu, setAdminMenu] = useState<'staff' | 'planning'>('staff');
   const [selectedUserId, setSelectedUserId] = useState<number | null>(null);
+  const [employeeFilter, setEmployeeFilter] = useState('');
   const [newUser, setNewUser] = useState({ name: '', email: '', password: '', role: 'user' as EmployeeSummary['role'] });
   const [newUserMessage, setNewUserMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [passwordValue, setPasswordValue] = useState('');
@@ -93,6 +94,16 @@ export function AdminTable() {
   } = useUserAbsences(selectedUserId);
   const { data: profileData } = useUserProfile(selectedUserId);
   const { data: scheduleData, refetch: refetchSchedule } = useUserSchedule(selectedUserId);
+
+  const filteredEmployees = useMemo(() => {
+    if (!employees) return [] as EmployeeSummary[];
+    const term = employeeFilter.trim().toLowerCase();
+    if (!term) return employees;
+    return employees.filter((employee) => {
+      const haystack = `${employee.name} ${employee.email} ${employee.personnelNumber ?? ''}`.toLowerCase();
+      return haystack.includes(term);
+    });
+  }, [employeeFilter, employees]);
 
   const createUserMutation = useMutation({
     mutationFn: async (payload: typeof newUser) => {
@@ -504,73 +515,61 @@ export function AdminTable() {
   };
 
   if (isEmployeesLoading) {
-  return <p>Lade Mitarbeitende...</p>;
-}
+    return <p>Lade Mitarbeitende...</p>;
+  }
 
-const employeeSelector = (
-  <div>
-    <h3 className="text-lg font-semibold mb-3">Mitarbeitende</h3>
-    <div className="space-y-2 max-h-[320px] overflow-auto pr-1">
-      {employees && employees.length > 0 ? (
-        employees.map((employee) => (
-          <button
-            key={employee.id}
-            onClick={() => setSelectedUserId(employee.id)}
-            className={`w-full rounded-lg border px-3 py-2 text-left transition ${
-              employee.id === selectedUserId
-                ? 'border-blue-500 bg-blue-50 text-blue-700'
-                : 'border-slate-200 hover:border-blue-300'
-            }`}
-          >
-            <p className="font-semibold flex items-center gap-2">
-              {employee.name}
-              {!employee.active && (
-                <span className="text-[10px] uppercase tracking-wide text-rose-600">deaktiviert</span>
-              )}
-              <span className="text-[10px] uppercase tracking-wide text-slate-400">
-                {employee.role === 'admin' ? 'Admin' : 'Mitarbeiter'}
-              </span>
-            </p>
-            <p className="text-xs text-slate-500">{employee.email}</p>
-          </button>
-        ))
-      ) : (
-        <p className="text-sm text-slate-500">
-          Es wurden noch keine Mitarbeitenden angelegt. Nutze "Mitarbeiter anlegen", um den ersten Account zu erzeugen.
-        </p>
-      )}
-    </div>
-  </div>
-);
-
-return (
-  <div className="space-y-4">
-    <div className="flex flex-wrap items-center justify-between gap-3">
-      <div>
-        <h2 className="text-xl font-semibold">Admincenter</h2>
-        <p className="text-sm text-slate-500">Kalender, Abwesenheiten und Stammdaten steuern</p>
+  const employeeSelector = (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between gap-2">
+        <h3 className="text-lg font-semibold">Mitarbeitende</h3>
+        <input
+          type="text"
+          value={employeeFilter}
+          onChange={(event) => setEmployeeFilter(event.target.value)}
+          placeholder="Suche nach Name oder Personalnr."
+          className="w-full max-w-[220px] rounded border border-slate-300 px-2 py-1 text-sm"
+        />
       </div>
-      <div className="rounded-full bg-white shadow px-2 py-1 text-sm">
-        <button
-          className={`px-3 py-1 rounded-full ${
-            adminMenu === 'staff' ? 'bg-blue-600 text-white' : 'text-slate-600 hover:text-blue-600'
-          }`}
-          onClick={() => setAdminMenu('staff')}
-        >
-          Mitarbeitendenanlage
-        </button>
-        <button
-          className={`px-3 py-1 rounded-full ${
-            adminMenu === 'planning' ? 'bg-blue-600 text-white' : 'text-slate-600 hover:text-blue-600'
-          }`}
-          onClick={() => setAdminMenu('planning')}
-        >
-          Kalender & Planung
-        </button>
+      <div className="space-y-2 max-h-[320px] overflow-auto pr-1">
+        {filteredEmployees && filteredEmployees.length > 0 ? (
+          filteredEmployees.map((employee) => (
+            <button
+              key={employee.id}
+              onClick={() => setSelectedUserId(employee.id)}
+              className={`w-full rounded-lg border px-3 py-2 text-left transition ${
+                employee.id === selectedUserId
+                  ? 'border-blue-500 bg-blue-50 text-blue-700'
+                  : 'border-slate-200 hover:border-blue-300'
+              }`}
+            >
+              <p className="font-semibold flex items-center gap-2">
+                {employee.name}
+                {employee.personnelNumber && (
+                  <span className="text-[10px] uppercase tracking-wide text-slate-500">#{employee.personnelNumber}</span>
+                )}
+                {!employee.active && (
+                  <span className="text-[10px] uppercase tracking-wide text-rose-600">deaktiviert</span>
+                )}
+                <span className="text-[10px] uppercase tracking-wide text-slate-400">
+                  {employee.role === 'admin' ? 'Admin' : 'Mitarbeiter'}
+                </span>
+              </p>
+              <p className="text-xs text-slate-500">{employee.email}</p>
+            </button>
+          ))
+        ) : (
+          <p className="text-sm text-slate-500">
+            {employees && employees.length > 0
+              ? 'Keine Treffer für die aktuelle Suche.'
+              : 'Es wurden noch keine Mitarbeitenden angelegt. Nutze "Mitarbeiter anlegen", um den ersten Account zu erzeugen.'}
+          </p>
+        )}
       </div>
     </div>
+  );
 
-    {adminMenu === 'staff' ? (
+  const adminContent =
+    adminMenu === 'staff' ? (
       <div className="grid gap-6 lg:grid-cols-[320px_1fr]">
         <div className="rounded border border-slate-200 bg-white p-4 space-y-4 text-sm">
           {employeeSelector}
@@ -1252,7 +1251,36 @@ return (
           </div>
         </div>
       </div>
-    )}
-  </div>
-);
+    );
+
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h2 className="text-xl font-semibold">Admincenter</h2>
+          <p className="text-sm text-slate-500">Kalender, Abwesenheiten und Stammdaten steuern</p>
+        </div>
+        <div className="rounded-full bg-white shadow px-2 py-1 text-sm">
+          <button
+            className={`px-3 py-1 rounded-full ${
+              adminMenu === 'staff' ? 'bg-blue-600 text-white' : 'text-slate-600 hover:text-blue-600'
+            }`}
+            onClick={() => setAdminMenu('staff')}
+          >
+            Mitarbeitendenanlage
+          </button>
+          <button
+            className={`px-3 py-1 rounded-full ${
+              adminMenu === 'planning' ? 'bg-blue-600 text-white' : 'text-slate-600 hover:text-blue-600'
+            }`}
+            onClick={() => setAdminMenu('planning')}
+          >
+            Kalender & Planung
+          </button>
+        </div>
+      </div>
+
+      {adminContent}
+    </div>
+  );
 }

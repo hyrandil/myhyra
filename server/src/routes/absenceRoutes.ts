@@ -68,6 +68,24 @@ const enrichAbsence = (row: Absence, schedule: WorkScheduleEntry[]) => {
   return { ...row, days } as Absence;
 };
 
+const buildVacationUsage = (absences: Absence[], schedule: WorkScheduleEntry[]) => {
+  const usage = new Map<string, number>();
+  absences
+    .filter((item) => item.type === 'vacation')
+    .forEach((item) => {
+      const factor = item.duration === 'half' ? 0.5 : 1;
+      workingDatesBetween(item.start_date, item.end_date, schedule).forEach((day) => {
+        const current = usage.get(day) ?? 0;
+        usage.set(day, Math.max(current, factor));
+      });
+    });
+  let total = 0;
+  usage.forEach((value) => {
+    total += value;
+  });
+  return total;
+};
+
 router.use(authenticate);
 
 router.get('/me', (req: AuthRequest, res) => {
@@ -87,12 +105,7 @@ router.get('/me/summary', (req: AuthRequest, res) => {
   const absences = db
     .prepare('SELECT * FROM absences WHERE user_id = ?')
     .all(req.user!.id) as Absence[];
-  const used = absences.reduce((total, item) => {
-    if (item.type !== 'vacation') return total;
-    const days = workingDatesBetween(item.start_date, item.end_date, schedule);
-    const factor = item.duration === 'half' ? 0.5 : 1;
-    return total + days.length * factor;
-  }, 0);
+  const used = buildVacationUsage(absences, schedule);
   res.json({ allowance, used, remaining: Math.max(allowance - used, 0) });
 });
 
@@ -112,12 +125,7 @@ router.get('/summary', (_req, res) => {
     const absences = db
       .prepare('SELECT * FROM absences WHERE user_id = ?')
       .all(row.user_id) as Absence[];
-    const used = absences.reduce((total, item) => {
-      if (item.type !== 'vacation') return total;
-      const days = workingDatesBetween(item.start_date, item.end_date, schedule);
-      const factor = item.duration === 'half' ? 0.5 : 1;
-      return total + days.length * factor;
-    }, 0);
+    const used = buildVacationUsage(absences, schedule);
     return {
       user_id: row.user_id,
       name: row.name,
@@ -157,6 +165,11 @@ router.post('/user/:userId', (req, res) => {
   }
   const { start_date, end_date, type, duration, note } = parsed.data;
   const schedule = getSchedule(userId);
+  db.prepare('DELETE FROM absences WHERE user_id = ? AND NOT (end_date < ? OR start_date > ?)').run(
+    userId,
+    start_date,
+    end_date
+  );
   const stmt = db.prepare(
     'INSERT INTO absences (user_id, start_date, end_date, date, type, duration, note) VALUES (?, ?, ?, ?, ?, ?, ?)'
   );

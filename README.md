@@ -12,10 +12,12 @@ Vollständiges Beispiel einer Zeiterfassungslösung bestehend aus drei Projekten
 - Zentraler Kommen/Gehen-Button, der automatisch den nächsten Schritt anbietet.
 - Kommen/Gehen-Stempelung inkl. verpflichtender Standortübermittlung (Browser/App fragen die Freigabe aktiv an).
 - Kompakte Kalenderansicht pro Nutzer mit Tageszusammenfassung (Arbeits- & Pausenzeit), eingetragenen Abwesenheiten und Google-Maps-Vorschau der Standorte.
-- Admin-Center mit aufklappbaren Bereichen: getrenntes Mitarbeitenden-Menü (Stammdaten/Rolle/Status, Geburtsdatum, Personalnummer, Kontaktdaten), Arbeitszeitplanung pro Wochentag und Kalender-Inspector zum Drilldown.
+- Admin-Center mit aufklappbaren Bereichen: getrenntes Mitarbeitenden-Menü (Stammdaten/Rolle/Status, Geburtsdatum, Personalnummer, Kontaktdaten), Arbeitszeitplanung pro Wochentag und aufgeräumtes Kalender-/Planungs-Tab mit gestapelter Übersicht.
+- Schnelle Mitarbeitenden-Suche nach Name oder Personalnummer in Anlage und Planung.
+- Farblegende wie bei timeCard: Urlaub (orange), Krank (rot), Remote (blau) & Sonstiges (grau) direkt im Kalender; offene Buchungen werden mit rotem ✕ markiert, korrekte Buchungen als schwarzer Punkt.
 - Admin-Werkzeuge zum Anlegen neuer Nutzer:innen, Bearbeiten von Stammdaten/Rollen, Zurücksetzen von Passwörtern, De-/Aktivieren von Logins sowie manuellen Korrekturen oder Ergänzungen einzelner Buchungen.
 - Einstellungsbereich für Mitarbeitende mit Passwortwechsel sowie praxisnahen Optionen wie Sprache, Wochenstart und Zeitformat.
-- Urlaubs- & Abwesenheitsverwaltung wie in klassischen Zeiterfassungssystemen: Admins erfassen Urlaub/Krank/Remote/Sonstige mit Start-/Enddatum, pflegen pro Person das Urlaubskontingent, planen Abwesenheitszeiträume und erhalten eine Monatsübersicht zu Anwesenheit & Abwesenheit (Nicht-Arbeitstage laut Plan werden automatisch übersprungen und bei Urlaub nicht abgezogen).
+- Urlaubs- & Abwesenheitsverwaltung wie in klassischen Zeiterfassungssystemen: Admins erfassen Urlaub/Krank/Remote/Sonstige mit Start-/Enddatum, pflegen pro Person das Urlaubskontingent, planen Abwesenheitszeiträume und erhalten eine Monatsübersicht zu Anwesenheit & Abwesenheit (Nicht-Arbeitstage laut Plan werden automatisch übersprungen und bei Urlaub nicht abgezogen). Überlappende Abwesenheiten werden überschrieben, sodass Krankheit Urlaubstage verdrängt und doppelte Einträge nicht mehrfach zählen.
 - Expo-App speichert Token sicher, fragt Standortberechtigungen an und erlaubt Map-Aufrufe aus den Buchungsdetails.
 - Mitarbeitende können ihr eigenes Passwort direkt im Dashboard mit alter Kennwortprüfung ändern.
 
@@ -68,6 +70,7 @@ Passe die `extra.apiUrl` in `mobile/app.json` oder `EXPO_PUBLIC_API_URL` an, dam
 | PATCH | `/api/users/:id` | (Admin) Stammdaten/Rolle eines Nutzers anpassen. |
 | PATCH | `/api/users/me/password` | Mitarbeitende ändern ihr eigenes Passwort nach alter Kennwortprüfung. |
 | GET/PATCH | `/api/users/me/settings` | Persönliche Einstellungen laden/ändern (Sprache, Wochenstart, Zeitformat). |
+| GET | `/api/users/me/schedule` | Eigener Arbeitszeitplan (Minuten je Wochentag) für Kalender/Abwesenheitsgutschriften. |
 | PATCH | `/api/users/:id/settings` | (Admin) Urlaubskontingent eines Mitarbeitenden anpassen. |
 | GET | `/api/absences/me` | Eigene Abwesenheiten (Urlaub, Krank, Remote, Sonstige) inklusive Bereichen im Kalender laden. |
 | GET | `/api/absences/me/summary` | Persönliche Urlaubsauswertung (Kontingent, Resttage). |
@@ -80,6 +83,7 @@ Passe die `extra.apiUrl` in `mobile/app.json` oder `EXPO_PUBLIC_API_URL` an, dam
 ### Abwesenheiten & Arbeitszeitpläne
 
 - Abwesenheiten werden mit Start- und Enddatum gespeichert und direkt im Kalender markiert; freie Tage aus dem individuellen Arbeitszeitplan (z. B. Wochenenden oder feste Freitage) werden automatisch übersprungen und nicht auf den Urlaub angerechnet.
+- Tageszusammenfassungen buchen Abwesenheiten automatisch gut: volle Tage füllen die geplanten Soll-Minuten, halbe Tage rechnen 50 % an – so erscheinen Urlaub/Krankheit direkt in der Arbeitszeit.
 - Admins pflegen pro Mitarbeitendem die Sollzeiten je Wochentag. Diese Planung steuert, welche Tage als Arbeitstage gelten und bildet die Basis für Urlaubssummen, Attendance-Reports und die Monatsübersicht im Admin-Center.
 - Mitarbeitende sehen ihre Abwesenheiten in der Tages-Detailansicht; Admins legen Abwesenheiten ausschließlich über das Admin-Menü an (Mitarbeitende können keine eigenen Abwesenheiten erfassen).
 
