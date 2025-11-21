@@ -6,9 +6,26 @@ import { authenticate, authorize, AuthRequest } from '../auth';
 import type { User } from '../types';
 
 const router = Router();
+const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
 
 const ensureSettingsRow = (userId: number) => {
   db.prepare('INSERT OR IGNORE INTO user_settings (user_id) VALUES (?)').run(userId);
+};
+
+const ensureProfileRow = (userId: number) => {
+  db.prepare('INSERT OR IGNORE INTO user_profiles (user_id) VALUES (?)').run(userId);
+};
+
+const ensureSchedule = (userId: number) => {
+  const existing = db.prepare('SELECT COUNT(1) as count FROM work_schedules WHERE user_id = ?').get(userId) as {
+    count: number;
+  };
+  if (existing?.count === 7) {
+    return;
+  }
+  const defaults = [480, 480, 480, 480, 480, 0, 0];
+  const insert = db.prepare('INSERT OR IGNORE INTO work_schedules (user_id, weekday, minutes) VALUES (?, ?, ?)');
+  defaults.forEach((minutes, weekday) => insert.run(userId, weekday, minutes));
 };
 
 const toUserPayload = (
@@ -109,6 +126,18 @@ const userSchema = z.object({
   password: z.string().min(6),
   role: z.enum(['user', 'admin']).optional().default('user'),
   vacationAllowance: z.number().min(0).max(80).optional(),
+  birth_date: z
+    .string()
+    .regex(dateRegex, 'Datum muss YYYY-MM-DD sein')
+    .optional()
+    .or(z.literal(''))
+    .transform((value) => value || undefined),
+  personnel_number: z.string().max(80).optional().or(z.literal('')).transform((value) => value || undefined),
+  phone: z.string().max(80).optional().or(z.literal('')).transform((value) => value || undefined),
+  address: z.string().max(180).optional().or(z.literal('')).transform((value) => value || undefined),
+  city: z.string().max(120).optional().or(z.literal('')).transform((value) => value || undefined),
+  postal_code: z.string().max(30).optional().or(z.literal('')).transform((value) => value || undefined),
+  note: z.string().max(255).optional().or(z.literal('')).transform((value) => value || undefined),
 });
 
 router.get('/', (req: AuthRequest, res) => {
@@ -132,7 +161,7 @@ router.post('/', (req, res) => {
   if (!parsed.success) {
     return res.status(400).json({ errors: parsed.error.format() });
   }
-  const { name, email, password, role, vacationAllowance } = parsed.data;
+  const { name, email, password, role, vacationAllowance, ...profile } = parsed.data;
   const existing = db.prepare('SELECT id FROM users WHERE email = ?').get(email) as { id: number } | undefined;
   if (existing) {
     return res.status(409).json({ message: 'E-Mail bereits vorhanden' });
@@ -140,10 +169,29 @@ router.post('/', (req, res) => {
   const passwordHash = bcrypt.hashSync(password, 10);
   const stmt = db.prepare('INSERT INTO users (name, email, password_hash, role, active) VALUES (?, ?, ?, ?, 1)');
   const result = stmt.run(name, email, passwordHash, role);
+  const createdUserId = Number(result.lastInsertRowid);
   db.prepare('INSERT INTO user_settings (user_id, vacation_allowance) VALUES (?, ?)').run(
-    Number(result.lastInsertRowid),
+    createdUserId,
     vacationAllowance ?? 30
   );
+  ensureProfileRow(createdUserId);
+  ensureSchedule(createdUserId);
+  if (Object.values(profile).some((value) => value !== undefined)) {
+    db.prepare(
+      `UPDATE user_profiles
+       SET birth_date = ?, personnel_number = ?, phone = ?, address = ?, city = ?, postal_code = ?, note = ?
+       WHERE user_id = ?`
+    ).run(
+      profile.birth_date ?? null,
+      profile.personnel_number ?? null,
+      profile.phone ?? null,
+      profile.address ?? null,
+      profile.city ?? null,
+      profile.postal_code ?? null,
+      profile.note ?? null,
+      createdUserId
+    );
+  }
   const created = db
     .prepare(
       `SELECT u.id, u.name, u.email, u.role, u.created_at, u.active, IFNULL(us.vacation_allowance, 0) as vacation_allowance
@@ -253,6 +301,32 @@ const adminSettingsSchema = z.object({
   vacation_allowance: z.number().min(0).max(80),
 });
 
+const profileSchema = z.object({
+  birth_date: z
+    .string()
+    .regex(dateRegex, 'Datum muss YYYY-MM-DD sein')
+    .optional()
+    .or(z.literal(''))
+    .transform((value) => value || undefined),
+  personnel_number: z.string().max(80).optional().or(z.literal('')).transform((value) => value || undefined),
+  phone: z.string().max(80).optional().or(z.literal('')).transform((value) => value || undefined),
+  address: z.string().max(180).optional().or(z.literal('')).transform((value) => value || undefined),
+  city: z.string().max(120).optional().or(z.literal('')).transform((value) => value || undefined),
+  postal_code: z.string().max(30).optional().or(z.literal('')).transform((value) => value || undefined),
+  note: z.string().max(255).optional().or(z.literal('')).transform((value) => value || undefined),
+});
+
+const scheduleSchema = z.object({
+  days: z
+    .array(
+      z.object({
+        weekday: z.number().int().min(0).max(6),
+        minutes: z.number().int().min(0).max(1440),
+      })
+    )
+    .length(7),
+});
+
 router.patch('/:id/settings', (req, res) => {
   const userId = Number(req.params.id);
   if (Number.isNaN(userId)) {
@@ -279,6 +353,90 @@ router.patch('/:id/settings', (req, res) => {
       vacation_allowance: number;
     };
   res.json(toUserPayload(updated));
+});
+
+router.get('/:id/profile', (req, res) => {
+  const userId = Number(req.params.id);
+  if (Number.isNaN(userId)) {
+    return res.status(400).json({ message: 'Ungültige Nutzer-ID' });
+  }
+  ensureProfileRow(userId);
+  const profile = db
+    .prepare(
+      `SELECT birth_date, personnel_number, phone, address, city, postal_code, note
+       FROM user_profiles WHERE user_id = ?`
+    )
+    .get(userId);
+  if (!profile) {
+    return res.status(404).json({ message: 'Profil nicht gefunden' });
+  }
+  res.json(profile);
+});
+
+router.patch('/:id/profile', (req, res) => {
+  const userId = Number(req.params.id);
+  if (Number.isNaN(userId)) {
+    return res.status(400).json({ message: 'Ungültige Nutzer-ID' });
+  }
+  const parsed = profileSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ errors: parsed.error.format() });
+  }
+  ensureProfileRow(userId);
+  db.prepare(
+    `UPDATE user_profiles
+     SET birth_date = ?, personnel_number = ?, phone = ?, address = ?, city = ?, postal_code = ?, note = ?
+     WHERE user_id = ?`
+  ).run(
+    parsed.data.birth_date ?? null,
+    parsed.data.personnel_number ?? null,
+    parsed.data.phone ?? null,
+    parsed.data.address ?? null,
+    parsed.data.city ?? null,
+    parsed.data.postal_code ?? null,
+    parsed.data.note ?? null,
+    userId
+  );
+  const profile = db
+    .prepare(
+      `SELECT birth_date, personnel_number, phone, address, city, postal_code, note
+       FROM user_profiles WHERE user_id = ?`
+    )
+    .get(userId);
+  res.json(profile);
+});
+
+router.get('/:id/schedule', (req, res) => {
+  const userId = Number(req.params.id);
+  if (Number.isNaN(userId)) {
+    return res.status(400).json({ message: 'Ungültige Nutzer-ID' });
+  }
+  ensureSchedule(userId);
+  const schedule = db
+    .prepare('SELECT weekday, minutes FROM work_schedules WHERE user_id = ? ORDER BY weekday ASC')
+    .all(userId);
+  res.json({ days: schedule });
+});
+
+router.put('/:id/schedule', (req, res) => {
+  const userId = Number(req.params.id);
+  if (Number.isNaN(userId)) {
+    return res.status(400).json({ message: 'Ungültige Nutzer-ID' });
+  }
+  const parsed = scheduleSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ errors: parsed.error.format() });
+  }
+  const tx = db.transaction((payload: typeof parsed.data) => {
+    db.prepare('DELETE FROM work_schedules WHERE user_id = ?').run(userId);
+    const insert = db.prepare('INSERT INTO work_schedules (user_id, weekday, minutes) VALUES (?, ?, ?)');
+    payload.days.forEach((day) => insert.run(userId, day.weekday, day.minutes));
+  });
+  tx(parsed.data);
+  const schedule = db
+    .prepare('SELECT weekday, minutes FROM work_schedules WHERE user_id = ? ORDER BY weekday ASC')
+    .all(userId);
+  res.json({ days: schedule });
 });
 
 export default router;

@@ -47,11 +47,34 @@ CREATE TABLE IF NOT EXISTS user_settings (
 CREATE TABLE IF NOT EXISTS absences (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   user_id INTEGER NOT NULL,
-  date TEXT NOT NULL,
+  start_date TEXT NOT NULL,
+  end_date TEXT NOT NULL,
+  date TEXT,
   type TEXT NOT NULL CHECK(type IN ('vacation','sick','remote','other')),
   duration TEXT NOT NULL CHECK(duration IN ('full','half')),
   note TEXT,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS user_profiles (
+  user_id INTEGER PRIMARY KEY,
+  birth_date TEXT,
+  personnel_number TEXT,
+  phone TEXT,
+  address TEXT,
+  city TEXT,
+  postal_code TEXT,
+  note TEXT,
+  FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS work_schedules (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER NOT NULL,
+  weekday INTEGER NOT NULL,
+  minutes INTEGER NOT NULL DEFAULT 0,
+  UNIQUE(user_id, weekday),
   FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
 );
 `);
@@ -75,6 +98,10 @@ ensureTableColumn('user_settings', 'time_format', "TEXT NOT NULL DEFAULT '24h'")
 db.prepare("UPDATE user_settings SET week_start = 'monday' WHERE week_start IS NULL").run();
 db.prepare("UPDATE user_settings SET time_format = '24h' WHERE time_format IS NULL").run();
 db.exec(`INSERT OR IGNORE INTO user_settings (user_id) SELECT id FROM users;`);
+ensureTableColumn('absences', 'start_date', 'TEXT');
+ensureTableColumn('absences', 'end_date', 'TEXT');
+db.prepare('UPDATE absences SET start_date = date WHERE start_date IS NULL').run();
+db.prepare('UPDATE absences SET end_date = date WHERE end_date IS NULL').run();
 
 function ensureAdminUser() {
   const existing = db.prepare('SELECT id FROM users WHERE email = ?').get(ADMIN_EMAIL);
@@ -86,6 +113,34 @@ function ensureAdminUser() {
   }
 }
 
+const defaultSchedule = [480, 480, 480, 480, 480, 0, 0];
+
+function ensureProfile(userId: number) {
+  db.prepare('INSERT OR IGNORE INTO user_profiles (user_id) VALUES (?)').run(userId);
+}
+
+function ensureSchedule(userId: number) {
+  const existing = db.prepare('SELECT COUNT(1) as count FROM work_schedules WHERE user_id = ?').get(userId) as {
+    count: number;
+  };
+  if (existing?.count === 7) {
+    return;
+  }
+  const insert = db.prepare('INSERT OR IGNORE INTO work_schedules (user_id, weekday, minutes) VALUES (?, ?, ?)');
+  defaultSchedule.forEach((minutes, weekday) => insert.run(userId, weekday, minutes));
+}
+
+const userIds = db.prepare('SELECT id FROM users').all() as { id: number }[];
+userIds.forEach((row) => {
+  ensureProfile(row.id);
+  ensureSchedule(row.id);
+});
+
 ensureAdminUser();
+const adminRow = db.prepare('SELECT id FROM users WHERE email = ?').get(ADMIN_EMAIL) as { id: number } | undefined;
+if (adminRow) {
+  ensureProfile(adminRow.id);
+  ensureSchedule(adminRow.id);
+}
 
 export default db;

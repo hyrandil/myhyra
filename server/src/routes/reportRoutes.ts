@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import db from '../db';
 import { authenticate, authorize } from '../auth';
+import type { WorkScheduleEntry } from '../types';
 
 const router = Router();
 
@@ -9,6 +10,47 @@ router.use(authorize(['admin']));
 
 const monthRegex = /^\d{4}-\d{2}$/;
 
+const parseDate = (value: string) => {
+  const [yearStr, monthStr, dayStr] = value.split('-');
+  const year = Number(yearStr);
+  const month = Number(monthStr);
+  const day = Number(dayStr);
+  return new Date(Date.UTC(year, month - 1, day));
+};
+
+const weekdayFromDate = (date: Date) => (date.getUTCDay() + 6) % 7;
+
+const workingDatesBetween = (start: string, end: string, schedule: WorkScheduleEntry[]) => {
+  const workingMap = new Map(schedule.map((entry) => [entry.weekday, entry.minutes]));
+  const results: string[] = [];
+  let cursor = parseDate(start);
+  const endDate = parseDate(end);
+  while (cursor.getTime() <= endDate.getTime()) {
+    const weekday = weekdayFromDate(cursor);
+    const minutes = workingMap.get(weekday) ?? 0;
+    if (minutes > 0) {
+      results.push(cursor.toISOString().slice(0, 10));
+    }
+    cursor = new Date(cursor.getTime() + 24 * 60 * 60 * 1000);
+  }
+  return results;
+};
+
+const scheduleForUser = (userId: number) => {
+  const rows = db
+    .prepare('SELECT weekday, minutes FROM work_schedules WHERE user_id = ? ORDER BY weekday ASC')
+    .all(userId) as WorkScheduleEntry[];
+  if (rows.length === 7) {
+    return rows;
+  }
+  const defaults = [480, 480, 480, 480, 480, 0, 0];
+  const insert = db.prepare('INSERT OR IGNORE INTO work_schedules (user_id, weekday, minutes) VALUES (?, ?, ?)');
+  defaults.forEach((minutes, weekday) => insert.run(userId, weekday, minutes));
+  return db
+    .prepare('SELECT weekday, minutes FROM work_schedules WHERE user_id = ? ORDER BY weekday ASC')
+    .all(userId) as WorkScheduleEntry[];
+};
+
 router.get('/attendance', (req, res) => {
   const monthParam = typeof req.query.month === 'string' && monthRegex.test(req.query.month)
     ? req.query.month
@@ -16,6 +58,12 @@ router.get('/attendance', (req, res) => {
   const today = new Date();
   const fallbackMonth = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
   const month = monthParam ?? fallbackMonth;
+  const monthStart = `${month}-01`;
+  const [yearStr, monthStr] = month.split('-');
+  const year = Number(yearStr);
+  const monthIndex = Number(monthStr);
+  const monthEndDate = new Date(Date.UTC(year, monthIndex, 0));
+  const monthEnd = monthEndDate.toISOString().slice(0, 10);
 
   const bookings = db
     .prepare(
@@ -26,8 +74,16 @@ router.get('/attendance', (req, res) => {
     .all(month) as { user_id: number; work_day: string }[];
 
   const absences = db
-    .prepare('SELECT user_id, date, type, duration FROM absences WHERE substr(date, 1, 7) = ?')
-    .all(month) as { user_id: number; date: string; type: string; duration: 'full' | 'half' }[];
+    .prepare(
+      'SELECT user_id, start_date, end_date, type, duration FROM absences WHERE NOT (end_date < ? OR start_date > ?)'
+    )
+    .all(monthStart, monthEnd) as {
+      user_id: number;
+      start_date: string;
+      end_date: string;
+      type: string;
+      duration: 'full' | 'half';
+    }[];
 
   const settings = db
     .prepare('SELECT user_id, vacation_allowance FROM user_settings')
@@ -54,28 +110,28 @@ router.get('/attendance', (req, res) => {
   };
   const absenceMap = new Map<number, AbsenceBucket>();
 
-  const addAbsence = (userId: number, type: string, duration: 'full' | 'half') => {
+  const scheduleCache = new Map<number, WorkScheduleEntry[]>();
+
+  const addAbsence = (userId: number, type: string, duration: 'full' | 'half', start: string, end: string) => {
     if (!absenceMap.has(userId)) {
       absenceMap.set(userId, { vacation: 0, sick: 0, remote: 0, other: 0 });
     }
-    const bucket = absenceMap.get(userId)!;
-    const days = duration === 'half' ? 0.5 : 1;
-    switch (type) {
-      case 'vacation':
-        bucket.vacation += days;
-        break;
-      case 'sick':
-        bucket.sick += days;
-        break;
-      case 'remote':
-        bucket.remote += days;
-        break;
-      default:
-        bucket.other += days;
+    if (!scheduleCache.has(userId)) {
+      scheduleCache.set(userId, scheduleForUser(userId));
     }
+    const schedule = scheduleCache.get(userId)!;
+    const days = workingDatesBetween(start, end, schedule);
+    const bucket = absenceMap.get(userId)!;
+    const dayValue = duration === 'half' ? 0.5 : 1;
+    const totalDays = days.length * dayValue;
+    if (totalDays === 0) return;
+    if (type === 'vacation') bucket.vacation += totalDays;
+    else if (type === 'sick') bucket.sick += totalDays;
+    else if (type === 'remote') bucket.remote += totalDays;
+    else bucket.other += totalDays;
   };
 
-  absences.forEach((row) => addAbsence(row.user_id, row.type, row.duration));
+  absences.forEach((row) => addAbsence(row.user_id, row.type, row.duration, row.start_date, row.end_date));
 
   const rows = users.map((user) => {
     const presenceDays = presenceMap.get(user.id)?.size ?? 0;

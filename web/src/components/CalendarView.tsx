@@ -1,5 +1,5 @@
 import { FormEvent, useEffect, useMemo, useState } from 'react';
-import type { Booking } from '../types';
+import type { Absence, Booking } from '../types';
 import { buildCalendarDays, formatMinutes, getDateKey, groupBookingsByDay } from '../utils/time';
 
 const weekdayLabels = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'];
@@ -8,6 +8,7 @@ interface CalendarViewProps {
   title: string;
   subtitle?: string;
   bookings: Booking[];
+  absences?: Absence[];
   isLoading: boolean;
   onRefresh?: () => void;
   emptyState?: string;
@@ -49,6 +50,7 @@ export function CalendarView({
   title,
   subtitle,
   bookings,
+  absences = [],
   isLoading,
   onRefresh,
   emptyState = 'Keine Buchungen für diesen Tag.',
@@ -72,9 +74,23 @@ export function CalendarView({
   }, [dataKey]);
 
   const grouped = useMemo(() => groupBookingsByDay(bookings), [bookings]);
+  const absenceMap = useMemo(() => {
+    const map: Record<string, Absence[]> = {};
+    absences.forEach((absence) => {
+      const days = absence.days && absence.days.length > 0 ? absence.days : [absence.start_date];
+      days.forEach((day) => {
+        if (!map[day]) {
+          map[day] = [];
+        }
+        map[day].push(absence);
+      });
+    });
+    return map;
+  }, [absences]);
   const monthDays = useMemo(() => buildCalendarDays(currentMonth), [currentMonth]);
   const selectedBookings = grouped[selectedDate]?.bookings ?? [];
   const summary = grouped[selectedDate]?.summary ?? { workMinutes: 0, breakMinutes: 0 };
+  const selectedAbsences = absenceMap[selectedDate] ?? [];
   const monthSummary = useMemo(() => {
     let workMinutes = 0;
     const attendanceDays = new Set<string>();
@@ -201,7 +217,15 @@ export function CalendarView({
             <div className="grid grid-cols-7 gap-1">
               {monthDays.map((day) => {
                 const hasEntries = Boolean(grouped[day.key]);
+                const absencesForDay = absenceMap[day.key]?.length ?? 0;
                 const isSelected = day.key === selectedDate;
+                const baseClass = isSelected
+                  ? 'border-blue-500 bg-blue-50 text-blue-700'
+                  : hasEntries
+                  ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+                  : absencesForDay > 0
+                  ? 'border-amber-200 bg-amber-50 text-amber-700'
+                  : 'border-transparent bg-slate-100 text-slate-500';
                 return (
                   <button
                     key={day.key}
@@ -213,16 +237,17 @@ export function CalendarView({
                         setCurrentMonth(new Date(day.date.getFullYear(), day.date.getMonth(), 1));
                       }
                     }}
-                    className={`h-12 rounded-md border text-xs transition-all ${
-                      isSelected
-                        ? 'border-blue-500 bg-blue-50 text-blue-700'
-                        : hasEntries
-                        ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
-                        : 'border-transparent bg-slate-100 text-slate-500'
-                    } ${day.isCurrentMonth ? '' : 'opacity-60'}`}
+                    className={`h-12 rounded-md border text-xs transition-all ${baseClass} ${
+                      day.isCurrentMonth ? '' : 'opacity-60'
+                    }`}
                   >
                     <div>{day.date.getDate()}</div>
-                    {hasEntries && <div className="mt-1 h-1 w-1 rounded-full bg-current mx-auto" />}
+                    {(hasEntries || absencesForDay > 0) && (
+                      <div className="mt-1 flex items-center justify-center gap-1">
+                        {hasEntries && <span className="h-1.5 w-1.5 rounded-full bg-current" />}
+                        {absencesForDay > 0 && <span className="h-1.5 w-1.5 rounded-full bg-amber-600" />}
+                      </div>
+                    )}
                   </button>
                 );
               })}
@@ -245,11 +270,34 @@ export function CalendarView({
                   </div>
                 </div>
               </div>
+              {selectedAbsences.length > 0 && (
+                <div className="mt-3 rounded-md bg-white p-3 text-sm text-slate-700">
+                  <p className="text-xs font-semibold uppercase text-amber-700">Abwesenheit</p>
+                  <ul className="mt-1 space-y-1">
+                    {selectedAbsences.map((absence) => (
+                      <li key={absence.id} className="flex items-center justify-between gap-3">
+                        <span className="font-medium">
+                          {absence.type} • {absence.duration === 'half' ? '½ Tag' : 'Ganzer Tag'}
+                        </span>
+                        <span className="text-xs text-slate-500">
+                          {absence.start_date === absence.end_date
+                            ? new Date(absence.start_date).toLocaleDateString('de-DE')
+                            : `${new Date(absence.start_date).toLocaleDateString('de-DE')} – ${new Date(
+                                absence.end_date
+                              ).toLocaleDateString('de-DE')}`}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
             </div>
 
             <div className="space-y-3">
             {selectedBookings.length === 0 ? (
-              <p className="text-sm text-slate-500">{emptyState}</p>
+              <p className="text-sm text-slate-500">
+                {selectedAbsences.length > 0 ? 'Keine Stempelungen, aber Abwesenheit hinterlegt.' : emptyState}
+              </p>
             ) : (
               selectedBookings.map((booking) => {
                 const isExpanded = expandedBookingId === booking.id;

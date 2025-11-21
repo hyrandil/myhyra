@@ -24,10 +24,12 @@ export interface EmployeeSummary {
 export interface Absence {
   id: number;
   user_id: number;
-  date: string;
+  start_date: string;
+  end_date: string;
   type: 'vacation' | 'sick' | 'remote' | 'other';
   duration: 'full' | 'half';
   note?: string | null;
+  days?: string[];
 }
 
 export interface VacationSummaryRow {
@@ -67,4 +69,23 @@ export interface UserSettingsPayload {
   week_start: 'monday' | 'sunday';
   time_format: '24h' | '12h';
   vacation_allowance?: number;
+}
+
+export interface UserProfilePayload {
+  birth_date?: string;
+  personnel_number?: string;
+  phone?: string;
+  address?: string;
+  city?: string;
+  postal_code?: string;
+  note?: string;
+}
+
+export interface WorkScheduleDay {
+  weekday: number;
+  minutes: number;
+}
+
+export interface WorkSchedulePayload {
+  days: WorkScheduleDay[];
 }

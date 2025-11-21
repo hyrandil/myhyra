@@ -10,6 +10,17 @@ export interface User {
   created_at: string;
 }
 
+export interface UserProfile {
+  user_id: number;
+  birth_date?: string | null;
+  personnel_number?: string | null;
+  phone?: string | null;
+  address?: string | null;
+  city?: string | null;
+  postal_code?: string | null;
+  note?: string | null;
+}
+
 export interface Booking {
   id: number;
   user_id: number;
@@ -31,12 +42,20 @@ export interface UserSettings {
   vacation_allowance: number;
 }
 
+export interface WorkScheduleEntry {
+  user_id: number;
+  weekday: number;
+  minutes: number;
+}
+
 export interface Absence {
   id: number;
   user_id: number;
-  date: string;
+  start_date: string;
+  end_date: string;
   type: 'vacation' | 'sick' | 'remote' | 'other';
   duration: 'full' | 'half';
   note?: string | null;
   created_at: string;
+  days?: string[];
 }

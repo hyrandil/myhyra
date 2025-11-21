@@ -10,7 +10,7 @@ export function VacationSummaryCard() {
     }
     const today = new Date().toISOString().slice(0, 10);
     return absences
-      .filter((absence) => absence.date >= today)
+      .filter((absence) => (absence.days?.[0] ?? absence.start_date) >= today)
       .slice(0, 5);
   }, [absences]);
 
@@ -58,11 +58,21 @@ export function VacationSummaryCard() {
                   <li key={absence.id} className="flex items-center justify-between py-2">
                     <div>
                       <p className="font-semibold text-slate-900">
-                        {new Date(absence.date).toLocaleDateString('de-DE', {
-                          day: '2-digit',
-                          month: 'short',
-                          year: 'numeric',
-                        })}
+                        {absence.start_date === absence.end_date
+                          ? new Date(absence.start_date).toLocaleDateString('de-DE', {
+                              day: '2-digit',
+                              month: 'short',
+                              year: 'numeric',
+                            })
+                          : `${new Date(absence.start_date).toLocaleDateString('de-DE', {
+                              day: '2-digit',
+                              month: 'short',
+                              year: 'numeric',
+                            })} – ${new Date(absence.end_date).toLocaleDateString('de-DE', {
+                              day: '2-digit',
+                              month: 'short',
+                              year: 'numeric',
+                            })}`}
                       </p>
                       <p className="text-xs uppercase text-slate-500">{absence.type === 'vacation' ? 'Urlaub' : absence.type}</p>
                     </div>

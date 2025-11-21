@@ -1,6 +1,14 @@
 import { useQuery } from '@tanstack/react-query';
 import api from '../api';
-import type { UserSettingsPayload, VacationSummarySnapshot, Absence, VacationSummaryRow, AttendanceReport } from '../types';
+import type {
+  UserSettingsPayload,
+  VacationSummarySnapshot,
+  Absence,
+  VacationSummaryRow,
+  AttendanceReport,
+  UserProfilePayload,
+  WorkSchedulePayload,
+} from '../types';
 
 export function useUserSettings() {
   return useQuery({
@@ -39,6 +47,28 @@ export function useUserAbsences(userId: number | null) {
     queryFn: async () => {
       const targetId = userId!;
       const { data } = await api.get<Absence[]>(`/absences/user/${targetId}`);
+      return data;
+    },
+  });
+}
+
+export function useUserProfile(userId: number | null) {
+  return useQuery({
+    queryKey: ['profile', userId],
+    enabled: Boolean(userId),
+    queryFn: async () => {
+      const { data } = await api.get<UserProfilePayload>(`/users/${userId}/profile`);
+      return data;
+    },
+  });
+}
+
+export function useUserSchedule(userId: number | null) {
+  return useQuery({
+    queryKey: ['schedule', userId],
+    enabled: Boolean(userId),
+    queryFn: async () => {
+      const { data } = await api.get<WorkSchedulePayload>(`/users/${userId}/schedule`);
       return data;
     },
   });
