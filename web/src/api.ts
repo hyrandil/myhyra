@@ -2,7 +2,8 @@ import axios from 'axios';
 import { AbsenceRequest, AttendanceReport, DailySummary, Employee, TimeEntry, UserInfo } from './types';
 
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || 'http://localhost:3001/api',
+  // Default to the Express port (4000) so local dev works without extra env config
+  baseURL: import.meta.env.VITE_API_URL || 'http://localhost:4000/api',
 });
 
 api.interceptors.request.use((config) => {
