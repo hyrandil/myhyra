@@ -31,6 +31,7 @@ export interface DailySummary {
   planned: number;
   delta: number;
   absences: string[];
+  status: string;
 }
 
 export interface AbsenceRequest {

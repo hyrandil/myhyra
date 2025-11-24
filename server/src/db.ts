@@ -162,13 +162,24 @@ ensureTableColumn('user_profiles', 'start_date', 'TEXT');
 ensureTableColumn('user_profiles', 'end_date', 'TEXT');
 
 function ensureAdminUser() {
-  const existing = db.prepare('SELECT id FROM users WHERE email = ?').get(ADMIN_EMAIL);
+  const existing = db.prepare('SELECT id FROM users WHERE email = ?').get(ADMIN_EMAIL) as
+    | { id: number }
+    | undefined;
+  const passwordHash = bcrypt.hashSync(ADMIN_PASSWORD, 10);
   if (!existing) {
-    const passwordHash = bcrypt.hashSync(ADMIN_PASSWORD, 10);
-    db.prepare(
-      'INSERT INTO users (name, email, password_hash, role, active) VALUES (?, ?, ?, ?, 1)'
-    ).run('Administrator', ADMIN_EMAIL, passwordHash, 'admin');
+    const result = db
+      .prepare('INSERT INTO users (name, email, password_hash, role, active) VALUES (?, ?, ?, ?, 1)')
+      .run('Administrator', ADMIN_EMAIL, passwordHash, 'admin');
+    return Number(result.lastInsertRowid);
   }
+
+  db.prepare('UPDATE users SET password_hash = ?, role = ?, active = 1, name = ? WHERE id = ?').run(
+    passwordHash,
+    'admin',
+    'Administrator',
+    existing.id
+  );
+  return existing.id;
 }
 
 const defaultSchedule = [480, 480, 480, 480, 480, 0, 0];
@@ -208,17 +219,17 @@ function ensureSchedule(userId: number) {
 
 ensureDefaultWorkModel();
 
+const adminId = ensureAdminUser();
+
 const userIds = db.prepare('SELECT id FROM users').all() as { id: number }[];
 userIds.forEach((row) => {
   ensureProfile(row.id);
   ensureSchedule(row.id);
 });
 
-ensureAdminUser();
-const adminRow = db.prepare('SELECT id FROM users WHERE email = ?').get(ADMIN_EMAIL) as { id: number } | undefined;
-if (adminRow) {
-  ensureProfile(adminRow.id);
-  ensureSchedule(adminRow.id);
+if (adminId) {
+  ensureProfile(adminId);
+  ensureSchedule(adminId);
 }
 
 export default db;

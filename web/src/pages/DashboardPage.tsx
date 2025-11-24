@@ -19,44 +19,40 @@ export function DashboardPage() {
   });
 
   const last = data?.[0];
-  const canClockIn = !last || last.type === 'CLOCK_OUT';
-  const canClockOut = last && (last.type === 'CLOCK_IN' || last.type === 'BREAK_END');
-  const canBreakStart = last && last.type === 'CLOCK_IN';
-  const canBreakEnd = last && last.type === 'BREAK_START';
+  const isWorking = last && (last.type === 'CLOCK_IN' || last.type === 'BREAK_END');
+  const isOnBreak = last?.type === 'BREAK_START';
+  const mainAction: TimeEntry['type'] = !last || last.type === 'CLOCK_OUT' ? 'CLOCK_IN' : 'CLOCK_OUT';
 
   return (
     <div className="space-y-4">
-      <div className="bg-white shadow rounded p-4">
-        <h2 className="text-lg font-semibold mb-2">Stempeluhr</h2>
-        <div className="flex flex-wrap gap-2">
+      <div className="bg-white shadow rounded p-4 space-y-3">
+        <h2 className="text-lg font-semibold">Stempeluhr</h2>
+        <div className="flex gap-3 items-center">
           <button
-            className="px-3 py-2 bg-emerald-600 text-white rounded disabled:opacity-50"
-            disabled={!canClockIn || mutate.isPending}
-            onClick={() => mutate.mutate('CLOCK_IN')}
+            className={`flex-1 py-4 text-xl font-semibold rounded shadow text-white ${
+              mainAction === 'CLOCK_IN' ? 'bg-emerald-600' : 'bg-rose-600'
+            } disabled:opacity-60`}
+            disabled={mutate.isPending}
+            onClick={() => mutate.mutate(mainAction)}
           >
-            Kommen
+            {mainAction === 'CLOCK_IN' ? 'Kommen' : 'Gehen'}
           </button>
-          <button
-            className="px-3 py-2 bg-rose-600 text-white rounded disabled:opacity-50"
-            disabled={!canClockOut || mutate.isPending}
-            onClick={() => mutate.mutate('CLOCK_OUT')}
-          >
-            Gehen
-          </button>
-          <button
-            className="px-3 py-2 bg-amber-500 text-white rounded disabled:opacity-50"
-            disabled={!canBreakStart || mutate.isPending}
-            onClick={() => mutate.mutate('BREAK_START')}
-          >
-            Pause starten
-          </button>
-          <button
-            className="px-3 py-2 bg-blue-500 text-white rounded disabled:opacity-50"
-            disabled={!canBreakEnd || mutate.isPending}
-            onClick={() => mutate.mutate('BREAK_END')}
-          >
-            Pause beenden
-          </button>
+          <div className="flex flex-col gap-2 w-40">
+            <button
+              className="px-3 py-2 bg-amber-500 text-white rounded disabled:opacity-50"
+              disabled={mutate.isPending || isOnBreak || !isWorking}
+              onClick={() => mutate.mutate('BREAK_START')}
+            >
+              Pause starten
+            </button>
+            <button
+              className="px-3 py-2 bg-blue-500 text-white rounded disabled:opacity-50"
+              disabled={mutate.isPending || !isOnBreak}
+              onClick={() => mutate.mutate('BREAK_END')}
+            >
+              Pause beenden
+            </button>
+          </div>
         </div>
       </div>
       <div className="bg-white shadow rounded p-4">

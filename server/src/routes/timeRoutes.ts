@@ -141,8 +141,23 @@ router.get('/me/daily', (req: AuthRequest, res) => {
     grouped.set(key, list);
   });
 
+  const statusForDay = (entries: TimeEntry[], abs: string[]): string => {
+    if (abs.includes('sick')) return 'sick';
+    if (abs.includes('vacation')) return 'vacation';
+    if (entries.length === 0) return 'empty';
+    const sorted = [...entries].sort(
+      (a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
+    );
+    const lastType = sorted.length > 0 ? sorted[sorted.length - 1]!.type : undefined;
+    if (lastType && lastType !== 'CLOCK_OUT') return 'open';
+    return 'ok';
+  };
+
   const cursor = new Date(start);
-  const days: Record<string, { worked: number; planned: number; delta: number; absences: string[] }> = {};
+  const days: Record<
+    string,
+    { worked: number; planned: number; delta: number; absences: string[]; status: string }
+  > = {};
   while (cursor.getTime() <= end.getTime()) {
     const key = cursor.toISOString().slice(0, 10);
     const weekday = (cursor.getUTCDay() + 6) % 7;
@@ -156,7 +171,7 @@ router.get('/me/daily', (req: AuthRequest, res) => {
       }
     });
     const delta = computeDelta(planned, worked);
-    days[key] = { worked, planned, delta, absences: absenceLabels };
+    days[key] = { worked, planned, delta, absences: absenceLabels, status: statusForDay(entries, absenceLabels) };
     cursor.setUTCDate(cursor.getUTCDate() + 1);
   }
 
