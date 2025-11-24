@@ -3,11 +3,12 @@ import { useMutation } from '@tanstack/react-query';
 import { CalendarView } from './CalendarView';
 import { useEmployees } from '../hooks/useEmployees';
 import { useUserBookings } from '../hooks/useBookings';
-import { useUserAbsences, useUserProfile, useUserSchedule } from '../hooks/useSettings';
+import { useUserAbsences, useUserFlexBalance, useUserProfile, useUserSchedule } from '../hooks/useSettings';
 import api from '../api';
 import type { EmployeeSummary } from '../types';
 import { VacationOverview } from './VacationOverview';
 import { AttendanceOverview } from './AttendanceOverview';
+import { formatMinutes } from '../utils/time';
 
 export function AdminTable() {
   const {
@@ -66,6 +67,8 @@ export function AdminTable() {
     { weekday: 5, minutes: 0 },
     { weekday: 6, minutes: 0 },
   ]);
+  const [flexMessage, setFlexMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [flexAdjustment, setFlexAdjustment] = useState('0');
 
   useEffect(() => {
     if (!selectedUserId && employees && employees.length > 0) {
@@ -80,6 +83,7 @@ export function AdminTable() {
     setEditMessage(null);
     setAllowanceMessage(null);
     setAbsenceMessage(null);
+    setFlexMessage(null);
   }, [selectedUserId]);
 
   const {
@@ -94,6 +98,7 @@ export function AdminTable() {
   } = useUserAbsences(selectedUserId);
   const { data: profileData } = useUserProfile(selectedUserId);
   const { data: scheduleData, refetch: refetchSchedule } = useUserSchedule(selectedUserId);
+  const { data: flexBalance, refetch: refetchFlex } = useUserFlexBalance(selectedUserId);
 
   const filteredEmployees = useMemo(() => {
     if (!employees) return [] as EmployeeSummary[];
@@ -192,6 +197,17 @@ export function AdminTable() {
     },
   });
 
+  const flexMutation = useMutation({
+    mutationFn: async ({ userId, enabled, adjustment }: { userId: number; enabled: boolean; adjustment: number }) => {
+      await api.patch(`/users/${userId}/flex`, { enabled, adjustment });
+    },
+    onSuccess: () => {
+      refetchFlex();
+      refetchEmployees();
+      setFlexMessage({ type: 'success', text: 'Gleitzeit-Einstellungen aktualisiert.' });
+    },
+  });
+
   const allowanceMutation = useMutation({
     mutationFn: async ({ userId, vacationAllowance }: { userId: number; vacationAllowance: number }) => {
       await api.patch(`/users/${userId}/settings`, { vacation_allowance: vacationAllowance });
@@ -271,6 +287,12 @@ export function AdminTable() {
     }
   }, [scheduleData]);
 
+  useEffect(() => {
+    if (flexBalance) {
+      setFlexAdjustment(String(flexBalance.adjustment ?? 0));
+    }
+  }, [flexBalance]);
+
   const handleCreateUser = async (event: FormEvent) => {
     event.preventDefault();
     setNewUserMessage(null);
@@ -336,6 +358,25 @@ export function AdminTable() {
       setStatusMessage({
         type: 'error',
         text: error?.response?.data?.message || 'Statusänderung fehlgeschlagen.',
+      });
+    }
+  };
+
+  const handleSaveFlex = async (enabledOverride?: boolean) => {
+    if (!selectedUserId) return;
+    setFlexMessage(null);
+    const adjustmentValue = Number.parseInt(flexAdjustment, 10);
+    if (Number.isNaN(adjustmentValue)) {
+      setFlexMessage({ type: 'error', text: 'Bitte eine gültige Minuten-Zahl angeben.' });
+      return;
+    }
+    try {
+      const enabled = enabledOverride ?? flexBalance?.enabled ?? false;
+      await flexMutation.mutateAsync({ userId: selectedUserId, enabled, adjustment: adjustmentValue });
+    } catch (error: any) {
+      setFlexMessage({
+        type: 'error',
+        text: error?.response?.data?.message || 'Gleitzeit konnte nicht gespeichert werden.',
       });
     }
   };
@@ -757,6 +798,60 @@ export function AdminTable() {
                           {statusMessage.text}
                         </p>
                       )}
+                      <div className="space-y-2 rounded-md border border-slate-200 p-3">
+                        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                          <div>
+                            <p className="text-xs uppercase text-slate-500">Gleitzeit</p>
+                            <p className="font-semibold text-slate-800">
+                              {flexBalance?.enabled ? 'Aktiv' : 'Deaktiviert'} • Konto{' '}
+                              {flexBalance ? formatMinutes(flexBalance.balanceMinutes) : '—'}
+                            </p>
+                            {flexBalance && (
+                              <p className="text-[11px] text-slate-500">
+                                Geplant: {formatMinutes(flexBalance.plannedMinutes)} • Gebucht: {formatMinutes(flexBalance.workedMinutes)}
+                              </p>
+                            )}
+                          </div>
+                          <button
+                            type="button"
+                            className="rounded bg-slate-800 px-3 py-2 text-sm font-semibold text-white disabled:opacity-50"
+                            disabled={flexMutation.isPending}
+                            onClick={() => handleSaveFlex(!(flexBalance?.enabled))}
+                          >
+                            {flexMutation.isPending
+                              ? 'Speichere...'
+                              : flexBalance?.enabled
+                              ? 'Gleitzeit deaktivieren'
+                              : 'Gleitzeit aktivieren'}
+                          </button>
+                        </div>
+                        <div className="grid gap-2 sm:grid-cols-[1fr_auto] sm:items-end">
+                          <label className="text-xs font-semibold text-slate-600">
+                            Manuelle Anpassung (Minuten)
+                            <input
+                              type="number"
+                              value={flexAdjustment}
+                              onChange={(event) => setFlexAdjustment(event.target.value)}
+                              className="mt-1 w-full rounded border border-slate-300 px-2 py-1"
+                              placeholder="z.B. 30 oder -45"
+                              disabled={!selectedUserId}
+                            />
+                          </label>
+                          <button
+                            type="button"
+                            className="rounded bg-indigo-600 px-3 py-2 text-sm font-semibold text-white disabled:opacity-50"
+                            disabled={flexMutation.isPending}
+                            onClick={() => handleSaveFlex()}
+                          >
+                            {flexMutation.isPending ? 'Speichere...' : 'Gleitzeitkonto aktualisieren'}
+                          </button>
+                        </div>
+                        {flexMessage && (
+                          <p className={`text-xs ${flexMessage.type === 'success' ? 'text-emerald-600' : 'text-rose-600'}`}>
+                            {flexMessage.text}
+                          </p>
+                        )}
+                      </div>
                     </div>
                   )}
                 </div>

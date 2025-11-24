@@ -71,7 +71,9 @@ Passe die `extra.apiUrl` in `mobile/app.json` oder `EXPO_PUBLIC_API_URL` an, dam
 | PATCH | `/api/users/me/password` | Mitarbeitende ändern ihr eigenes Passwort nach alter Kennwortprüfung. |
 | GET/PATCH | `/api/users/me/settings` | Persönliche Einstellungen laden/ändern (Sprache, Wochenstart, Zeitformat). |
 | GET | `/api/users/me/schedule` | Eigener Arbeitszeitplan (Minuten je Wochentag) für Kalender/Abwesenheitsgutschriften. |
+| GET | `/api/users/me/flex` | Persönliches Gleitzeitkonto inkl. Plan-/Ist-Minuten und manueller Anpassung. |
 | PATCH | `/api/users/:id/settings` | (Admin) Urlaubskontingent eines Mitarbeitenden anpassen. |
+| GET/PATCH | `/api/users/:id/flex` | (Admin) Gleitzeit für Mitarbeitende aktivieren/deaktivieren und Kontostand justieren. |
 | GET | `/api/absences/me` | Eigene Abwesenheiten (Urlaub, Krank, Remote, Sonstige) inklusive Bereichen im Kalender laden. |
 | GET | `/api/absences/me/summary` | Persönliche Urlaubsauswertung (Kontingent, Resttage). |
 | GET | `/api/absences/user/:id` | (Admin) Abwesenheiten eines Mitarbeitenden. |
@@ -86,6 +88,12 @@ Passe die `extra.apiUrl` in `mobile/app.json` oder `EXPO_PUBLIC_API_URL` an, dam
 - Tageszusammenfassungen buchen Abwesenheiten automatisch gut: Krankheit/Remote/Sonstiges füllen bis zum geplanten Soll auf (bereits gestempelte Arbeitszeit wird angerechnet), Urlaub schreibt den Sollwert fest und addiert zusätzlich tatsächlich geleistete Minuten; halbe Tage rechnen je 50 %.
 - Admins pflegen pro Mitarbeitendem die Sollzeiten je Wochentag. Diese Planung steuert, welche Tage als Arbeitstage gelten und bildet die Basis für Urlaubssummen, Attendance-Reports und die Monatsübersicht im Admin-Center.
 - Mitarbeitende sehen ihre Abwesenheiten in der Tages-Detailansicht; Admins legen Abwesenheiten ausschließlich über das Admin-Menü an (Mitarbeitende können keine eigenen Abwesenheiten erfassen).
+- Die automatische Pausenlogik zieht bei durchgehender Arbeit über 6 h bis zu 30 min Pause ab (maximal die Zeit oberhalb der 6 h-Grenze); echte Unterbrechungen mindern den Abzug und ab 30 min Pause wird nichts weiter abgezogen.
+
+### Gleitzeitkonto
+
+- Pro Nutzer kann der Admin Gleitzeit aktivieren/deaktivieren und manuelle Korrekturminuten hinterlegen; das Frontend zeigt den Kontostand in den Einstellungen sowie im Admin-Center an.
+- Das Konto berechnet Soll/Ist auf Basis des individuellen Arbeitszeitplans, berücksichtigt die oben beschriebenen Abwesenheitsgutschriften und schreibt Mehr-/Minderzeiten tageweise gut.
 
 ## Mobile & Browser Standortnachweis
 

@@ -8,6 +8,7 @@ import type {
   AttendanceReport,
   UserProfilePayload,
   WorkSchedulePayload,
+  FlexBalancePayload,
 } from '../types';
 
 export function useUserSettings() {
@@ -79,6 +80,27 @@ export function useMySchedule() {
     queryKey: ['schedule', 'me'],
     queryFn: async () => {
       const { data } = await api.get<WorkSchedulePayload>('/users/me/schedule');
+      return data;
+    },
+  });
+}
+
+export function useMyFlexBalance() {
+  return useQuery({
+    queryKey: ['flex', 'me'],
+    queryFn: async () => {
+      const { data } = await api.get<FlexBalancePayload>('/users/me/flex');
+      return data;
+    },
+  });
+}
+
+export function useUserFlexBalance(userId: number | null) {
+  return useQuery({
+    queryKey: ['flex', 'user', userId],
+    enabled: Boolean(userId),
+    queryFn: async () => {
+      const { data } = await api.get<FlexBalancePayload>(`/users/${userId}/flex`);
       return data;
     },
   });

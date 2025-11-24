@@ -40,6 +40,8 @@ CREATE TABLE IF NOT EXISTS user_settings (
   language TEXT NOT NULL DEFAULT 'de',
   week_start TEXT NOT NULL DEFAULT 'monday',
   time_format TEXT NOT NULL DEFAULT '24h',
+  flex_enabled INTEGER NOT NULL DEFAULT 0,
+  flex_adjust_minutes INTEGER NOT NULL DEFAULT 0,
   vacation_allowance REAL NOT NULL DEFAULT 30,
   FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
 );
@@ -95,8 +97,12 @@ ensureTableColumn('bookings', 'clock_out_lng', 'REAL');
 ensureTableColumn('users', 'active', 'INTEGER NOT NULL DEFAULT 1');
 ensureTableColumn('user_settings', 'week_start', "TEXT NOT NULL DEFAULT 'monday'");
 ensureTableColumn('user_settings', 'time_format', "TEXT NOT NULL DEFAULT '24h'");
+ensureTableColumn('user_settings', 'flex_enabled', 'INTEGER NOT NULL DEFAULT 0');
+ensureTableColumn('user_settings', 'flex_adjust_minutes', 'INTEGER NOT NULL DEFAULT 0');
 db.prepare("UPDATE user_settings SET week_start = 'monday' WHERE week_start IS NULL").run();
 db.prepare("UPDATE user_settings SET time_format = '24h' WHERE time_format IS NULL").run();
+db.prepare('UPDATE user_settings SET flex_enabled = 0 WHERE flex_enabled IS NULL').run();
+db.prepare('UPDATE user_settings SET flex_adjust_minutes = 0 WHERE flex_adjust_minutes IS NULL').run();
 db.exec(`INSERT OR IGNORE INTO user_settings (user_id) SELECT id FROM users;`);
 ensureTableColumn('absences', 'start_date', 'TEXT');
 ensureTableColumn('absences', 'end_date', 'TEXT');

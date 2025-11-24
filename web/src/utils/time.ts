@@ -39,25 +39,47 @@ export function calculateDaySummary(bookings: Booking[]): DaySummary {
   let workMs = 0;
   let firstIn: number | null = null;
   let lastOut: number | null = null;
+  let breakMs = 0;
+  let previousOut: number | null = null;
   for (const booking of sorted) {
     const clockIn = new Date(booking.clock_in).getTime();
     if (Number.isNaN(clockIn)) continue;
     if (firstIn === null) {
       firstIn = clockIn;
     }
+    if (previousOut !== null) {
+      const gap = clockIn - previousOut;
+      if (gap > 0) {
+        breakMs += gap;
+      }
+    }
     if (booking.clock_out) {
       const clockOut = new Date(booking.clock_out).getTime();
       if (!Number.isNaN(clockOut) && clockOut > clockIn) {
         workMs += clockOut - clockIn;
         lastOut = lastOut ? Math.max(lastOut, clockOut) : clockOut;
+        previousOut = clockOut;
       }
     }
   }
   const span = firstIn !== null && lastOut !== null ? Math.max(lastOut - firstIn, 0) : 0;
-  const breakMs = Math.max(span - workMs, 0);
+  const spanMinutes = span / 60000;
+  if (spanMinutes <= 360) {
+    return {
+      workMinutes: Math.round(workMs / 60000),
+      breakMinutes: Math.round(breakMs / 60000),
+    };
+  }
+
+  const breakMinutes = breakMs / 60000;
+  const requiredPause = Math.min(30, spanMinutes - 360);
+  const countedBreak = breakMinutes >= 30 ? requiredPause : breakMinutes;
+  const autoDeduction = Math.max(requiredPause - countedBreak, 0);
+  const adjustedWork = Math.max(workMs / 60000 - autoDeduction, 0);
+
   return {
-    workMinutes: Math.round(workMs / 60000),
-    breakMinutes: Math.round(breakMs / 60000),
+    workMinutes: Math.round(adjustedWork),
+    breakMinutes: Math.round(breakMinutes),
   };
 }
 

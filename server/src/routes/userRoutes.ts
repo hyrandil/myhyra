@@ -3,7 +3,7 @@ import bcrypt from 'bcryptjs';
 import { z } from 'zod';
 import db from '../db';
 import { authenticate, authorize, AuthRequest } from '../auth';
-import type { User } from '../types';
+import type { User, Booking, Absence, WorkScheduleEntry } from '../types';
 
 const router = Router();
 const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
@@ -33,6 +33,7 @@ const toUserPayload = (
     active: number;
     vacation_allowance?: number;
     personnel_number?: string | null;
+    flex_enabled?: number;
   }
 ) => ({
   id: user.id,
@@ -43,7 +44,167 @@ const toUserPayload = (
   active: Boolean(user.active),
   vacationAllowance: user.vacation_allowance ?? 0,
   personnelNumber: user.personnel_number ?? undefined,
+  flexEnabled: Boolean(user.flex_enabled ?? 0),
 });
+
+const dateKey = (value: string) => value.slice(0, 10);
+
+const weekdayFromDate = (value: string) => {
+  const [year, month, day] = value.split('-').map((num) => Number(num));
+  const date = new Date(Date.UTC(year, month - 1, day));
+  return (date.getUTCDay() + 6) % 7;
+};
+
+const scheduleForUser = (userId: number): WorkScheduleEntry[] => {
+  const entries = db
+    .prepare('SELECT weekday, minutes FROM work_schedules WHERE user_id = ? ORDER BY weekday ASC')
+    .all(userId) as WorkScheduleEntry[];
+  if (entries.length === 7) return entries;
+  ensureSchedule(userId);
+  return db
+    .prepare('SELECT weekday, minutes FROM work_schedules WHERE user_id = ? ORDER BY weekday ASC')
+    .all(userId) as WorkScheduleEntry[];
+};
+
+const workingDatesBetween = (start: string, end: string, schedule: WorkScheduleEntry[]) => {
+  const map = new Map(schedule.map((entry) => [entry.weekday, entry.minutes]));
+  const [startY, startM, startD] = start.split('-').map((num) => Number(num));
+  const [endY, endM, endD] = end.split('-').map((num) => Number(num));
+  const cursor = new Date(Date.UTC(startY, startM - 1, startD));
+  const endDate = new Date(Date.UTC(endY, endM - 1, endD));
+  const results: string[] = [];
+  while (cursor.getTime() <= endDate.getTime()) {
+    const weekday = (cursor.getUTCDay() + 6) % 7;
+    const minutes = map.get(weekday) ?? 0;
+    if (minutes > 0) {
+      results.push(cursor.toISOString().slice(0, 10));
+    }
+    cursor.setUTCDate(cursor.getUTCDate() + 1);
+  }
+  return results;
+};
+
+const computeDayWorkMinutes = (bookings: Booking[]) => {
+  const sorted = [...bookings].sort(
+    (a, b) => new Date(a.clock_in).getTime() - new Date(b.clock_in).getTime()
+  );
+  let workedMs = 0;
+  let firstIn: number | null = null;
+  let lastOut: number | null = null;
+  let totalBreakMs = 0;
+
+  let previousOut: number | null = null;
+
+  sorted.forEach((booking) => {
+    const clockIn = new Date(booking.clock_in).getTime();
+    if (Number.isNaN(clockIn)) return;
+    if (firstIn === null) {
+      firstIn = clockIn;
+    }
+
+    if (previousOut !== null) {
+      const gap = clockIn - previousOut;
+      if (gap > 0) {
+        totalBreakMs += gap;
+      }
+    }
+
+    if (booking.clock_out) {
+      const clockOut = new Date(booking.clock_out).getTime();
+      if (!Number.isNaN(clockOut) && clockOut > clockIn) {
+        workedMs += clockOut - clockIn;
+        lastOut = lastOut ? Math.max(lastOut, clockOut) : clockOut;
+        previousOut = clockOut;
+      }
+    }
+  });
+
+  if (firstIn === null || lastOut === null) {
+    return 0;
+  }
+
+  const spanMinutes = Math.max(lastOut - firstIn, 0) / 60000;
+  const breakMinutes = totalBreakMs / 60000;
+  if (spanMinutes <= 360) {
+    return Math.round(workedMs / 60000);
+  }
+
+  const requiredPause = Math.min(30, spanMinutes - 360);
+  const countedBreak = breakMinutes >= 30 ? requiredPause : breakMinutes;
+  const autoDeduction = Math.max(requiredPause - countedBreak, 0);
+  const adjusted = Math.max(workedMs / 60000 - autoDeduction, 0);
+  return Math.round(adjusted);
+};
+
+const computeFlexBalance = (userId: number) => {
+  ensureSchedule(userId);
+  ensureSettingsRow(userId);
+  const schedule = scheduleForUser(userId);
+  const planMap = new Map(schedule.map((entry) => [entry.weekday, entry.minutes]));
+  const bookings = db
+    .prepare('SELECT * FROM bookings WHERE user_id = ? ORDER BY clock_in ASC')
+    .all(userId) as Booking[];
+  const absences = db
+    .prepare('SELECT * FROM absences WHERE user_id = ?')
+    .all(userId) as Absence[];
+
+  const bookingsByDay = new Map<string, Booking[]>();
+  bookings.forEach((booking) => {
+    const key = dateKey(booking.clock_in);
+    const list = bookingsByDay.get(key) ?? [];
+    list.push(booking);
+    bookingsByDay.set(key, list);
+  });
+
+  const absenceMap = new Map<string, Absence[]>();
+  absences.forEach((absence) => {
+    const days = workingDatesBetween(absence.start_date, absence.end_date, schedule);
+    days.forEach((day) => {
+      const list = absenceMap.get(day) ?? [];
+      list.push(absence);
+      absenceMap.set(day, list);
+    });
+  });
+
+  const dayKeys = new Set<string>([...bookingsByDay.keys(), ...absenceMap.keys()]);
+  let plannedTotal = 0;
+  let workedTotal = 0;
+
+  dayKeys.forEach((dayKey) => {
+    const weekday = weekdayFromDate(dayKey);
+    const planned = planMap.get(weekday) ?? 0;
+    const baseWork = computeDayWorkMinutes(bookingsByDay.get(dayKey) ?? []);
+    const absencesForDay = absenceMap.get(dayKey) ?? [];
+
+    let creditVacation = 0;
+    let topUpOther = 0;
+
+    absencesForDay.forEach((absence) => {
+      const factor = absence.duration === 'half' ? 0.5 : 1;
+      const target = Math.round(planned * factor);
+      if (absence.type === 'vacation') {
+        creditVacation += target;
+      } else {
+        const covered = baseWork + creditVacation + topUpOther;
+        const topUp = Math.max(target - covered, 0);
+        topUpOther += topUp;
+      }
+    });
+
+    const totalForDay = baseWork + creditVacation + topUpOther;
+    if (planned > 0 || totalForDay > 0 || absencesForDay.length > 0) {
+      plannedTotal += planned;
+      workedTotal += totalForDay;
+    }
+  });
+
+  const adjustmentRow = db
+    .prepare('SELECT flex_adjust_minutes, flex_enabled FROM user_settings WHERE user_id = ?')
+    .get(userId) as { flex_adjust_minutes?: number; flex_enabled?: number } | undefined;
+  const adjustment = adjustmentRow?.flex_adjust_minutes ?? 0;
+  const enabled = Boolean(adjustmentRow?.flex_enabled ?? 0);
+  return { balanceMinutes: workedTotal - plannedTotal + adjustment, plannedTotal, workedTotal, adjustment, enabled };
+};
 
 router.use(authenticate);
 
@@ -131,6 +292,11 @@ router.get('/me/schedule', (req: AuthRequest, res) => {
   res.json({ days: schedule });
 });
 
+router.get('/me/flex', (req: AuthRequest, res) => {
+  const { balanceMinutes, plannedTotal, workedTotal, adjustment, enabled } = computeFlexBalance(req.user!.id);
+  res.json({ balanceMinutes, plannedMinutes: plannedTotal, workedMinutes: workedTotal, adjustment, enabled });
+});
+
 router.use(authorize(['admin']));
 
 const userSchema = z.object({
@@ -157,7 +323,7 @@ router.get('/', (req: AuthRequest, res) => {
   const users = db
     .prepare(
       `SELECT u.id, u.name, u.email, u.role, u.created_at, u.active, IFNULL(us.vacation_allowance, 0) as vacation_allowance
-       , up.personnel_number
+       , IFNULL(us.flex_enabled, 0) as flex_enabled, up.personnel_number
        FROM users u
        LEFT JOIN user_settings us ON us.user_id = u.id
        LEFT JOIN user_profiles up ON up.user_id = u.id
@@ -211,7 +377,7 @@ router.post('/', (req, res) => {
   const created = db
     .prepare(
       `SELECT u.id, u.name, u.email, u.role, u.created_at, u.active, IFNULL(us.vacation_allowance, 0) as vacation_allowance
-       , up.personnel_number
+       , IFNULL(us.flex_enabled, 0) as flex_enabled, up.personnel_number
        FROM users u
        LEFT JOIN user_settings us ON us.user_id = u.id
        LEFT JOIN user_profiles up ON up.user_id = u.id
@@ -264,7 +430,7 @@ router.patch('/:id/status', (req, res) => {
   const updated = db
     .prepare(
       `SELECT u.id, u.name, u.email, u.role, u.created_at, u.active, IFNULL(us.vacation_allowance, 0) as vacation_allowance
-       , up.personnel_number
+       , IFNULL(us.flex_enabled, 0) as flex_enabled, up.personnel_number
        FROM users u
        LEFT JOIN user_settings us ON us.user_id = u.id
        LEFT JOIN user_profiles up ON up.user_id = u.id
@@ -282,6 +448,11 @@ const userUpdateSchema = z.object({
   name: z.string().min(2),
   email: z.string().email(),
   role: z.enum(['user', 'admin']),
+});
+
+const flexConfigSchema = z.object({
+  enabled: z.boolean(),
+  adjustment: z.number().int().optional(),
 });
 
 router.patch('/:id', (req, res) => {
@@ -308,7 +479,7 @@ router.patch('/:id', (req, res) => {
   const updated = db
     .prepare(
       `SELECT u.id, u.name, u.email, u.role, u.created_at, u.active, IFNULL(us.vacation_allowance, 0) as vacation_allowance
-       , up.personnel_number
+       , IFNULL(us.flex_enabled, 0) as flex_enabled, up.personnel_number
        FROM users u
        LEFT JOIN user_settings us ON us.user_id = u.id
        LEFT JOIN user_profiles up ON up.user_id = u.id
@@ -369,6 +540,7 @@ router.patch('/:id/settings', (req, res) => {
   const updated = db
     .prepare(
       `SELECT u.id, u.name, u.email, u.role, u.created_at, u.active, IFNULL(us.vacation_allowance, 0) as vacation_allowance
+       , IFNULL(us.flex_enabled, 0) as flex_enabled
        FROM users u
        LEFT JOIN user_settings us ON us.user_id = u.id
        WHERE u.id = ?`
@@ -462,6 +634,37 @@ router.put('/:id/schedule', (req, res) => {
     .prepare('SELECT weekday, minutes FROM work_schedules WHERE user_id = ? ORDER BY weekday ASC')
     .all(userId);
   res.json({ days: schedule });
+});
+
+router.get('/:id/flex', (req, res) => {
+  const userId = Number(req.params.id);
+  if (Number.isNaN(userId)) {
+    return res.status(400).json({ message: 'Ungültige Nutzer-ID' });
+  }
+  const { balanceMinutes, plannedTotal, workedTotal, adjustment, enabled } = computeFlexBalance(userId);
+  res.json({ balanceMinutes, plannedMinutes: plannedTotal, workedMinutes: workedTotal, adjustment, enabled });
+});
+
+router.patch('/:id/flex', (req, res) => {
+  const userId = Number(req.params.id);
+  if (Number.isNaN(userId)) {
+    return res.status(400).json({ message: 'Ungültige Nutzer-ID' });
+  }
+  const parsed = flexConfigSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ errors: parsed.error.format() });
+  }
+  ensureSettingsRow(userId);
+  const adjustment = parsed.data.adjustment ??
+    (db.prepare('SELECT flex_adjust_minutes FROM user_settings WHERE user_id = ?').get(userId) as { flex_adjust_minutes?: number }
+      | undefined)?.flex_adjust_minutes ?? 0;
+  db.prepare('UPDATE user_settings SET flex_enabled = ?, flex_adjust_minutes = ? WHERE user_id = ?').run(
+    parsed.data.enabled ? 1 : 0,
+    adjustment,
+    userId
+  );
+  const { balanceMinutes, plannedTotal, workedTotal } = computeFlexBalance(userId);
+  res.json({ balanceMinutes, plannedMinutes: plannedTotal, workedMinutes: workedTotal, adjustment, enabled: parsed.data.enabled });
 });
 
 export default router;

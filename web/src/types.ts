@@ -20,6 +20,7 @@ export interface EmployeeSummary {
   created_at?: string;
   vacationAllowance?: number;
   personnelNumber?: string;
+  flexEnabled?: boolean;
 }
 
 export interface Absence {
@@ -89,4 +90,12 @@ export interface WorkScheduleDay {
 
 export interface WorkSchedulePayload {
   days: WorkScheduleDay[];
+}
+
+export interface FlexBalancePayload {
+  balanceMinutes: number;
+  plannedMinutes: number;
+  workedMinutes: number;
+  adjustment: number;
+  enabled: boolean;
 }
