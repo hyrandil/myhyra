@@ -1,4 +1,4 @@
-import { Router } from 'express';
+import { Router, Response } from 'express';
 import bcrypt from 'bcryptjs';
 import { z } from 'zod';
 import db from '../db';
@@ -12,11 +12,17 @@ const ensureSettingsRow = (userId: number) => {
   db.prepare('INSERT OR IGNORE INTO user_settings (user_id) VALUES (?)').run(userId);
 };
 
+const userExists = (userId: number) => {
+  return Boolean(db.prepare('SELECT id FROM users WHERE id = ?').get(userId));
+};
+
 const ensureProfileRow = (userId: number) => {
+  if (!userExists(userId)) return;
   db.prepare('INSERT OR IGNORE INTO user_profiles (user_id) VALUES (?)').run(userId);
 };
 
 const ensureSchedule = (userId: number) => {
+  if (!userExists(userId)) return;
   const existing = db.prepare('SELECT COUNT(1) as count FROM work_schedules WHERE user_id = ?').get(userId) as {
     count: number;
   };
@@ -26,6 +32,14 @@ const ensureSchedule = (userId: number) => {
   const defaults = [480, 480, 480, 480, 480, 0, 0];
   const insert = db.prepare('INSERT OR IGNORE INTO work_schedules (user_id, weekday, minutes) VALUES (?, ?, ?)');
   defaults.forEach((minutes, weekday) => insert.run(userId, weekday, minutes));
+};
+
+const guardMissingUser = (userId: number, res: Response) => {
+  if (!userExists(userId)) {
+    res.status(404).json({ message: 'Nutzer nicht gefunden' });
+    return true;
+  }
+  return false;
 };
 
 const toUserPayload = (
@@ -604,6 +618,7 @@ router.patch('/:id/settings', (req, res) => {
   if (Number.isNaN(userId)) {
     return res.status(400).json({ message: 'Ungültige Nutzer-ID' });
   }
+  if (guardMissingUser(userId, res)) return;
   const parsed = adminSettingsSchema.safeParse(req.body);
   if (!parsed.success) {
     return res.status(400).json({ errors: parsed.error.format() });
@@ -633,6 +648,7 @@ router.get('/:id/profile', (req, res) => {
   if (Number.isNaN(userId)) {
     return res.status(400).json({ message: 'Ungültige Nutzer-ID' });
   }
+  if (guardMissingUser(userId, res)) return;
   ensureProfileRow(userId);
   const profile = db
     .prepare(
@@ -651,6 +667,7 @@ router.patch('/:id/profile', (req, res) => {
   if (Number.isNaN(userId)) {
     return res.status(400).json({ message: 'Ungültige Nutzer-ID' });
   }
+  if (guardMissingUser(userId, res)) return;
   const parsed = profileSchema.safeParse(req.body);
   if (!parsed.success) {
     return res.status(400).json({ errors: parsed.error.format() });
@@ -684,6 +701,7 @@ router.get('/:id/schedule', (req, res) => {
   if (Number.isNaN(userId)) {
     return res.status(400).json({ message: 'Ungültige Nutzer-ID' });
   }
+  if (guardMissingUser(userId, res)) return;
   ensureSchedule(userId);
   const schedule = db
     .prepare('SELECT weekday, minutes FROM work_schedules WHERE user_id = ? ORDER BY weekday ASC')
@@ -696,6 +714,7 @@ router.put('/:id/schedule', (req, res) => {
   if (Number.isNaN(userId)) {
     return res.status(400).json({ message: 'Ungültige Nutzer-ID' });
   }
+  if (guardMissingUser(userId, res)) return;
   const parsed = scheduleSchema.safeParse(req.body);
   if (!parsed.success) {
     return res.status(400).json({ errors: parsed.error.format() });
@@ -717,6 +736,7 @@ router.get('/:id/flex', (req, res) => {
   if (Number.isNaN(userId)) {
     return res.status(400).json({ message: 'Ungültige Nutzer-ID' });
   }
+  if (guardMissingUser(userId, res)) return;
   const { balanceMinutes, plannedTotal, workedTotal, adjustment, enabled } = computeFlexBalance(userId);
   res.json({ balanceMinutes, plannedMinutes: plannedTotal, workedMinutes: workedTotal, adjustment, enabled });
 });
@@ -726,6 +746,7 @@ router.patch('/:id/flex', (req, res) => {
   if (Number.isNaN(userId)) {
     return res.status(400).json({ message: 'Ungültige Nutzer-ID' });
   }
+  if (guardMissingUser(userId, res)) return;
   const parsed = flexConfigSchema.safeParse(req.body);
   if (!parsed.success) {
     return res.status(400).json({ errors: parsed.error.format() });

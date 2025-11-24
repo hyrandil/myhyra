@@ -44,7 +44,12 @@ const formatDate = (date: Date) => date.toISOString().slice(0, 10);
 
 const weekdayFromDate = (date: Date) => (date.getUTCDay() + 6) % 7; // Monday = 0
 
+const userExists = (userId: number) => Boolean(db.prepare('SELECT id FROM users WHERE id = ?').get(userId));
+
 function getSchedule(userId: number): WorkScheduleEntry[] {
+  if (!userExists(userId)) {
+    return [];
+  }
   const entries = db
     .prepare('SELECT user_id, weekday, minutes FROM work_schedules WHERE user_id = ? ORDER BY weekday ASC')
     .all(userId) as WorkScheduleEntry[];
@@ -211,6 +216,9 @@ router.get('/user/:userId', (req, res) => {
   const userId = Number(req.params.userId);
   if (Number.isNaN(userId)) {
     return res.status(400).json({ message: 'Ungültige Nutzer-ID' });
+  }
+  if (!userExists(userId)) {
+    return res.status(404).json({ message: 'Nutzer nicht gefunden' });
   }
   const schedule = getSchedule(userId);
   const absences = db
