@@ -119,13 +119,28 @@ export function CalendarView({
     const baseSummary = grouped[dateKey]?.summary ?? { workMinutes: 0, breakMinutes: 0 };
     const plannedMinutes = plannedMinutesForKey(dateKey);
     const absencesForDay = absenceMap[dateKey] ?? [];
-    const absenceMinutes = absencesForDay.reduce((max, item) => {
-      const factor = item.duration === 'half' ? 0.5 : 1;
-      return Math.max(max, Math.round(plannedMinutes * factor));
-    }, 0);
+
+    let creditFromVacation = 0;
+    let topUpFromOtherAbsences = 0;
+
+    absencesForDay.forEach((absence) => {
+      const factor = absence.duration === 'half' ? 0.5 : 1;
+      const target = Math.round(plannedMinutes * factor);
+      if (absence.type === 'vacation') {
+        creditFromVacation += target;
+      } else {
+        // Krankheit/Remote/Sonstiges füllen nur bis zur geplanten Tagesarbeitszeit auf
+        const alreadyCovered = baseSummary.workMinutes + creditFromVacation + topUpFromOtherAbsences;
+        const topUp = Math.max(target - alreadyCovered, 0);
+        topUpFromOtherAbsences += topUp;
+      }
+    });
+
     return {
       ...baseSummary,
-      workMinutes: Math.max(baseSummary.workMinutes, absenceMinutes),
+      // Urlaub zählt immer den Tagessoll und addiert echte Arbeit obendrauf.
+      // Alle anderen Abwesenheiten füllen maximal bis zum Soll auf.
+      workMinutes: baseSummary.workMinutes + creditFromVacation + topUpFromOtherAbsences,
     };
   };
   const monthDays = useMemo(() => buildCalendarDays(currentMonth), [currentMonth]);

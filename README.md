@@ -83,7 +83,7 @@ Passe die `extra.apiUrl` in `mobile/app.json` oder `EXPO_PUBLIC_API_URL` an, dam
 ### Abwesenheiten & Arbeitszeitpläne
 
 - Abwesenheiten werden mit Start- und Enddatum gespeichert und direkt im Kalender markiert; freie Tage aus dem individuellen Arbeitszeitplan (z. B. Wochenenden oder feste Freitage) werden automatisch übersprungen und nicht auf den Urlaub angerechnet.
-- Tageszusammenfassungen buchen Abwesenheiten automatisch gut: volle Tage füllen die geplanten Soll-Minuten, halbe Tage rechnen 50 % an – so erscheinen Urlaub/Krankheit direkt in der Arbeitszeit.
+- Tageszusammenfassungen buchen Abwesenheiten automatisch gut: Krankheit/Remote/Sonstiges füllen bis zum geplanten Soll auf (bereits gestempelte Arbeitszeit wird angerechnet), Urlaub schreibt den Sollwert fest und addiert zusätzlich tatsächlich geleistete Minuten; halbe Tage rechnen je 50 %.
 - Admins pflegen pro Mitarbeitendem die Sollzeiten je Wochentag. Diese Planung steuert, welche Tage als Arbeitstage gelten und bildet die Basis für Urlaubssummen, Attendance-Reports und die Monatsübersicht im Admin-Center.
 - Mitarbeitende sehen ihre Abwesenheiten in der Tages-Detailansicht; Admins legen Abwesenheiten ausschließlich über das Admin-Menü an (Mitarbeitende können keine eigenen Abwesenheiten erfassen).
 
