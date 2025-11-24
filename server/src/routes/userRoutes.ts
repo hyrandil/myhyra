@@ -49,8 +49,17 @@ const toUserPayload = (
 
 const dateKey = (value: string) => value.slice(0, 10);
 
+const toDateParts = (value: string) => {
+  const parts = value.split('-').map((num) => Number(num));
+  return {
+    year: parts[0] ?? 0,
+    month: parts[1] ?? 1,
+    day: parts[2] ?? 1,
+  };
+};
+
 const weekdayFromDate = (value: string) => {
-  const [year, month, day] = value.split('-').map((num) => Number(num));
+  const { year, month, day } = toDateParts(value);
   const date = new Date(Date.UTC(year, month - 1, day));
   return (date.getUTCDay() + 6) % 7;
 };
@@ -68,10 +77,10 @@ const scheduleForUser = (userId: number): WorkScheduleEntry[] => {
 
 const workingDatesBetween = (start: string, end: string, schedule: WorkScheduleEntry[]) => {
   const map = new Map(schedule.map((entry) => [entry.weekday, entry.minutes]));
-  const [startY, startM, startD] = start.split('-').map((num) => Number(num));
-  const [endY, endM, endD] = end.split('-').map((num) => Number(num));
-  const cursor = new Date(Date.UTC(startY, startM - 1, startD));
-  const endDate = new Date(Date.UTC(endY, endM - 1, endD));
+  const startParts = toDateParts(start);
+  const endParts = toDateParts(end);
+  const cursor = new Date(Date.UTC(startParts.year, startParts.month - 1, startParts.day));
+  const endDate = new Date(Date.UTC(endParts.year, endParts.month - 1, endParts.day));
   const results: string[] = [];
   while (cursor.getTime() <= endDate.getTime()) {
     const weekday = (cursor.getUTCDay() + 6) % 7;
