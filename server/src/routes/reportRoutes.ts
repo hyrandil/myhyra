@@ -6,7 +6,7 @@ import type { WorkScheduleEntry } from '../types';
 const router = Router();
 
 router.use(authenticate);
-router.use(authorize(['admin']));
+router.use(authorize(['admin', 'hr']));
 
 const monthRegex = /^\d{4}-\d{2}$/;
 

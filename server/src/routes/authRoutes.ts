@@ -12,10 +12,10 @@ const registerSchema = z.object({
   name: z.string().min(2),
   email: z.string().email(),
   password: z.string().min(6),
-  role: z.enum(['user', 'admin']).optional().default('user'),
+  role: z.enum(['employee', 'lead', 'hr', 'admin']).optional().default('employee'),
 });
 
-router.post('/register', authenticate, authorize(['admin']), (req: AuthRequest, res) => {
+router.post('/register', authenticate, authorize(['admin', 'hr']), (req: AuthRequest, res) => {
   const parsed = registerSchema.safeParse(req.body);
   if (!parsed.success) {
     return res.status(400).json({ errors: parsed.error.format() });
@@ -29,6 +29,7 @@ router.post('/register', authenticate, authorize(['admin']), (req: AuthRequest, 
   const stmt = db.prepare('INSERT INTO users (name, email, password_hash, role, active) VALUES (?, ?, ?, ?, 1)');
   const result = stmt.run(name, email, passwordHash, role);
   db.prepare('INSERT INTO user_settings (user_id) VALUES (?)').run(Number(result.lastInsertRowid));
+  db.prepare('INSERT OR IGNORE INTO user_profiles (user_id) VALUES (?)').run(Number(result.lastInsertRowid));
   res.json({ id: result.lastInsertRowid, name, email, role });
 });
 

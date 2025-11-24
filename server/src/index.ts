@@ -7,6 +7,7 @@ import bookingRoutes from './routes/bookingRoutes';
 import userRoutes from './routes/userRoutes';
 import absenceRoutes from './routes/absenceRoutes';
 import reportRoutes from './routes/reportRoutes';
+import timeRoutes from './routes/timeRoutes';
 import './db';
 
 const app = express();
@@ -25,6 +26,7 @@ app.use('/api/bookings', bookingRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/absences', absenceRoutes);
 app.use('/api/reports', reportRoutes);
+app.use('/api/time', timeRoutes);
 
 app.listen(PORT, () => {
   console.log(`API läuft auf Port ${PORT}`);

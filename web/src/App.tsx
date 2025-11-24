@@ -1,80 +1,81 @@
-import { useState } from 'react';
-import { LoginCard } from './components/LoginCard';
-import { BookingList } from './components/BookingList';
-import { ActionsCard } from './components/ActionsCard';
-import { AdminTable } from './components/AdminTable';
-import { SettingsPanel } from './components/SettingsPanel';
-import { VacationSummaryCard } from './components/VacationSummaryCard';
-import { useAuth } from './hooks/useAuth';
+import { Link, Navigate, Route, Routes } from 'react-router-dom';
+import { DashboardPage } from './pages/DashboardPage';
+import { LoginPage } from './pages/LoginPage';
+import { TimesPage } from './pages/TimesPage';
+import { AbsencePage } from './pages/AbsencePage';
+import { EmployeesPage } from './pages/EmployeesPage';
+import { ReportsPage } from './pages/ReportsPage';
+import { useAuth } from './AuthProvider';
 
-type AuthContext = ReturnType<typeof useAuth>;
+function Protected({ children }: { children: React.ReactNode }) {
+  const { user } = useAuth();
+  if (!user) return <Navigate to="/login" replace />;
+  return <>{children}</>;
+}
 
-function Dashboard({ auth }: { auth: AuthContext }) {
-  const { user, logout } = auth;
-  const [view, setView] = useState<'dashboard' | 'settings' | 'admin'>('dashboard');
-
+function Shell({ children }: { children: React.ReactNode }) {
+  const auth = useAuth();
   return (
-    <div className="max-w-5xl mx-auto py-10 space-y-6">
-      <header className="flex items-center justify-between">
-        <div>
-          <p className="text-sm text-slate-500">Eingeloggt als</p>
-          <p className="font-semibold">{user?.name}</p>
-        </div>
-        <div className="flex gap-3 items-center">
-          <div className="bg-slate-100 rounded px-2 py-1 text-sm">
-            <button
-              onClick={() => setView('dashboard')}
-              className={`px-2 ${view === 'dashboard' ? 'text-blue-600 font-semibold' : 'text-slate-500'}`}
-            >
-              Übersicht
-            </button>
-            <button
-              onClick={() => setView('settings')}
-              className={`px-2 ${view === 'settings' ? 'text-blue-600 font-semibold' : 'text-slate-500'}`}
-            >
-              Einstellungen
-            </button>
-            {user?.role === 'admin' && (
-              <button
-                onClick={() => setView('admin')}
-                className={`px-2 ${view === 'admin' ? 'text-blue-600 font-semibold' : 'text-slate-500'}`}
-              >
-                Admin
-              </button>
-            )}
+    <div className="min-h-screen bg-slate-100">
+      <header className="bg-white shadow">
+        <div className="max-w-6xl mx-auto px-4 py-3 flex justify-between items-center">
+          <div>
+            <p className="text-sm text-slate-500">Eingeloggt als</p>
+            <p className="font-semibold">{auth.user?.name}</p>
           </div>
-          <button className="text-sm text-rose-600" onClick={logout}>
-            Logout
-          </button>
+          <nav className="flex gap-3 text-sm">
+            <Link to="/" className="hover:text-blue-600">
+              Dashboard
+            </Link>
+            <Link to="/zeiten" className="hover:text-blue-600">
+              Zeiterfassung
+            </Link>
+            <Link to="/abwesenheiten" className="hover:text-blue-600">
+              Abwesenheiten
+            </Link>
+            {(auth.hasRole('hr', 'admin', 'lead')) && (
+              <Link to="/mitarbeitende" className="hover:text-blue-600">
+                Mitarbeitende
+              </Link>
+            )}
+            {(auth.hasRole('hr', 'admin')) && (
+              <Link to="/berichte" className="hover:text-blue-600">
+                Berichte
+              </Link>
+            )}
+            <button className="text-rose-600" onClick={auth.logout}>
+              Logout
+            </button>
+          </nav>
         </div>
       </header>
-      {view === 'dashboard' && (
-        <div className="space-y-4">
-          <ActionsCard />
-          <BookingList />
-          <VacationSummaryCard />
-        </div>
-      )}
-      {view === 'settings' && <SettingsPanel />}
-      {view === 'admin' && user?.role === 'admin' && <AdminTable />}
+      <main className="max-w-6xl mx-auto px-4 py-6 space-y-4">{children}</main>
     </div>
   );
 }
 
 export default function App() {
-  const auth = useAuth();
-
-  if (!auth.user) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100">
-        <LoginCard onSubmit={auth.login} />
-      </div>
-    );
-  }
-
+  const { user } = useAuth();
   return (
-    <div className="min-h-screen bg-slate-100">
-      <Dashboard auth={auth} />
-    </div>
+    <Routes>
+      <Route path="/login" element={<LoginPage />} />
+      <Route
+        path="/*"
+        element={
+          <Protected>
+            <Shell>
+              <Routes>
+                <Route path="/" element={<DashboardPage />} />
+                <Route path="/zeiten" element={<TimesPage />} />
+                <Route path="/abwesenheiten" element={<AbsencePage />} />
+                <Route path="/mitarbeitende" element={<EmployeesPage />} />
+                <Route path="/berichte" element={<ReportsPage />} />
+              </Routes>
+            </Shell>
+          </Protected>
+        }
+      />
+      <Route path="*" element={<Navigate to={user ? '/' : '/login'} replace />} />
+    </Routes>
   );
 }

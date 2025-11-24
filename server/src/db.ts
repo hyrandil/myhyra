@@ -16,7 +16,7 @@ CREATE TABLE IF NOT EXISTS users (
   name TEXT NOT NULL,
   email TEXT UNIQUE NOT NULL,
   password_hash TEXT NOT NULL,
-  role TEXT NOT NULL CHECK(role IN ('user', 'admin')),
+  role TEXT NOT NULL CHECK(role IN ('employee', 'lead', 'hr', 'admin')),
   active INTEGER NOT NULL DEFAULT 1,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
@@ -33,6 +33,20 @@ CREATE TABLE IF NOT EXISTS bookings (
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY(user_id) REFERENCES users(id)
+);
+
+CREATE TABLE IF NOT EXISTS work_models (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL,
+  monday INTEGER NOT NULL DEFAULT 480,
+  tuesday INTEGER NOT NULL DEFAULT 480,
+  wednesday INTEGER NOT NULL DEFAULT 480,
+  thursday INTEGER NOT NULL DEFAULT 480,
+  friday INTEGER NOT NULL DEFAULT 480,
+  saturday INTEGER NOT NULL DEFAULT 0,
+  sunday INTEGER NOT NULL DEFAULT 0,
+  pause_after_minutes INTEGER NOT NULL DEFAULT 360,
+  pause_duration_minutes INTEGER NOT NULL DEFAULT 30
 );
 
 CREATE TABLE IF NOT EXISTS user_settings (
@@ -61,6 +75,11 @@ CREATE TABLE IF NOT EXISTS absences (
 
 CREATE TABLE IF NOT EXISTS user_profiles (
   user_id INTEGER PRIMARY KEY,
+  location TEXT,
+  department TEXT,
+  work_model_id INTEGER,
+  start_date TEXT,
+  end_date TEXT,
   birth_date TEXT,
   personnel_number TEXT,
   phone TEXT,
@@ -68,7 +87,8 @@ CREATE TABLE IF NOT EXISTS user_profiles (
   city TEXT,
   postal_code TEXT,
   note TEXT,
-  FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+  FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE,
+  FOREIGN KEY(work_model_id) REFERENCES work_models(id)
 );
 
 CREATE TABLE IF NOT EXISTS work_schedules (
@@ -78,6 +98,32 @@ CREATE TABLE IF NOT EXISTS work_schedules (
   minutes INTEGER NOT NULL DEFAULT 0,
   UNIQUE(user_id, weekday),
   FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS time_entries (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER NOT NULL,
+  timestamp TEXT NOT NULL,
+  type TEXT NOT NULL CHECK(type IN ('CLOCK_IN','CLOCK_OUT','BREAK_START','BREAK_END')),
+  source TEXT NOT NULL CHECK(source IN ('WEB','APP','TERMINAL')) DEFAULT 'WEB',
+  lat REAL,
+  lng REAL,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS absence_requests (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER NOT NULL,
+  start_date TEXT NOT NULL,
+  end_date TEXT NOT NULL,
+  type TEXT NOT NULL CHECK(type IN ('vacation','sick','remote','other')),
+  status TEXT NOT NULL CHECK(status IN ('pending','approved','rejected')) DEFAULT 'pending',
+  comment TEXT,
+  created_by INTEGER NOT NULL,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE,
+  FOREIGN KEY(created_by) REFERENCES users(id) ON DELETE CASCADE
 );
 `);
 
@@ -95,6 +141,7 @@ ensureTableColumn('bookings', 'clock_in_lng', 'REAL');
 ensureTableColumn('bookings', 'clock_out_lat', 'REAL');
 ensureTableColumn('bookings', 'clock_out_lng', 'REAL');
 ensureTableColumn('users', 'active', 'INTEGER NOT NULL DEFAULT 1');
+ensureTableColumn('users', 'role', "TEXT NOT NULL DEFAULT 'employee'");
 ensureTableColumn('user_settings', 'week_start', "TEXT NOT NULL DEFAULT 'monday'");
 ensureTableColumn('user_settings', 'time_format', "TEXT NOT NULL DEFAULT '24h'");
 ensureTableColumn('user_settings', 'flex_enabled', 'INTEGER NOT NULL DEFAULT 0');
@@ -108,6 +155,11 @@ ensureTableColumn('absences', 'start_date', 'TEXT');
 ensureTableColumn('absences', 'end_date', 'TEXT');
 db.prepare('UPDATE absences SET start_date = date WHERE start_date IS NULL').run();
 db.prepare('UPDATE absences SET end_date = date WHERE end_date IS NULL').run();
+ensureTableColumn('user_profiles', 'location', 'TEXT');
+ensureTableColumn('user_profiles', 'department', 'TEXT');
+ensureTableColumn('user_profiles', 'work_model_id', 'INTEGER');
+ensureTableColumn('user_profiles', 'start_date', 'TEXT');
+ensureTableColumn('user_profiles', 'end_date', 'TEXT');
 
 function ensureAdminUser() {
   const existing = db.prepare('SELECT id FROM users WHERE email = ?').get(ADMIN_EMAIL);
@@ -121,8 +173,26 @@ function ensureAdminUser() {
 
 const defaultSchedule = [480, 480, 480, 480, 480, 0, 0];
 
+function ensureDefaultWorkModel() {
+  const existing = db.prepare('SELECT id FROM work_models WHERE name = ?').get('Standard 40h') as
+    | { id: number }
+    | undefined;
+  if (!existing) {
+    db.prepare(
+      `INSERT INTO work_models (name, monday, tuesday, wednesday, thursday, friday, saturday, sunday, pause_after_minutes, pause_duration_minutes)
+       VALUES ('Standard 40h', 480, 480, 480, 480, 480, 0, 0, 360, 30)`
+    ).run();
+  }
+}
+
 function ensureProfile(userId: number) {
-  db.prepare('INSERT OR IGNORE INTO user_profiles (user_id) VALUES (?)').run(userId);
+  const defaultModel = db.prepare('SELECT id FROM work_models ORDER BY id ASC LIMIT 1').get() as
+    | { id: number }
+    | undefined;
+  db.prepare('INSERT OR IGNORE INTO user_profiles (user_id, work_model_id) VALUES (?, ?)').run(
+    userId,
+    defaultModel?.id ?? null
+  );
 }
 
 function ensureSchedule(userId: number) {
@@ -135,6 +205,8 @@ function ensureSchedule(userId: number) {
   const insert = db.prepare('INSERT OR IGNORE INTO work_schedules (user_id, weekday, minutes) VALUES (?, ?, ?)');
   defaultSchedule.forEach((minutes, weekday) => insert.run(userId, weekday, minutes));
 }
+
+ensureDefaultWorkModel();
 
 const userIds = db.prepare('SELECT id FROM users').all() as { id: number }[];
 userIds.forEach((row) => {
