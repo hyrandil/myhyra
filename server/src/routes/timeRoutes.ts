@@ -47,7 +47,17 @@ function insertEntry(
 }
 
 const manualEntrySchema = z.object({
-  timestamp: z.string().datetime(),
+  timestamp: z
+    .string()
+    .min(16)
+    .transform((value) => {
+      const normalized = value.endsWith('Z') ? value : `${value}Z`;
+      const date = new Date(normalized);
+      if (Number.isNaN(date.getTime())) {
+        throw new Error('Ungültiger Zeitstempel');
+      }
+      return date.toISOString();
+    }),
   type: z.enum(['CLOCK_IN', 'CLOCK_OUT', 'BREAK_START', 'BREAK_END']),
   source: sourceEnum.optional(),
   location: locationSchema.optional(),
@@ -74,18 +84,18 @@ function buildDailySummary(userId: number, month?: string, maskAbsences = false)
   const planMap = new Map(schedule.map((entry) => [entry.weekday, entry.minutes]));
 
   const entryRows = db
-    .prepare('SELECT * FROM time_entries WHERE user_id = ? AND date(timestamp) BETWEEN ? AND ?')
-    .all(userId, start.toISOString().slice(0, 10), end.toISOString().slice(0, 10)) as TimeEntry[];
+    .prepare('SELECT * FROM time_entries WHERE user_id = ? AND date(timestamp) <= ?')
+    .all(userId, end.toISOString().slice(0, 10)) as TimeEntry[];
 
   const manualAbsences = db
-    .prepare('SELECT * FROM absences WHERE user_id = ? AND NOT (end_date < ? OR start_date > ?)')
-    .all(userId, start.toISOString().slice(0, 10), end.toISOString().slice(0, 10)) as Absence[];
+    .prepare('SELECT * FROM absences WHERE user_id = ? AND NOT (end_date < ? )')
+    .all(userId, start.toISOString().slice(0, 10)) as Absence[];
 
   const approvedRequests = db
     .prepare(
-      "SELECT user_id, start_date, end_date, type, 'full' as duration, NULL as note, created_at, id FROM absence_requests WHERE user_id = ? AND status = 'approved' AND NOT (end_date < ? OR start_date > ?)"
+      "SELECT user_id, start_date, end_date, type, 'full' as duration, NULL as note, created_at, id FROM absence_requests WHERE user_id = ? AND status = 'approved' AND end_date >= ?"
     )
-    .all(userId, start.toISOString().slice(0, 10), end.toISOString().slice(0, 10)) as Absence[];
+    .all(userId, start.toISOString().slice(0, 10)) as Absence[];
 
   const absenceKey = new Set(
     manualAbsences.map((a) => `${a.start_date}|${a.end_date}|${a.type}|${a.duration ?? 'full'}`)
@@ -147,12 +157,33 @@ function buildDailySummary(userId: number, month?: string, maskAbsences = false)
     return 'ok';
   };
 
-  const cursor = new Date(start);
-  const days: Record<
-    string,
-    { worked: number; planned: number; delta: number; absences: string[]; status: string; pending?: boolean }
-  > = {};
-  while (cursor.getTime() <= end.getTime()) {
+  const earliestEntry = entryRows.reduce<string | null>((acc, row) => {
+    const key = row.timestamp.slice(0, 10);
+    if (!acc) return key;
+    return key < acc ? key : acc;
+  }, null);
+  const earliestAbsence = absences.reduce<string | null>((acc, row) => {
+    if (!acc) return row.start_date;
+    return row.start_date < acc ? row.start_date : acc;
+  }, null);
+  const monthStart = new Date(start);
+  const startCursor = (() => {
+    const dates = [trackingStartValue, earliestEntry, earliestAbsence].filter(Boolean) as string[];
+    if (dates.length === 0) return new Date(start);
+    let min: string = dates[0]!;
+    dates.forEach((value) => {
+      if (min && value < min) min = value;
+    });
+    const parsed = new Date(`${min}T00:00:00Z`);
+    return parsed.getTime() < monthStart.getTime() ? parsed : new Date(start);
+  })();
+
+  const days: Record<string, { worked: number; planned: number; flex: number; absences: string[]; status: string; pending?: boolean }> = {};
+  let flexCarry = 0;
+  let cursor = new Date(startCursor);
+  const endCursor = new Date(end);
+
+  while (cursor.getTime() <= endCursor.getTime()) {
     const key = cursor.toISOString().slice(0, 10);
     const weekday = (cursor.getUTCDay() + 6) % 7;
     const planned = planMap.get(weekday) ?? 0;
@@ -179,6 +210,7 @@ function buildDailySummary(userId: number, month?: string, maskAbsences = false)
     const effectivePlanned = inactiveBeforeTracking ? 0 : planned;
     const effectiveWorked = inactiveBeforeTracking ? 0 : baseWork + creditVacation + topUpOther;
     const delta = computeDelta(effectivePlanned, effectiveWorked);
+    flexCarry += delta;
     const status = inactiveBeforeTracking
       ? 'inactive'
       : statusForDay(entries, absencesForDay, hasPending);
@@ -192,18 +224,24 @@ function buildDailySummary(userId: number, month?: string, maskAbsences = false)
     if (hasPending) {
       absenceLabels.push('pending');
     }
-    days[key] = {
-      worked: effectiveWorked,
-      planned: effectivePlanned,
-      delta,
-      absences: absenceLabels,
-      status,
-      pending: hasPending,
-    };
+    if (cursor.getTime() >= monthStart.getTime()) {
+      days[key] = {
+        worked: effectiveWorked,
+        planned: effectivePlanned,
+        flex: flexCarry,
+        absences: absenceLabels,
+        status,
+        pending: hasPending,
+      };
+    }
     cursor.setUTCDate(cursor.getUTCDate() + 1);
   }
 
-  return { month: `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, '0')}`, days };
+  return {
+    month: `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, '0')}`,
+    days,
+    flexBalance: flexCarry,
+  };
 }
 
 router.use(authenticate);
@@ -347,7 +385,7 @@ router.get('/overview', (req: AuthRequest, res) => {
           date: key,
           planned: 0,
           worked: 0,
-          delta: 0,
+          flex: 0,
           absences: [],
           status: 'ok',
           pending: false,

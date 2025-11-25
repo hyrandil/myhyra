@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   createDepartment,
   createEmployee,
@@ -7,6 +7,7 @@ import {
   fetchDepartments,
   fetchEmployees,
   removeDepartmentMember,
+  resetUserPassword,
   updateDepartment,
   updateDepartmentMemberRole,
   updateEmployee,
@@ -19,6 +20,7 @@ export function EmployeesPage() {
   const [search, setSearch] = useState('');
   const [selected, setSelected] = useState<Employee | null>(null);
   const [showDepartments, setShowDepartments] = useState(false);
+  const [resetPasswordValue, setResetPasswordValue] = useState('');
   const { data } = useQuery({ queryKey: ['employees', search], queryFn: () => fetchEmployees(search || undefined) });
   const { data: departments } = useQuery({ queryKey: ['departments'], queryFn: fetchDepartments });
 
@@ -74,6 +76,11 @@ export function EmployeesPage() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['departments'] }),
   });
 
+  const passwordResetMutation = useMutation({
+    mutationFn: ({ id, password }: { id: number; password: string }) => resetUserPassword(id, password),
+    onSuccess: () => setResetPasswordValue(''),
+  });
+
   const onCreate = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const form = new FormData(e.currentTarget);
@@ -95,6 +102,10 @@ export function EmployeesPage() {
     const q = new FormData(e.currentTarget).get('q') as string;
     setSearch(q);
   };
+
+  useEffect(() => {
+    setResetPasswordValue('');
+  }, [selected?.id]);
 
   return (
     <div className="space-y-4">
@@ -278,6 +289,29 @@ export function EmployeesPage() {
                 placeholder="Erfassungsbeginn"
                 onChange={(e) => setSelected({ ...selected, trackingStartDate: e.target.value })}
               />
+              <div className="grid grid-cols-3 gap-2 items-end">
+                <div className="col-span-2">
+                  <label className="text-sm text-slate-600">Neues Passwort setzen</label>
+                  <input
+                    className="input"
+                    type="password"
+                    value={resetPasswordValue}
+                    onChange={(e) => setResetPasswordValue(e.target.value)}
+                    placeholder="Neues Passwort"
+                  />
+                </div>
+                <button
+                  className="btn-ghost"
+                  type="button"
+                  disabled={!resetPasswordValue || passwordResetMutation.isPending}
+                  onClick={() => {
+                    if (!selected || !resetPasswordValue) return;
+                    passwordResetMutation.mutate({ id: selected.id, password: resetPasswordValue });
+                  }}
+                >
+                  Zurücksetzen
+                </button>
+              </div>
               <div className="flex gap-2">
                 <button className="btn-primary" type="submit" disabled={updateMutation.isPending}>
                   Speichern

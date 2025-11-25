@@ -46,7 +46,7 @@ export interface TimeEntry {
 export interface DailySummary {
   worked: number;
   planned: number;
-  delta: number;
+  flex: number;
   absences: string[];
   status: string;
   pending?: boolean;

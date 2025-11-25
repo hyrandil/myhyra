@@ -210,18 +210,8 @@ router.patch('/requests/:id/status', (req: AuthRequest, res) => {
     return res.status(404).json({ message: 'Antrag nicht gefunden' });
   }
   if (req.user!.role !== 'admin' && req.user!.role !== 'hr') {
-    const allowedDepartments = managedDepartments(req.user!.id);
-    if (allowedDepartments.length === 0) {
-      return res.status(403).json({ message: 'Keine Berechtigung für diese Abteilung' });
-    }
-    const match = db
-      .prepare(
-        `SELECT 1 FROM department_members WHERE user_id = ? AND department_id IN (${allowedDepartments
-          .map(() => '?')
-          .join(',')})`
-      )
-      .get(requestRow.user_id, ...allowedDepartments) as { 1: number } | undefined;
-    if (!match) {
+    const allowed = canManageUser(req.user!.id, req.user!.role, requestRow.user_id);
+    if (!allowed) {
       return res.status(403).json({ message: 'Keine Berechtigung für diese Abteilung' });
     }
   }

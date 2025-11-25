@@ -6,6 +6,7 @@ import { AbsencePage } from './pages/AbsencePage';
 import { EmployeesPage } from './pages/EmployeesPage';
 import { ReportsPage } from './pages/ReportsPage';
 import { OverviewCalendarPage } from './pages/OverviewCalendarPage';
+import { PlanningPage } from './pages/PlanningPage';
 import { useAuth } from './AuthProvider';
 
 function Protected({ children }: { children: React.ReactNode }) {
@@ -48,6 +49,7 @@ function Shell({ children }: { children: React.ReactNode }) {
           <NavItem to="/zeiten" icon="📅" label="Kalender & Zeiten" />
           <NavItem to="/uebersicht" icon="🗂️" label="Übersichtkalender" />
           <NavItem to="/abwesenheiten" icon="🧭" label="Abwesenheiten" />
+          {auth.hasRole('hr', 'admin') && <NavItem to="/planung" icon="⏳" label="Stundenplanung" />}
           {auth.hasRole('lead', 'hr', 'admin') && <NavItem to="/mitarbeitende" icon="👥" label="Team" />}
           {auth.hasRole('hr', 'admin') && <NavItem to="/berichte" icon="📊" label="Berichte" />}
         </nav>
@@ -104,6 +106,7 @@ export default function App() {
                 <Route path="/zeiten" element={<TimesPage />} />
                 <Route path="/uebersicht" element={<OverviewCalendarPage />} />
                 <Route path="/abwesenheiten" element={<AbsencePage />} />
+                <Route path="/planung" element={<PlanningPage />} />
                 <Route path="/mitarbeitende" element={<EmployeesPage />} />
                 <Route path="/berichte" element={<ReportsPage />} />
               </Routes>

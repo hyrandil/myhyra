@@ -142,16 +142,19 @@ export async function punch(
 }
 
 export async function fetchDaily(month?: string) {
-  const res = await api.get<{ month: string; days: Record<string, DailySummary> }>('/time/me/daily', {
+  const res = await api.get<{ month: string; days: Record<string, DailySummary>; flexBalance?: number }>('/time/me/daily', {
     params: month ? { month } : undefined,
   });
   return res.data;
 }
 
 export async function fetchDailyForUser(userId: number, month?: string) {
-  const res = await api.get<{ month: string; days: Record<string, DailySummary> }>(`/time/user/${userId}/daily`, {
-    params: month ? { month } : undefined,
-  });
+  const res = await api.get<{ month: string; days: Record<string, DailySummary>; flexBalance?: number }>(
+    `/time/user/${userId}/daily`,
+    {
+      params: month ? { month } : undefined,
+    }
+  );
   return res.data;
 }
 
@@ -192,6 +195,21 @@ export async function createAbsenceForUser(
 
 export async function deleteAbsenceForUser(userId: number, start_date: string, end_date: string) {
   const res = await api.delete(`/absences/user/${userId}`, { data: { start_date, end_date } });
+  return res.data;
+}
+
+export async function resetUserPassword(userId: number, password: string) {
+  const res = await api.patch(`/users/${userId}/password`, { password });
+  return res.data;
+}
+
+export async function fetchSchedule(userId: number) {
+  const res = await api.get<{ days: { weekday: number; minutes: number }[] }>(`/users/${userId}/schedule`);
+  return res.data;
+}
+
+export async function updateSchedule(userId: number, days: { weekday: number; minutes: number }[]) {
+  const res = await api.put<{ days: { weekday: number; minutes: number }[] }>(`/users/${userId}/schedule`, { days });
   return res.data;
 }
 

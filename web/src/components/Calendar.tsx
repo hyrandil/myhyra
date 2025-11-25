@@ -10,6 +10,7 @@ type CalendarProps = {
   onSelect?: (date: string) => void;
   maskAbsences?: boolean;
   hideDetails?: boolean;
+  absencesOnly?: boolean;
 };
 
 const formatHours = (minutes: number) => {
@@ -40,7 +41,7 @@ function dayColor(summary?: DailySummary) {
   return 'bg-white text-slate-900 border-slate-300';
 }
 
-export function Calendar({ month, days, selectedDate, onSelect, maskAbsences, hideDetails }: CalendarProps) {
+export function Calendar({ month, days, selectedDate, onSelect, maskAbsences, hideDetails, absencesOnly }: CalendarProps) {
   const [internalSelected, setInternalSelected] = useState<string | null>(selectedDate ?? null);
 
   useEffect(() => {
@@ -93,11 +94,11 @@ export function Calendar({ month, days, selectedDate, onSelect, maskAbsences, hi
           >
             <div className="flex justify-between items-start">
               <span className="font-semibold">{cell.label || ''}</span>
-              {cell.summary && (
+              {cell.summary && !absencesOnly && (
                 <span className="text-xs flex items-center gap-1">
                   <span className={`h-2 w-2 rounded-full ${statusAccent(cell.summary)}`}></span>
-                  {cell.summary.delta >= 0 ? '+' : ''}
-                  {formatHours(cell.summary.delta)}
+                  {cell.summary.flex >= 0 ? '+' : ''}
+                  {formatHours(cell.summary.flex)}
                 </span>
               )}
             </div>
@@ -127,12 +128,16 @@ export function Calendar({ month, days, selectedDate, onSelect, maskAbsences, hi
               <h4 className="font-semibold text-sm mb-1">{selectedDate ?? internalSelected}</h4>
               {selectedSummary ? (
                 <div className="text-sm space-y-1">
-                  <p>
-                    Arbeitszeit: {formatHours(selectedSummary.worked)} / {formatHours(selectedSummary.planned)}
-                  </p>
-                  <p className={selectedSummary.delta >= 0 ? 'text-emerald-700' : 'text-rose-700'}>
-                    Delta: {formatHours(selectedSummary.delta)}
-                  </p>
+                  {!absencesOnly && (
+                    <>
+                      <p>
+                        Arbeitszeit: {formatHours(selectedSummary.worked)} / {formatHours(selectedSummary.planned)}
+                      </p>
+                      <p className={selectedSummary.flex >= 0 ? 'text-emerald-700' : 'text-rose-700'}>
+                        Gleitzeit: {formatHours(selectedSummary.flex)}
+                      </p>
+                    </>
+                  )}
                   {selectedSummary.pending && <p className="text-amber-700">Antrag wartend</p>}
                   {selectedSummary.absences.length > 0 && (
                     <p>

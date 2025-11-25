@@ -61,7 +61,7 @@ export function TimesPage() {
     }
   }, [enableManagement, employees, targetUser, user?.id]);
 
-  const { data, isLoading } = useQuery<{ month: string; days: Record<string, DailySummary> }>({
+  const { data, isLoading } = useQuery<{ month: string; days: Record<string, DailySummary>; flexBalance?: number }>({
     queryKey: ['daily', month, selectedUserId, enableManagement ? 'manager' : 'self'],
     queryFn: () => {
       if (enableManagement && selectedUserId && selectedUserId !== user?.id) {
@@ -80,15 +80,17 @@ export function TimesPage() {
   }, [enableManagement, hasRole, selectedUserId, user?.id]);
 
   const totals = useMemo(() => {
-    return Object.values(days).reduce<{ worked: number; planned: number }>(
+    return Object.values(days).reduce<{ worked: number; planned: number; flex: number }>(
       (acc, d) => {
         acc.worked += d.worked;
         acc.planned += d.planned;
+        acc.flex = d.flex; // latest value is month-to-date balance
         return acc;
       },
-      { worked: 0, planned: 0 }
+      { worked: 0, planned: 0, flex: 0 }
     );
   }, [days]);
+  const flexBalance = data?.flexBalance ?? totals.flex;
 
   const goto = (delta: number) => {
     const base = new Date(`${month}-01T00:00:00Z`);
@@ -116,7 +118,7 @@ export function TimesPage() {
       location?: { lat?: number; lng?: number };
     }) => createManualTimeEntry(selectedUserId!, { timestamp, type, location }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['daily'] });
+      queryClient.invalidateQueries({ queryKey: ['daily', month, selectedUserId] });
       queryClient.invalidateQueries({ queryKey: ['overview'] });
     },
   });
@@ -125,7 +127,7 @@ export function TimesPage() {
     mutationFn: ({ start_date, end_date, type, duration }: { start_date: string; end_date: string; type: string; duration: 'full' | 'half' }) =>
       createAbsenceForUser(selectedUserId!, { start_date, end_date, type, duration }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['daily'] });
+      queryClient.invalidateQueries({ queryKey: ['daily', month, selectedUserId] });
       queryClient.invalidateQueries({ queryKey: ['overview'] });
     },
   });
@@ -134,7 +136,7 @@ export function TimesPage() {
     mutationFn: ({ start_date, end_date }: { start_date: string; end_date: string }) =>
       deleteAbsenceForUser(selectedUserId!, start_date, end_date),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['daily'] });
+      queryClient.invalidateQueries({ queryKey: ['daily', month, selectedUserId] });
       queryClient.invalidateQueries({ queryKey: ['overview'] });
     },
   });
@@ -144,7 +146,7 @@ export function TimesPage() {
     if (!selectedUserId) return;
     const form = new FormData(e.currentTarget);
     manualTime.mutate({
-      timestamp: `${form.get('timestamp') || manualTimestamp}`,
+      timestamp: `${form.get('timestamp') || manualTimestamp}${String(form.get('timestamp') || manualTimestamp).toString().endsWith('Z') ? '' : 'Z'}`,
       type: form.get('type') as any,
       location: {
         lat: form.get('lat') ? Number(form.get('lat')) : undefined,
@@ -255,13 +257,9 @@ export function TimesPage() {
               <p className="text-xl font-semibold">{formatHours(totals.planned)}</p>
             </div>
             <div className="p-3 rounded-lg bg-slate-50 border border-slate-200 md:col-span-1 col-span-2">
-              <p className="text-xs uppercase text-slate-500">Delta</p>
-              <p
-                className={`text-xl font-semibold ${
-                  totals.worked - totals.planned >= 0 ? 'text-emerald-600' : 'text-rose-600'
-                }`}
-              >
-                {formatHours(totals.worked - totals.planned)}
+              <p className="text-xs uppercase text-slate-500">Gleitzeit</p>
+              <p className={`text-xl font-semibold ${flexBalance >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+                {formatHours(flexBalance)}
               </p>
             </div>
           </div>
