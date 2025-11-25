@@ -1,4 +1,4 @@
-import { Router } from 'express';
+import { Router, Response } from 'express';
 import bcrypt from 'bcryptjs';
 import { z } from 'zod';
 import db from '../db';
@@ -12,11 +12,17 @@ const ensureSettingsRow = (userId: number) => {
   db.prepare('INSERT OR IGNORE INTO user_settings (user_id) VALUES (?)').run(userId);
 };
 
+const userExists = (userId: number) => {
+  return Boolean(db.prepare('SELECT id FROM users WHERE id = ?').get(userId));
+};
+
 const ensureProfileRow = (userId: number) => {
+  if (!userExists(userId)) return;
   db.prepare('INSERT OR IGNORE INTO user_profiles (user_id) VALUES (?)').run(userId);
 };
 
 const ensureSchedule = (userId: number) => {
+  if (!userExists(userId)) return;
   const existing = db.prepare('SELECT COUNT(1) as count FROM work_schedules WHERE user_id = ?').get(userId) as {
     count: number;
   };
@@ -28,12 +34,25 @@ const ensureSchedule = (userId: number) => {
   defaults.forEach((minutes, weekday) => insert.run(userId, weekday, minutes));
 };
 
+const guardMissingUser = (userId: number, res: Response) => {
+  if (!userExists(userId)) {
+    res.status(404).json({ message: 'Nutzer nicht gefunden' });
+    return true;
+  }
+  return false;
+};
+
 const toUserPayload = (
   user: Pick<User, 'id' | 'name' | 'email' | 'role' | 'created_at'> & {
     active: number;
     vacation_allowance?: number;
     personnel_number?: string | null;
     flex_enabled?: number;
+    location?: string | null;
+    department?: string | null;
+    start_date?: string | null;
+    end_date?: string | null;
+    work_model_id?: number | null;
   }
 ) => ({
   id: user.id,
@@ -45,6 +64,11 @@ const toUserPayload = (
   vacationAllowance: user.vacation_allowance ?? 0,
   personnelNumber: user.personnel_number ?? undefined,
   flexEnabled: Boolean(user.flex_enabled ?? 0),
+  location: user.location ?? undefined,
+  department: user.department ?? undefined,
+  startDate: user.start_date ?? undefined,
+  endDate: user.end_date ?? undefined,
+  workModelId: user.work_model_id ?? undefined,
 });
 
 const dateKey = (value: string) => value.slice(0, 10);
@@ -306,13 +330,13 @@ router.get('/me/flex', (req: AuthRequest, res) => {
   res.json({ balanceMinutes, plannedMinutes: plannedTotal, workedMinutes: workedTotal, adjustment, enabled });
 });
 
-router.use(authorize(['admin']));
+router.use(authorize(['admin', 'hr']));
 
 const userSchema = z.object({
   name: z.string().min(2),
   email: z.string().email(),
   password: z.string().min(6),
-  role: z.enum(['user', 'admin']).optional().default('user'),
+  role: z.enum(['employee', 'lead', 'hr', 'admin']).optional().default('employee'),
   vacationAllowance: z.number().min(0).max(80).optional(),
   birth_date: z
     .string()
@@ -325,21 +349,37 @@ const userSchema = z.object({
   address: z.string().max(180).optional().or(z.literal('')).transform((value) => value || undefined),
   city: z.string().max(120).optional().or(z.literal('')).transform((value) => value || undefined),
   postal_code: z.string().max(30).optional().or(z.literal('')).transform((value) => value || undefined),
+  location: z.string().max(120).optional().or(z.literal('')).transform((value) => value || undefined),
+  department: z.string().max(120).optional().or(z.literal('')).transform((value) => value || undefined),
+  work_model_id: z.number().int().optional(),
+  start_date: z
+    .string()
+    .regex(dateRegex, 'Datum muss YYYY-MM-DD sein')
+    .optional()
+    .or(z.literal(''))
+    .transform((value) => value || undefined),
+  end_date: z
+    .string()
+    .regex(dateRegex, 'Datum muss YYYY-MM-DD sein')
+    .optional()
+    .or(z.literal(''))
+    .transform((value) => value || undefined),
   note: z.string().max(255).optional().or(z.literal('')).transform((value) => value || undefined),
 });
 
 router.get('/', (req: AuthRequest, res) => {
+  const search = typeof req.query.q === 'string' ? `%${req.query.q}%` : '%';
   const users = db
     .prepare(
       `SELECT u.id, u.name, u.email, u.role, u.created_at, u.active, IFNULL(us.vacation_allowance, 0) as vacation_allowance
-       , IFNULL(us.flex_enabled, 0) as flex_enabled, up.personnel_number
+       , IFNULL(us.flex_enabled, 0) as flex_enabled, up.personnel_number, up.location, up.department, up.start_date, up.end_date, up.work_model_id
        FROM users u
        LEFT JOIN user_settings us ON us.user_id = u.id
        LEFT JOIN user_profiles up ON up.user_id = u.id
-       WHERE u.id != ?
+       WHERE u.id != ? AND (u.name LIKE ? OR u.email LIKE ? OR IFNULL(up.personnel_number,'') LIKE ?)
        ORDER BY u.name ASC`
     )
-    .all(req.user!.id) as (Pick<User, 'id' | 'name' | 'email' | 'role' | 'created_at'> & {
+    .all(req.user!.id, search, search, search) as (Pick<User, 'id' | 'name' | 'email' | 'role' | 'created_at'> & {
       active: number;
       vacation_allowance: number;
       personnel_number?: string | null;
@@ -370,7 +410,8 @@ router.post('/', (req, res) => {
   if (Object.values(profile).some((value) => value !== undefined)) {
     db.prepare(
       `UPDATE user_profiles
-       SET birth_date = ?, personnel_number = ?, phone = ?, address = ?, city = ?, postal_code = ?, note = ?
+       SET birth_date = ?, personnel_number = ?, phone = ?, address = ?, city = ?, postal_code = ?, note = ?,
+           location = ?, department = ?, start_date = ?, end_date = ?, work_model_id = COALESCE(?, work_model_id)
        WHERE user_id = ?`
     ).run(
       profile.birth_date ?? null,
@@ -380,13 +421,18 @@ router.post('/', (req, res) => {
       profile.city ?? null,
       profile.postal_code ?? null,
       profile.note ?? null,
+      profile.location ?? null,
+      profile.department ?? null,
+      profile.start_date ?? null,
+      profile.end_date ?? null,
+      profile.work_model_id ?? null,
       createdUserId
     );
   }
   const created = db
     .prepare(
       `SELECT u.id, u.name, u.email, u.role, u.created_at, u.active, IFNULL(us.vacation_allowance, 0) as vacation_allowance
-       , IFNULL(us.flex_enabled, 0) as flex_enabled, up.personnel_number
+       , IFNULL(us.flex_enabled, 0) as flex_enabled, up.personnel_number, up.location, up.department, up.start_date, up.end_date, up.work_model_id
        FROM users u
        LEFT JOIN user_settings us ON us.user_id = u.id
        LEFT JOIN user_profiles up ON up.user_id = u.id
@@ -439,7 +485,7 @@ router.patch('/:id/status', (req, res) => {
   const updated = db
     .prepare(
       `SELECT u.id, u.name, u.email, u.role, u.created_at, u.active, IFNULL(us.vacation_allowance, 0) as vacation_allowance
-       , IFNULL(us.flex_enabled, 0) as flex_enabled, up.personnel_number
+       , IFNULL(us.flex_enabled, 0) as flex_enabled, up.personnel_number, up.location, up.department, up.start_date, up.end_date, up.work_model_id
        FROM users u
        LEFT JOIN user_settings us ON us.user_id = u.id
        LEFT JOIN user_profiles up ON up.user_id = u.id
@@ -456,7 +502,23 @@ router.patch('/:id/status', (req, res) => {
 const userUpdateSchema = z.object({
   name: z.string().min(2),
   email: z.string().email(),
-  role: z.enum(['user', 'admin']),
+  role: z.enum(['employee', 'lead', 'hr', 'admin']),
+  location: z.string().max(120).optional().or(z.literal('')).transform((value) => value || undefined),
+  department: z.string().max(120).optional().or(z.literal('')).transform((value) => value || undefined),
+  start_date: z
+    .string()
+    .regex(dateRegex, 'Datum muss YYYY-MM-DD sein')
+    .optional()
+    .or(z.literal(''))
+    .transform((value) => value || undefined),
+  end_date: z
+    .string()
+    .regex(dateRegex, 'Datum muss YYYY-MM-DD sein')
+    .optional()
+    .or(z.literal(''))
+    .transform((value) => value || undefined),
+  work_model_id: z.number().int().optional(),
+  active: z.boolean().optional(),
 });
 
 const flexConfigSchema = z.object({
@@ -485,10 +547,29 @@ router.patch('/:id', (req, res) => {
   if (result.changes === 0) {
     return res.status(404).json({ message: 'Nutzer nicht gefunden' });
   }
+  if (parsed.data.active !== undefined) {
+    db.prepare('UPDATE users SET active = ? WHERE id = ?').run(parsed.data.active ? 1 : 0, userId);
+  }
+  db.prepare(
+    `UPDATE user_profiles
+     SET location = COALESCE(?, location),
+         department = COALESCE(?, department),
+         start_date = COALESCE(?, start_date),
+         end_date = COALESCE(?, end_date),
+         work_model_id = COALESCE(?, work_model_id)
+     WHERE user_id = ?`
+  ).run(
+    parsed.data.location ?? null,
+    parsed.data.department ?? null,
+    parsed.data.start_date ?? null,
+    parsed.data.end_date ?? null,
+    parsed.data.work_model_id ?? null,
+    userId
+  );
   const updated = db
     .prepare(
       `SELECT u.id, u.name, u.email, u.role, u.created_at, u.active, IFNULL(us.vacation_allowance, 0) as vacation_allowance
-       , IFNULL(us.flex_enabled, 0) as flex_enabled, up.personnel_number
+       , IFNULL(us.flex_enabled, 0) as flex_enabled, up.personnel_number, up.location, up.department, up.start_date, up.end_date, up.work_model_id
        FROM users u
        LEFT JOIN user_settings us ON us.user_id = u.id
        LEFT JOIN user_profiles up ON up.user_id = u.id
@@ -537,6 +618,7 @@ router.patch('/:id/settings', (req, res) => {
   if (Number.isNaN(userId)) {
     return res.status(400).json({ message: 'Ungültige Nutzer-ID' });
   }
+  if (guardMissingUser(userId, res)) return;
   const parsed = adminSettingsSchema.safeParse(req.body);
   if (!parsed.success) {
     return res.status(400).json({ errors: parsed.error.format() });
@@ -566,6 +648,7 @@ router.get('/:id/profile', (req, res) => {
   if (Number.isNaN(userId)) {
     return res.status(400).json({ message: 'Ungültige Nutzer-ID' });
   }
+  if (guardMissingUser(userId, res)) return;
   ensureProfileRow(userId);
   const profile = db
     .prepare(
@@ -584,6 +667,7 @@ router.patch('/:id/profile', (req, res) => {
   if (Number.isNaN(userId)) {
     return res.status(400).json({ message: 'Ungültige Nutzer-ID' });
   }
+  if (guardMissingUser(userId, res)) return;
   const parsed = profileSchema.safeParse(req.body);
   if (!parsed.success) {
     return res.status(400).json({ errors: parsed.error.format() });
@@ -617,6 +701,7 @@ router.get('/:id/schedule', (req, res) => {
   if (Number.isNaN(userId)) {
     return res.status(400).json({ message: 'Ungültige Nutzer-ID' });
   }
+  if (guardMissingUser(userId, res)) return;
   ensureSchedule(userId);
   const schedule = db
     .prepare('SELECT weekday, minutes FROM work_schedules WHERE user_id = ? ORDER BY weekday ASC')
@@ -629,6 +714,7 @@ router.put('/:id/schedule', (req, res) => {
   if (Number.isNaN(userId)) {
     return res.status(400).json({ message: 'Ungültige Nutzer-ID' });
   }
+  if (guardMissingUser(userId, res)) return;
   const parsed = scheduleSchema.safeParse(req.body);
   if (!parsed.success) {
     return res.status(400).json({ errors: parsed.error.format() });
@@ -650,6 +736,7 @@ router.get('/:id/flex', (req, res) => {
   if (Number.isNaN(userId)) {
     return res.status(400).json({ message: 'Ungültige Nutzer-ID' });
   }
+  if (guardMissingUser(userId, res)) return;
   const { balanceMinutes, plannedTotal, workedTotal, adjustment, enabled } = computeFlexBalance(userId);
   res.json({ balanceMinutes, plannedMinutes: plannedTotal, workedMinutes: workedTotal, adjustment, enabled });
 });
@@ -659,6 +746,7 @@ router.patch('/:id/flex', (req, res) => {
   if (Number.isNaN(userId)) {
     return res.status(400).json({ message: 'Ungültige Nutzer-ID' });
   }
+  if (guardMissingUser(userId, res)) return;
   const parsed = flexConfigSchema.safeParse(req.body);
   if (!parsed.success) {
     return res.status(400).json({ errors: parsed.error.format() });

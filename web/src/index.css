@@ -2,6 +2,46 @@
 @tailwind components;
 @tailwind utilities;
 
+:root {
+  color-scheme: light;
+}
+
 body {
+  @apply bg-slate-100 text-slate-900;
+  background-image: radial-gradient(circle at 10% 20%, rgba(59,130,246,0.08) 0, rgba(59,130,246,0.08) 12px, transparent 12px),
+    radial-gradient(circle at 90% 10%, rgba(14,116,144,0.07) 0, rgba(14,116,144,0.07) 14px, transparent 14px),
+    linear-gradient(180deg, #f8fafc 0%, #eef2ff 40%, #f8fafc 100%);
+  background-size: 220px 220px, 240px 240px, auto;
+  min-height: 100vh;
   font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+}
+
+.bg-surface {
+  background-image: radial-gradient(circle at 10% 20%, rgba(59,130,246,0.04) 0, rgba(59,130,246,0.04) 12px, transparent 12px),
+    radial-gradient(circle at 90% 10%, rgba(14,116,144,0.05) 0, rgba(14,116,144,0.05) 14px, transparent 14px),
+    linear-gradient(180deg, #eef2ff 0%, #f8fafc 40%, #eef2ff 100%);
+}
+
+.card {
+  @apply bg-white shadow-sm rounded-xl border border-slate-200;
+}
+
+.card-ghost {
+  @apply bg-white/80 backdrop-blur-md shadow-sm rounded-xl border border-white/60;
+}
+
+.badge {
+  @apply inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-semibold uppercase tracking-wide;
+}
+
+.input {
+  @apply w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-sky-500 focus:border-sky-500;
+}
+
+.btn-primary {
+  @apply inline-flex items-center justify-center gap-2 rounded-lg bg-sky-600 px-4 py-2 text-white font-semibold shadow hover:bg-sky-700 transition;
+}
+
+.btn-ghost {
+  @apply inline-flex items-center justify-center gap-2 rounded-lg px-3 py-2 text-slate-700 hover:bg-slate-100 transition;
 }

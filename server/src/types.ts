@@ -1,4 +1,4 @@
-export type Role = 'user' | 'admin';
+export type Role = 'employee' | 'lead' | 'hr' | 'admin';
 
 export interface User {
   id: number;
@@ -12,6 +12,11 @@ export interface User {
 
 export interface UserProfile {
   user_id: number;
+  location?: string | null;
+  department?: string | null;
+  work_model_id?: number | null;
+  start_date?: string | null;
+  end_date?: string | null;
   birth_date?: string | null;
   personnel_number?: string | null;
   phone?: string | null;
@@ -42,10 +47,39 @@ export interface UserSettings {
   vacation_allowance: number;
 }
 
+export interface WorkModel {
+  id: number;
+  name: string;
+  monday: number;
+  tuesday: number;
+  wednesday: number;
+  thursday: number;
+  friday: number;
+  saturday: number;
+  sunday: number;
+  pause_after_minutes: number;
+  pause_duration_minutes: number;
+}
+
 export interface WorkScheduleEntry {
   user_id: number;
   weekday: number;
   minutes: number;
+}
+
+export type TimeEntryType = 'CLOCK_IN' | 'CLOCK_OUT' | 'BREAK_START' | 'BREAK_END';
+
+export type TimeSource = 'WEB' | 'APP' | 'TERMINAL';
+
+export interface TimeEntry {
+  id: number;
+  user_id: number;
+  timestamp: string;
+  type: TimeEntryType;
+  source: TimeSource;
+  lat?: number | null;
+  lng?: number | null;
+  created_at?: string;
 }
 
 export interface Absence {

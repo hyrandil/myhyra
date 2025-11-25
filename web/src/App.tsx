@@ -1,80 +1,115 @@
-import { useState } from 'react';
-import { LoginCard } from './components/LoginCard';
-import { BookingList } from './components/BookingList';
-import { ActionsCard } from './components/ActionsCard';
-import { AdminTable } from './components/AdminTable';
-import { SettingsPanel } from './components/SettingsPanel';
-import { VacationSummaryCard } from './components/VacationSummaryCard';
-import { useAuth } from './hooks/useAuth';
+import { NavLink, Navigate, Route, Routes } from 'react-router-dom';
+import { DashboardPage } from './pages/DashboardPage';
+import { LoginPage } from './pages/LoginPage';
+import { TimesPage } from './pages/TimesPage';
+import { AbsencePage } from './pages/AbsencePage';
+import { EmployeesPage } from './pages/EmployeesPage';
+import { ReportsPage } from './pages/ReportsPage';
+import { useAuth } from './AuthProvider';
 
-type AuthContext = ReturnType<typeof useAuth>;
+function Protected({ children }: { children: React.ReactNode }) {
+  const { user } = useAuth();
+  if (!user) return <Navigate to="/login" replace />;
+  return <>{children}</>;
+}
 
-function Dashboard({ auth }: { auth: AuthContext }) {
-  const { user, logout } = auth;
-  const [view, setView] = useState<'dashboard' | 'settings' | 'admin'>('dashboard');
-
+function NavItem({ to, icon, label }: { to: string; icon: string; label: string }) {
   return (
-    <div className="max-w-5xl mx-auto py-10 space-y-6">
-      <header className="flex items-center justify-between">
-        <div>
-          <p className="text-sm text-slate-500">Eingeloggt als</p>
-          <p className="font-semibold">{user?.name}</p>
+    <NavLink
+      to={to}
+      end={to === '/'}
+      className={({ isActive }) =>
+        `flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-semibold transition border border-transparent ${
+          isActive
+            ? 'bg-white/20 text-white border-white/30 shadow-lg'
+            : 'text-sky-100 hover:bg-white/10 hover:border-white/20'
+        }`
+      }
+    >
+      <span className="text-lg">{icon}</span>
+      {label}
+    </NavLink>
+  );
+}
+
+function Shell({ children }: { children: React.ReactNode }) {
+  const auth = useAuth();
+  return (
+    <div className="min-h-screen flex bg-surface">
+      <aside className="w-72 bg-gradient-to-b from-sky-900 via-sky-950 to-slate-950 text-sky-50 flex flex-col shadow-2xl relative">
+        <div className="absolute inset-0 opacity-20 bg-[radial-gradient(circle_at_top,_rgba(255,255,255,0.2)_0,_transparent_60%)]" />
+        <div className="p-6 border-b border-white/10 relative">
+          <p className="text-[11px] uppercase tracking-[0.35em] text-sky-200">TimeCard Look</p>
+          <p className="text-3xl font-black">ZeitPilot</p>
+          <p className="text-sky-200 text-sm mt-1">Kiosk-Layout wie timeCard 10</p>
         </div>
-        <div className="flex gap-3 items-center">
-          <div className="bg-slate-100 rounded px-2 py-1 text-sm">
-            <button
-              onClick={() => setView('dashboard')}
-              className={`px-2 ${view === 'dashboard' ? 'text-blue-600 font-semibold' : 'text-slate-500'}`}
-            >
-              Übersicht
-            </button>
-            <button
-              onClick={() => setView('settings')}
-              className={`px-2 ${view === 'settings' ? 'text-blue-600 font-semibold' : 'text-slate-500'}`}
-            >
-              Einstellungen
-            </button>
-            {user?.role === 'admin' && (
-              <button
-                onClick={() => setView('admin')}
-                className={`px-2 ${view === 'admin' ? 'text-blue-600 font-semibold' : 'text-slate-500'}`}
-              >
-                Admin
-              </button>
-            )}
+        <nav className="p-4 space-y-1 flex-1 relative">
+          <NavItem to="/" icon="⏱️" label="Dashboard" />
+          <NavItem to="/zeiten" icon="📅" label="Kalender & Zeiten" />
+          <NavItem to="/abwesenheiten" icon="🧭" label="Abwesenheiten" />
+          {auth.hasRole('lead', 'hr', 'admin') && <NavItem to="/mitarbeitende" icon="👥" label="Mitarbeitende" />}
+          {auth.hasRole('hr', 'admin') && <NavItem to="/berichte" icon="📊" label="Berichte" />}
+        </nav>
+        <div className="p-4 border-t border-white/10 bg-white/5 backdrop-blur relative">
+          <div className="flex items-center gap-3">
+            <div className="h-11 w-11 rounded-full bg-white/20 flex items-center justify-center text-lg font-bold">
+              {auth.user?.name?.[0] ?? '?'}
+            </div>
+            <div className="flex-1">
+              <p className="text-xs uppercase text-sky-200">{auth.user?.role ?? 'User'}</p>
+              <p className="font-semibold leading-tight">{auth.user?.name}</p>
+              <p className="text-xs text-sky-200 truncate">{auth.user?.email}</p>
+            </div>
           </div>
-          <button className="text-sm text-rose-600" onClick={logout}>
-            Logout
+          <button
+            onClick={auth.logout}
+            className="mt-3 w-full bg-white text-sky-900 rounded-lg font-semibold py-2 shadow hover:bg-slate-100"
+          >
+            Sicher abmelden
           </button>
         </div>
-      </header>
-      {view === 'dashboard' && (
-        <div className="space-y-4">
-          <ActionsCard />
-          <BookingList />
-          <VacationSummaryCard />
-        </div>
-      )}
-      {view === 'settings' && <SettingsPanel />}
-      {view === 'admin' && user?.role === 'admin' && <AdminTable />}
+      </aside>
+      <div className="flex-1 flex flex-col">
+        <header className="border-b bg-white/80 backdrop-blur sticky top-0 z-10 shadow-sm">
+          <div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
+            <div>
+              <p className="text-[11px] uppercase tracking-[0.2em] text-slate-500">timeCard 10 inspiriert</p>
+              <p className="text-xl font-bold">Cockpit & Auswertungen</p>
+            </div>
+            <div className="flex items-center gap-3">
+              <span className="badge bg-emerald-100 text-emerald-700">{auth.user?.role ?? 'User'}</span>
+              <span className="badge bg-slate-200 text-slate-800">{auth.user?.email}</span>
+            </div>
+          </div>
+        </header>
+        <main className="max-w-6xl mx-auto px-6 py-8 space-y-5 w-full">{children}</main>
+      </div>
     </div>
   );
 }
 
 export default function App() {
-  const auth = useAuth();
-
-  if (!auth.user) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100">
-        <LoginCard onSubmit={auth.login} />
-      </div>
-    );
-  }
-
+  const { user } = useAuth();
   return (
-    <div className="min-h-screen bg-slate-100">
-      <Dashboard auth={auth} />
-    </div>
+    <Routes>
+      <Route path="/login" element={<LoginPage />} />
+      <Route
+        path="/*"
+        element={
+          <Protected>
+            <Shell>
+              <Routes>
+                <Route path="/" element={<DashboardPage />} />
+                <Route path="/zeiten" element={<TimesPage />} />
+                <Route path="/abwesenheiten" element={<AbsencePage />} />
+                <Route path="/mitarbeitende" element={<EmployeesPage />} />
+                <Route path="/berichte" element={<ReportsPage />} />
+              </Routes>
+            </Shell>
+          </Protected>
+        }
+      />
+      <Route path="*" element={<Navigate to={user ? '/' : '/login'} replace />} />
+    </Routes>
   );
 }
