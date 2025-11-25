@@ -7,6 +7,7 @@ import type { User, Booking, Absence, WorkScheduleEntry } from '../types';
 
 const router = Router();
 const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
+const normalizeEmail = (email: string) => email.trim().toLowerCase();
 
 const ensureSettingsRow = (userId: number) => {
   db.prepare('INSERT OR IGNORE INTO user_settings (user_id) VALUES (?)').run(userId);
@@ -401,13 +402,14 @@ router.post('/', (req, res) => {
     return res.status(400).json({ errors: parsed.error.format() });
   }
   const { name, email, password, role, vacationAllowance, ...profile } = parsed.data;
-  const existing = db.prepare('SELECT id FROM users WHERE email = ?').get(email) as { id: number } | undefined;
+  const normalizedEmail = normalizeEmail(email);
+  const existing = db.prepare('SELECT id FROM users WHERE email = ?').get(normalizedEmail) as { id: number } | undefined;
   if (existing) {
     return res.status(409).json({ message: 'E-Mail bereits vorhanden' });
   }
   const passwordHash = bcrypt.hashSync(password, 10);
   const stmt = db.prepare('INSERT INTO users (name, email, password_hash, role, active) VALUES (?, ?, ?, ?, 1)');
-  const result = stmt.run(name, email, passwordHash, role);
+  const result = stmt.run(name, normalizedEmail, passwordHash, role);
   const createdUserId = Number(result.lastInsertRowid);
   db.prepare('INSERT INTO user_settings (user_id, vacation_allowance) VALUES (?, ?)').run(
     createdUserId,
@@ -550,15 +552,16 @@ router.patch('/:id', (req, res) => {
   if (!parsed.success) {
     return res.status(400).json({ errors: parsed.error.format() });
   }
+  const normalizedEmail = normalizeEmail(parsed.data.email);
   const duplicate = db
     .prepare('SELECT id FROM users WHERE email = ? AND id != ?')
-    .get(parsed.data.email, userId) as { id: number } | undefined;
+    .get(normalizedEmail, userId) as { id: number } | undefined;
   if (duplicate) {
     return res.status(409).json({ message: 'E-Mail ist bereits vergeben' });
   }
   const result = db
     .prepare('UPDATE users SET name = ?, email = ?, role = ? WHERE id = ?')
-    .run(parsed.data.name, parsed.data.email, parsed.data.role, userId);
+    .run(parsed.data.name, normalizedEmail, parsed.data.role, userId);
   if (result.changes === 0) {
     return res.status(404).json({ message: 'Nutzer nicht gefunden' });
   }

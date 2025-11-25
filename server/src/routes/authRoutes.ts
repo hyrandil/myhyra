@@ -15,22 +15,25 @@ const registerSchema = z.object({
   role: z.enum(['employee', 'lead', 'hr', 'admin']).optional().default('employee'),
 });
 
+const normalizeEmail = (email: string) => email.trim().toLowerCase();
+
 router.post('/register', authenticate, authorize(['admin', 'hr']), (req: AuthRequest, res) => {
   const parsed = registerSchema.safeParse(req.body);
   if (!parsed.success) {
     return res.status(400).json({ errors: parsed.error.format() });
   }
   const { name, email, password, role } = parsed.data;
-  const existing = db.prepare('SELECT id FROM users WHERE email = ?').get(email) as { id: number } | undefined;
+  const normalizedEmail = normalizeEmail(email);
+  const existing = db.prepare('SELECT id FROM users WHERE email = ?').get(normalizedEmail) as { id: number } | undefined;
   if (existing) {
     return res.status(409).json({ message: 'E-Mail bereits vorhanden' });
   }
   const passwordHash = bcrypt.hashSync(password, 10);
   const stmt = db.prepare('INSERT INTO users (name, email, password_hash, role, active) VALUES (?, ?, ?, ?, 1)');
-  const result = stmt.run(name, email, passwordHash, role);
+  const result = stmt.run(name, normalizedEmail, passwordHash, role);
   db.prepare('INSERT INTO user_settings (user_id) VALUES (?)').run(Number(result.lastInsertRowid));
   db.prepare('INSERT OR IGNORE INTO user_profiles (user_id) VALUES (?)').run(Number(result.lastInsertRowid));
-  res.json({ id: result.lastInsertRowid, name, email, role });
+  res.json({ id: result.lastInsertRowid, name, email: normalizedEmail, role });
 });
 
 const loginSchema = z.object({ email: z.string().email(), password: z.string().min(6) });
@@ -41,7 +44,8 @@ router.post('/login', (req, res) => {
     return res.status(400).json({ errors: parsed.error.format() });
   }
   const { email, password } = parsed.data;
-  const user = db.prepare('SELECT * FROM users WHERE email = ?').get(email) as User | undefined;
+  const normalizedEmail = normalizeEmail(email);
+  const user = db.prepare('SELECT * FROM users WHERE email = ?').get(normalizedEmail) as User | undefined;
   if (!user) {
     return res.status(401).json({ message: 'Ungültige Zugangsdaten' });
   }

@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { z } from 'zod';
-import { authorize } from '../auth';
+import { authenticate, authorize } from '../auth';
 import db from '../db';
 
 const router = Router();
@@ -15,7 +15,7 @@ const memberSchema = z.object({
   role: z.enum(['member', 'lead', 'hr']).default('member'),
 });
 
-router.use(authorize(['admin', 'hr']));
+router.use(authenticate, authorize(['admin', 'hr']));
 
 router.get('/', (_req, res) => {
   const departments = db
@@ -36,11 +36,18 @@ router.post('/', (req, res) => {
   if (!parsed.success) {
     return res.status(400).json({ errors: parsed.error.format() });
   }
-  const result = db.prepare('INSERT INTO departments (name, description) VALUES (?, ?)').run(
-    parsed.data.name,
-    parsed.data.description ?? null
-  );
-  res.status(201).json({ id: Number(result.lastInsertRowid), ...parsed.data });
+  try {
+    const result = db.prepare('INSERT INTO departments (name, description) VALUES (?, ?)').run(
+      parsed.data.name.trim(),
+      parsed.data.description ?? null
+    );
+    res.status(201).json({ id: Number(result.lastInsertRowid), ...parsed.data });
+  } catch (error: any) {
+    if (String(error?.message).includes('UNIQUE')) {
+      return res.status(409).json({ message: 'Abteilung existiert bereits' });
+    }
+    return res.status(500).json({ message: 'Anlegen fehlgeschlagen' });
+  }
 });
 
 router.post('/:id/members', (req, res) => {

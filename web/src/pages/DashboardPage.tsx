@@ -25,35 +25,33 @@ export function DashboardPage() {
 
   return (
     <div className="space-y-4">
-      <div className="card-ghost p-6 bg-gradient-to-r from-sky-600 to-blue-700 text-white shadow-lg">
-        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+      <div className="card p-5 flex flex-col gap-4">
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
           <div>
-            <p className="text-sm uppercase tracking-[0.25em] text-sky-100">Live Stempeln</p>
-            <h1 className="text-3xl font-bold">Zentrale Stempeluhr</h1>
-            <p className="text-sky-100 mt-1">
-              Status: {isOnBreak ? 'In Pause' : isWorking ? 'Anwesend' : 'Abgemeldet'}
-            </p>
+            <p className="text-xs uppercase text-slate-500">Zentrale Stempeluhr</p>
+            <h1 className="text-2xl font-semibold text-slate-900">Status: {isOnBreak ? 'Pause' : isWorking ? 'Anwesend' : 'Abgemeldet'}</h1>
+            <p className="text-sm text-slate-600">Letzte Aktion: {last ? labels[last.type] : '—'}</p>
           </div>
-          <div className="flex items-center gap-6">
+          <div className="flex flex-col md:flex-row gap-3 items-stretch md:items-center">
             <button
-              className={`rounded-full h-28 w-28 text-lg font-bold shadow-lg ring-4 ring-white/40 transition ${
+              className={`w-full md:w-40 h-14 rounded-lg font-semibold text-white shadow transition ${
                 mainAction === 'CLOCK_IN' ? 'bg-emerald-500 hover:bg-emerald-600' : 'bg-rose-500 hover:bg-rose-600'
-              } disabled:opacity-50`}
+              } disabled:opacity-60`}
               disabled={mutate.isPending}
               onClick={() => mutate.mutate(mainAction)}
             >
               {mainAction === 'CLOCK_IN' ? 'Kommen' : 'Gehen'}
             </button>
-            <div className="flex flex-col gap-2 w-48">
+            <div className="flex gap-2">
               <button
-                className="btn-ghost bg-white/10 text-white border border-white/20 disabled:opacity-40"
+                className="w-full md:w-36 h-14 rounded-lg border border-slate-200 text-slate-800 font-semibold disabled:opacity-40"
                 disabled={mutate.isPending || isOnBreak || !isWorking}
                 onClick={() => mutate.mutate('BREAK_START')}
               >
                 Pause starten
               </button>
               <button
-                className="btn-ghost bg-white/10 text-white border border-white/20 disabled:opacity-40"
+                className="w-full md:w-36 h-14 rounded-lg border border-slate-200 text-slate-800 font-semibold disabled:opacity-40"
                 disabled={mutate.isPending || !isOnBreak}
                 onClick={() => mutate.mutate('BREAK_END')}
               >
@@ -61,19 +59,6 @@ export function DashboardPage() {
               </button>
             </div>
           </div>
-        </div>
-      </div>
-
-      <div className="grid gap-4 md:grid-cols-3">
-        <div className="card p-4">
-          <p className="text-xs uppercase text-slate-500">Aktueller Status</p>
-          <h3 className="text-xl font-semibold mt-1">{isOnBreak ? 'Pause' : isWorking ? 'Anwesend' : 'Abgemeldet'}</h3>
-          <p className="text-sm text-slate-500 mt-2">Letzte Aktion: {last ? labels[last.type] : '—'}</p>
-        </div>
-        <div className="card p-4">
-          <p className="text-xs uppercase text-slate-500">Quelle</p>
-          <h3 className="text-xl font-semibold mt-1">{last?.source ?? 'WEB'}</h3>
-          <p className="text-sm text-slate-500 mt-2">GPS {last?.lat && last?.lng ? 'erfasst' : 'nicht vorhanden'}</p>
         </div>
       </div>
 
