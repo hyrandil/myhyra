@@ -89,7 +89,7 @@ export function EmployeesPage() {
       <div className="card p-4 flex items-center justify-between">
         <div>
           <p className="text-xs uppercase text-slate-500">Personalverwaltung</p>
-          <h2 className="text-2xl font-semibold">Mitarbeitende</h2>
+          <h2 className="text-2xl font-semibold">Team</h2>
           <p className="text-sm text-slate-500">Suche nach Name/Personalnummer und lege neue Accounts an</p>
         </div>
         <form className="flex gap-2" onSubmit={onSearch}>
@@ -120,7 +120,7 @@ export function EmployeesPage() {
             ))}
           </select>
           <input name="location" placeholder="Standort" className="input" />
-          <input name="trackingStartDate" placeholder="Erfassungsbeginn (YYYY-MM-DD)" className="input" />
+          <input name="trackingStartDate" type="date" placeholder="Erfassungsbeginn" className="input" />
           <button className="btn-primary md:col-span-3" type="submit" disabled={createMutation.isPending}>
             Speichern
           </button>
@@ -130,7 +130,7 @@ export function EmployeesPage() {
       <div className="grid md:grid-cols-3 gap-4">
         <div className="card p-4 md:col-span-2">
           <div className="flex justify-between items-center mb-2">
-            <h3 className="font-semibold">Mitarbeitendenübersicht</h3>
+            <h3 className="font-semibold">Teamübersicht</h3>
             <span className="text-xs text-slate-500">{(data ?? []).length} Personen</span>
           </div>
           <div className="overflow-auto">
@@ -189,7 +189,7 @@ export function EmployeesPage() {
                 ))}
               </tbody>
             </table>
-            {(data ?? []).length === 0 && <p className="text-sm text-slate-500 mt-2">Keine Mitarbeitenden angelegt.</p>}
+            {(data ?? []).length === 0 && <p className="text-sm text-slate-500 mt-2">Keine Personen angelegt.</p>}
           </div>
         </div>
 
@@ -262,6 +262,7 @@ export function EmployeesPage() {
               <input
                 className="input"
                 value={selected.trackingStartDate ?? ''}
+                type="date"
                 placeholder="Erfassungsbeginn"
                 onChange={(e) => setSelected({ ...selected, trackingStartDate: e.target.value })}
               />

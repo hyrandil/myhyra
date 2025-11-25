@@ -5,6 +5,7 @@ import { TimesPage } from './pages/TimesPage';
 import { AbsencePage } from './pages/AbsencePage';
 import { EmployeesPage } from './pages/EmployeesPage';
 import { ReportsPage } from './pages/ReportsPage';
+import { OverviewCalendarPage } from './pages/OverviewCalendarPage';
 import { useAuth } from './AuthProvider';
 
 function Protected({ children }: { children: React.ReactNode }) {
@@ -41,13 +42,13 @@ function Shell({ children }: { children: React.ReactNode }) {
         <div className="p-6 border-b border-white/10 relative">
           <p className="text-[11px] uppercase tracking-[0.35em] text-sky-200">Zeiterfassung</p>
           <p className="text-3xl font-black">ZeitPilot</p>
-          <p className="text-sky-200 text-sm mt-1">Kiosk-Layout für schnelles Stempeln</p>
         </div>
         <nav className="p-4 space-y-1 flex-1 relative">
           <NavItem to="/" icon="⏱️" label="Dashboard" />
           <NavItem to="/zeiten" icon="📅" label="Kalender & Zeiten" />
+          <NavItem to="/uebersicht" icon="🗂️" label="Übersichtkalender" />
           <NavItem to="/abwesenheiten" icon="🧭" label="Abwesenheiten" />
-          {auth.hasRole('lead', 'hr', 'admin') && <NavItem to="/mitarbeitende" icon="👥" label="Mitarbeitende" />}
+          {auth.hasRole('lead', 'hr', 'admin') && <NavItem to="/mitarbeitende" icon="👥" label="Team" />}
           {auth.hasRole('hr', 'admin') && <NavItem to="/berichte" icon="📊" label="Berichte" />}
         </nav>
         <div className="p-4 border-t border-white/10 bg-white/5 backdrop-blur relative">
@@ -101,6 +102,7 @@ export default function App() {
               <Routes>
                 <Route path="/" element={<DashboardPage />} />
                 <Route path="/zeiten" element={<TimesPage />} />
+                <Route path="/uebersicht" element={<OverviewCalendarPage />} />
                 <Route path="/abwesenheiten" element={<AbsencePage />} />
                 <Route path="/mitarbeitende" element={<EmployeesPage />} />
                 <Route path="/berichte" element={<ReportsPage />} />

@@ -174,18 +174,27 @@ export function TimesPage() {
 
       <div className="space-y-4">
         <div className="card p-4">
-          <div className="flex items-center justify-between mb-2">
-            <h3 className="text-lg font-semibold">Kalender</h3>
-            <div className="flex gap-2 text-xs text-slate-600 items-center">
-              <span className="h-2 w-2 rounded-full bg-slate-900"></span> korrekt
-              <span className="h-2 w-2 rounded-full bg-rose-600"></span> offen/krank
-              <span className="h-2 w-2 rounded-full bg-amber-500"></span> Urlaub
+            <div className="flex items-center justify-between mb-2">
+              <h3 className="text-lg font-semibold">Kalender</h3>
+              <div className="flex gap-3 text-xs text-slate-600 items-center">
+                <span className="flex items-center gap-1">
+                  <span className="h-2 w-2 rounded-full bg-slate-900"></span> korrekt
+                </span>
+                <span className="flex items-center gap-1">
+                  <span className="h-2 w-2 rounded-full bg-rose-600"></span> offen
+                </span>
+                <span className="flex items-center gap-1">
+                  <span className="h-2 w-2 rounded-full bg-amber-500"></span> Urlaub
+                </span>
+                <span className="flex items-center gap-1">
+                  <span className="h-2 w-2 rounded-full bg-slate-500"></span> Nicht im Haus
+                </span>
+              </div>
             </div>
-          </div>
           {isLoading ? <p className="text-sm text-slate-500">Lade…</p> : <Calendar month={month} days={days} />}
         </div>
         <div className="card p-4 space-y-3">
-          <h3 className="text-lg font-semibold">Monatsübersicht (ausgewählter Mitarbeitender)</h3>
+          <h3 className="text-lg font-semibold">Monatsübersicht (Auswahl)</h3>
           <div className="grid grid-cols-2 gap-2 text-sm md:grid-cols-3">
             <div className="p-3 rounded-lg bg-slate-50 border border-slate-200">
               <p className="text-xs uppercase text-slate-500">Arbeitszeit</p>

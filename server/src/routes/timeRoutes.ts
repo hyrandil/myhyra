@@ -137,8 +137,8 @@ function buildDailySummary(userId: number, month?: string) {
   });
 
   const statusForDay = (entries: TimeEntry[], abs: Absence[], pending: boolean): string => {
-    if (abs.some((a) => a.type === 'sick')) return 'sick';
     if (abs.some((a) => a.type === 'vacation')) return 'vacation';
+    if (abs.length > 0) return 'away';
     if (pending) return 'pending';
     if (entries.length === 0) return 'empty';
     const sorted = [...entries].sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
@@ -182,7 +182,7 @@ function buildDailySummary(userId: number, month?: string) {
     const status = inactiveBeforeTracking
       ? 'inactive'
       : statusForDay(entries, absencesForDay, hasPending);
-    const absenceLabels: string[] = absencesForDay.map((a) => a.type);
+    const absenceLabels: string[] = absencesForDay.map((a) => (a.type === 'vacation' ? 'Urlaub' : 'Nicht im Haus'));
     if (hasPending) {
       absenceLabels.push('pending');
     }

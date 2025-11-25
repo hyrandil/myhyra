@@ -209,7 +209,7 @@ router.patch('/requests/:id/status', (req: AuthRequest, res) => {
   if (!requestRow) {
     return res.status(404).json({ message: 'Antrag nicht gefunden' });
   }
-  if (req.user!.role !== 'admin') {
+  if (req.user!.role !== 'admin' && req.user!.role !== 'hr') {
     const allowedDepartments = managedDepartments(req.user!.id);
     if (allowedDepartments.length === 0) {
       return res.status(403).json({ message: 'Keine Berechtigung für diese Abteilung' });
