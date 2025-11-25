@@ -227,6 +227,11 @@ router.patch('/requests/:id/status', (req: AuthRequest, res) => {
   }
   db.prepare('UPDATE absence_requests SET status = ? WHERE id = ?').run(parsed.data, id);
   if (parsed.data === 'approved') {
+    db.prepare('DELETE FROM absences WHERE user_id = ? AND NOT (end_date < ? OR start_date > ?)').run(
+      requestRow.user_id,
+      requestRow.start_date,
+      requestRow.end_date
+    );
     db.prepare(
       "INSERT INTO absences (user_id, start_date, end_date, type, duration) VALUES (?, ?, ?, ?, 'full')"
     ).run(requestRow.user_id, requestRow.start_date, requestRow.end_date, requestRow.type);
@@ -241,27 +246,6 @@ function ensureManageable(req: AuthRequest, res: any, targetUserId: number) {
   res.status(403).json({ message: 'Keine Berechtigung für diesen Mitarbeitenden' });
   return false;
 }
-
-router.post('/user/:userId', (req: AuthRequest, res) => {
-  const userId = Number(req.params.userId);
-  if (Number.isNaN(userId)) {
-    return res.status(400).json({ message: 'Ungültige Nutzer-ID' });
-  }
-  if (!ensureManageable(req, res, userId)) return;
-  if (!userExists(userId)) {
-    return res.status(404).json({ message: 'Nutzer nicht gefunden' });
-  }
-  const parsed = absenceSchema.safeParse(req.body);
-  if (!parsed.success) {
-    return res.status(400).json({ errors: parsed.error.format() });
-  }
-  const { start_date, end_date, type, duration, note } = parsed.data;
-  const stmt = db.prepare(
-    "INSERT INTO absences (user_id, start_date, end_date, type, duration, note) VALUES (?, ?, ?, ?, ?, ?)"
-  );
-  const result = stmt.run(userId, start_date, end_date, type, duration, note ?? null);
-  res.status(201).json({ id: result.lastInsertRowid });
-});
 
 router.get('/summary', (_req, res) => {
   const users = db
@@ -334,6 +318,25 @@ router.post('/user/:userId', (req: AuthRequest, res) => {
   const result = stmt.run(userId, start_date, end_date, start_date, type, duration, note ?? null);
   const created = db.prepare('SELECT * FROM absences WHERE id = ?').get(result.lastInsertRowid) as Absence;
   res.status(201).json(enrichAbsence({ ...created, start_date, end_date }, schedule));
+});
+
+router.delete('/user/:userId', (req: AuthRequest, res) => {
+  const userId = Number(req.params.userId);
+  if (Number.isNaN(userId)) {
+    return res.status(400).json({ message: 'Ungültige Nutzer-ID' });
+  }
+  if (!ensureManageable(req, res, userId)) return;
+  const parsed = absenceSchema.pick({ start_date: true, end_date: true }).safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ errors: parsed.error.format() });
+  }
+  const { start_date, end_date } = parsed.data;
+  db.prepare('DELETE FROM absences WHERE user_id = ? AND NOT (end_date < ? OR start_date > ?)').run(
+    userId,
+    start_date,
+    end_date
+  );
+  res.json({ message: 'Abwesenheit entfernt' });
 });
 
 router.delete('/:id', (req: AuthRequest, res) => {

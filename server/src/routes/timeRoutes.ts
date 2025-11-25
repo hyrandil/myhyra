@@ -61,7 +61,7 @@ function ensureManageable(req: AuthRequest, res: any, targetUserId: number) {
   return false;
 }
 
-function buildDailySummary(userId: number, month?: string) {
+function buildDailySummary(userId: number, month?: string, maskAbsences = false) {
   const now = month ? new Date(`${month}-01T00:00:00Z`) : new Date();
   const start = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
   const end = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 0));
@@ -182,7 +182,13 @@ function buildDailySummary(userId: number, month?: string) {
     const status = inactiveBeforeTracking
       ? 'inactive'
       : statusForDay(entries, absencesForDay, hasPending);
-    const absenceLabels: string[] = absencesForDay.map((a) => (a.type === 'vacation' ? 'Urlaub' : 'Nicht im Haus'));
+    const absenceLabels: string[] = absencesForDay.map((a) => {
+      if (a.type === 'vacation') return 'Urlaub';
+      if (maskAbsences) return 'Nicht im Haus';
+      if (a.type === 'sick') return 'Krank';
+      if (a.type === 'remote') return 'Remote';
+      return 'Sonstige';
+    });
     if (hasPending) {
       absenceLabels.push('pending');
     }
@@ -269,7 +275,7 @@ router.post('/break-end', (req: AuthRequest, res) => {
 
 router.get('/me/daily', (req: AuthRequest, res) => {
   const { month } = req.query as { month?: string };
-  res.json(buildDailySummary(req.user!.id, month));
+  res.json(buildDailySummary(req.user!.id, month, true));
 });
 
 router.get('/user/:userId/daily', authorize(['admin', 'hr', 'lead']), (req: AuthRequest, res) => {
@@ -287,7 +293,7 @@ router.get('/user/:userId/daily', authorize(['admin', 'hr', 'lead']), (req: Auth
 });
 
 router.get('/overview', (req: AuthRequest, res) => {
-  const { month, department } = req.query as { month?: string; department?: string };
+  const { month, department, userId } = req.query as { month?: string; department?: string; userId?: string };
   const today = new Date();
   const monthValue = month || `${today.getUTCFullYear()}-${String(today.getUTCMonth() + 1).padStart(2, '0')}`;
   const base = new Date(`${monthValue}-01T00:00:00Z`);
@@ -297,11 +303,21 @@ router.get('/overview', (req: AuthRequest, res) => {
   const deptFilter = department?.trim();
   const userRows = deptFilter
     ? (db
-        .prepare('SELECT user_id FROM user_profiles WHERE department = ?')
-        .all(deptFilter) as { user_id: number }[])
-    : (db.prepare('SELECT id FROM users').all() as { id: number }[]);
+        .prepare(
+          'SELECT u.id, u.name, up.department FROM users u LEFT JOIN user_profiles up ON up.user_id = u.id WHERE up.department = ?'
+        )
+        .all(deptFilter) as { id: number; name: string; department?: string | null }[])
+    : (db
+        .prepare('SELECT u.id, u.name, up.department FROM users u LEFT JOIN user_profiles up ON up.user_id = u.id')
+        .all() as { id: number; name: string; department?: string | null }[]);
 
-  const userIds = userRows.map((row: any) => row.user_id ?? row.id);
+  const filteredByUser = userId ? userRows.filter((row) => row.id === Number(userId)) : userRows;
+  const selectedUsers = filteredByUser.length > 0 ? filteredByUser : userRows;
+
+  const userMap = new Map<number, { name: string; department?: string | null }>();
+  selectedUsers.forEach((row) => userMap.set(row.id, { name: row.name, department: row.department ?? null }));
+
+  const userIds = selectedUsers.map((row: any) => row.id);
   if (userIds.length === 0) return res.json({ month: monthValue, days: {} });
 
   const placeholders = userIds.map(() => '?').join(',');
@@ -321,13 +337,25 @@ router.get('/overview', (req: AuthRequest, res) => {
 
   const days: Record<string, any> = {};
 
-  const addRange = (startDate: string, endDate: string, type: string) => {
+  const addRange = (startDate: string, endDate: string, type: string, user: { id: number; name: string; department?: string | null }) => {
     const cursor = new Date(`${startDate}T00:00:00Z`);
     const endValue = new Date(`${endDate}T00:00:00Z`);
     while (cursor.getTime() <= endValue.getTime()) {
       const key = cursor.toISOString().slice(0, 10);
       if (!days[key]) {
-        days[key] = { date: key, planned: 0, worked: 0, delta: 0, absences: [], status: 'ok', pending: false };
+        days[key] = {
+          date: key,
+          planned: 0,
+          worked: 0,
+          delta: 0,
+          absences: [],
+          status: 'ok',
+          pending: false,
+          users: [],
+        };
+      }
+      if (!days[key].users.some((u: any) => u.id === user.id)) {
+        days[key].users.push(user);
       }
       if (type === 'vacation') {
         days[key].status = 'vacation';
@@ -341,7 +369,13 @@ router.get('/overview', (req: AuthRequest, res) => {
   };
 
   [...manualAbsences, ...approvedRequests].forEach((absence) => {
-    addRange(absence.start_date, absence.end_date, absence.type);
+    const meta = userMap.get((absence as any).user_id);
+    if (!meta) return;
+    addRange(absence.start_date, absence.end_date, absence.type, {
+      id: (absence as any).user_id,
+      name: meta.name,
+      department: meta.department ?? null,
+    });
   });
 
   res.json({ month: monthValue, days });

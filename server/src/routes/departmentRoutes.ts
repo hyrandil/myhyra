@@ -15,7 +15,14 @@ const memberSchema = z.object({
   role: z.enum(['member', 'lead', 'hr']).default('member'),
 });
 
-router.use(authenticate, authorize(['admin', 'hr']));
+router.use(authenticate);
+
+router.get('/public', (_req, res) => {
+  const departments = db.prepare('SELECT id, name, description FROM departments ORDER BY name ASC').all();
+  res.json(departments);
+});
+
+router.use(authorize(['admin', 'hr']));
 
 router.get('/', (_req, res) => {
   const departments = db

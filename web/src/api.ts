@@ -30,6 +30,11 @@ export async function fetchEmployees(search?: string) {
   return res.data;
 }
 
+export async function fetchPublicDepartments() {
+  const res = await api.get<{ id: number; name: string; description?: string }[]>('/departments/public');
+  return res.data;
+}
+
 export async function createEmployee(payload: Partial<Employee> & { email: string; name: string; password: string; role: Employee['role'] }) {
   const res = await api.post('/users', {
     name: payload.name,
@@ -150,9 +155,9 @@ export async function fetchDailyForUser(userId: number, month?: string) {
   return res.data;
 }
 
-export async function fetchDailyOverview(month?: string, department?: string) {
+export async function fetchDailyOverview(month?: string, department?: string, userId?: number) {
   const res = await api.get<{ month: string; days: Record<string, DailySummary> }>('/time/overview', {
-    params: { month, department },
+    params: { month, department, userId },
   });
   return res.data;
 }
@@ -182,6 +187,11 @@ export async function createAbsenceForUser(
   payload: { start_date: string; end_date: string; type: string; duration?: 'full' | 'half'; note?: string }
 ) {
   const res = await api.post(`/absences/user/${userId}`, payload);
+  return res.data;
+}
+
+export async function deleteAbsenceForUser(userId: number, start_date: string, end_date: string) {
+  const res = await api.delete(`/absences/user/${userId}`, { data: { start_date, end_date } });
   return res.data;
 }
 

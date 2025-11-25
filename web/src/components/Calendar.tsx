@@ -144,6 +144,11 @@ export function Calendar({ month, days, selectedDate, onSelect, maskAbsences, hi
                         : selectedSummary.absences.join(', ')}
                     </p>
                   )}
+                  {selectedSummary.users && selectedSummary.users.length > 0 && (
+                    <p>
+                      Betroffen: {selectedSummary.users.map((u) => u.name).join(', ')}
+                    </p>
+                  )}
                 </div>
               ) : (
                 <p className="text-sm text-slate-500">Keine Daten.</p>

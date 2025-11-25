@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Calendar } from '../components/Calendar';
-import { fetchDaily, fetchDailyForUser, fetchDailyOverview, fetchEmployees } from '../api';
+import { fetchDaily, fetchDailyForUser, fetchDailyOverview, fetchEmployees, fetchPublicDepartments } from '../api';
 import { useAuth } from '../AuthProvider';
 import { DailySummary, Employee } from '../types';
 
@@ -33,15 +33,18 @@ export function OverviewCalendarPage() {
   const { data: employees } = useQuery({
     queryKey: ['employees', 'overview'],
     queryFn: () => fetchEmployees(),
-    enabled: enableManagement,
+  });
+
+  const { data: departments } = useQuery({
+    queryKey: ['departments', 'public'],
+    queryFn: fetchPublicDepartments,
   });
 
   const visibleEmployees: Employee[] = useMemo(() => {
-    if (!enableManagement && auth.user) return [{ ...auth.user, active: true } as Employee];
     const list = employees ?? [];
     if (!departmentFilter) return list;
     return list.filter((e) => (e.department || '').toLowerCase().includes(departmentFilter.toLowerCase()));
-  }, [auth.user, departmentFilter, enableManagement, employees]);
+  }, [departmentFilter, employees]);
 
   useEffect(() => {
     if (enableManagement && visibleEmployees.length > 0 && !selectedUser) {
@@ -53,7 +56,7 @@ export function OverviewCalendarPage() {
     queryKey: ['overview', month, selectedUser, departmentFilter, enableManagement ? 'managed' : 'self'],
     queryFn: () => {
       if (!enableManagement) {
-        return fetchDailyOverview(month, departmentFilter || undefined);
+        return fetchDailyOverview(month, departmentFilter || undefined, selectedUser || undefined);
       }
       if (selectedUser && selectedUser !== auth.user?.id) {
         return fetchDailyForUser(selectedUser, month);
@@ -116,19 +119,41 @@ export function OverviewCalendarPage() {
         </div>
       ) : (
         <div className="card p-4 grid gap-3 md:grid-cols-3 items-end">
-          <div className="space-y-2 md:col-span-2">
-            <label className="text-sm text-slate-600">Ansicht</label>
+          <div className="space-y-2">
+            <label className="text-sm text-slate-600">Abteilung</label>
             <select
               className="input"
               value={departmentFilter}
               onChange={(e) => setDepartmentFilter(e.target.value)}
             >
               <option value="">Alle Mitarbeitenden</option>
-              {auth.user?.department && <option value={auth.user.department}>Abteilung: {auth.user.department}</option>}
+              {(departments ?? []).map((dept) => (
+                <option key={dept.id} value={dept.name}>
+                  {dept.name}
+                </option>
+              ))}
             </select>
           </div>
-          <p className="text-sm text-slate-500">
-            Urlaubsübersicht ohne Details. Andere Abwesenheiten erscheinen gesammelt als "Nicht im Haus".
+          <div className="space-y-2 md:col-span-2">
+            <label className="text-sm text-slate-600">Person</label>
+            <select
+              className="input"
+              value={selectedUser ?? ''}
+              onChange={(e) => setSelectedUser(e.target.value ? Number(e.target.value) : null)}
+            >
+              <option value="">Alle</option>
+              {visibleEmployees
+                .filter((emp) => !departmentFilter || (emp.department || '').toLowerCase() === departmentFilter.toLowerCase())
+                .map((emp) => (
+                  <option key={emp.id} value={emp.id}>
+                    {emp.name} ({emp.department || 'ohne Abteilung'})
+                  </option>
+                ))}
+            </select>
+          </div>
+          <p className="text-sm text-slate-500 md:col-span-3">
+            Urlaubsübersicht ohne Details. Andere Abwesenheiten erscheinen gesammelt als "Nicht im Haus". Auswahl zeigt, welche
+            Personen betroffen sind.
           </p>
         </div>
       )}

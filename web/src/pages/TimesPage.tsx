@@ -4,6 +4,7 @@ import { Calendar } from '../components/Calendar';
 import {
   createAbsenceForUser,
   createManualTimeEntry,
+  deleteAbsenceForUser,
   fetchDaily,
   fetchDailyForUser,
   fetchEmployees,
@@ -20,6 +21,8 @@ export function TimesPage() {
   });
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [manualTimestamp, setManualTimestamp] = useState('');
+  const [absenceStart, setAbsenceStart] = useState('');
+  const [absenceEnd, setAbsenceEnd] = useState('');
 
   useEffect(() => {
     if (!selectedDate) {
@@ -97,6 +100,8 @@ export function TimesPage() {
   useEffect(() => {
     if (selectedDate) {
       setManualTimestamp(`${selectedDate}T09:00`);
+      setAbsenceStart(selectedDate);
+      setAbsenceEnd(selectedDate);
     }
   }, [selectedDate]);
 
@@ -110,19 +115,28 @@ export function TimesPage() {
       type: 'CLOCK_IN' | 'CLOCK_OUT' | 'BREAK_START' | 'BREAK_END';
       location?: { lat?: number; lng?: number };
     }) => createManualTimeEntry(selectedUserId!, { timestamp, type, location }),
-    onSuccess: () =>
-      queryClient.invalidateQueries({
-        predicate: (q) => Array.isArray(q.queryKey) && q.queryKey[0] === 'daily' && q.queryKey.includes(selectedUserId),
-      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['daily'] });
+      queryClient.invalidateQueries({ queryKey: ['overview'] });
+    },
   });
 
   const manualAbsence = useMutation({
     mutationFn: ({ start_date, end_date, type, duration }: { start_date: string; end_date: string; type: string; duration: 'full' | 'half' }) =>
       createAbsenceForUser(selectedUserId!, { start_date, end_date, type, duration }),
-    onSuccess: () =>
-      queryClient.invalidateQueries({
-        predicate: (q) => Array.isArray(q.queryKey) && q.queryKey[0] === 'daily' && q.queryKey.includes(selectedUserId),
-      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['daily'] });
+      queryClient.invalidateQueries({ queryKey: ['overview'] });
+    },
+  });
+
+  const deleteAbsence = useMutation({
+    mutationFn: ({ start_date, end_date }: { start_date: string; end_date: string }) =>
+      deleteAbsenceForUser(selectedUserId!, start_date, end_date),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['daily'] });
+      queryClient.invalidateQueries({ queryKey: ['overview'] });
+    },
   });
 
   const onManualTime = (e: React.FormEvent<HTMLFormElement>) => {
@@ -293,8 +307,22 @@ export function TimesPage() {
             <h3 className="text-lg font-semibold">Abwesenheit eintragen</h3>
             <form className="space-y-2" onSubmit={onManualAbsence}>
               <div className="grid grid-cols-2 gap-2">
-                <input name="start_date" type="date" required className="input" defaultValue={selectedDate ?? ''} />
-                <input name="end_date" type="date" required className="input" defaultValue={selectedDate ?? ''} />
+                <input
+                  name="start_date"
+                  type="date"
+                  required
+                  className="input"
+                  value={absenceStart}
+                  onChange={(e) => setAbsenceStart(e.target.value)}
+                />
+                <input
+                  name="end_date"
+                  type="date"
+                  required
+                  className="input"
+                  value={absenceEnd}
+                  onChange={(e) => setAbsenceEnd(e.target.value)}
+                />
               </div>
               <select name="type" className="input w-full">
                 <option value="vacation">Urlaub</option>
@@ -315,6 +343,19 @@ export function TimesPage() {
                 Eintragen
               </button>
             </form>
+            {days[selectedDate ?? '']?.absences?.length ? (
+              <button
+                className="btn-ghost text-sm text-rose-600"
+                type="button"
+                onClick={() => {
+                  if (!selectedDate || !selectedUserId) return;
+                  deleteAbsence.mutate({ start_date: selectedDate, end_date: selectedDate });
+                }}
+                disabled={deleteAbsence.isPending}
+              >
+                Abwesenheit am ausgewählten Tag löschen
+              </button>
+            ) : null}
           </div>
         </div>
       )}

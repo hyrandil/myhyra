@@ -50,6 +50,7 @@ export interface DailySummary {
   absences: string[];
   status: string;
   pending?: boolean;
+  users?: { id: number; name: string; department?: string | null }[];
 }
 
 export interface AbsenceRequest {
