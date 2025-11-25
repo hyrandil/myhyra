@@ -9,7 +9,7 @@ import {
   fetchEmployees,
 } from '../api';
 import { useAuth } from '../AuthProvider';
-import { Employee } from '../types';
+import { DailySummary, Employee } from '../types';
 
 export function TimesPage() {
   const { user, hasRole } = useAuth();
@@ -18,8 +18,18 @@ export function TimesPage() {
     const now = new Date();
     return `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, '0')}`;
   });
-  const [targetUser, setTargetUser] = useState<number | null>(user?.id ?? null);
+  const [targetUser, setTargetUser] = useState<number | null>(() =>
+    hasRole('admin', 'hr', 'lead') ? null : user?.id ?? null
+  );
   const enableManagement = hasRole('admin', 'hr', 'lead');
+
+  const formatHours = (minutes: number) => {
+    const sign = minutes < 0 ? '-' : '';
+    const abs = Math.abs(minutes);
+    const hrs = Math.floor(abs / 60);
+    const mins = abs % 60;
+    return `${sign}${hrs}h ${String(mins).padStart(2, '0')}m`;
+  };
 
   const { data: employees } = useQuery({
     queryKey: ['employees', 'all'],
@@ -33,8 +43,8 @@ export function TimesPage() {
     }
   }, [enableManagement, employees, targetUser]);
 
-  const { data, isLoading } = useQuery({
-    queryKey: ['daily', month, targetUser],
+  const { data, isLoading } = useQuery<{ month: string; days: Record<string, DailySummary> }>({
+    queryKey: ['daily', month, targetUser, enableManagement ? 'manager' : 'self'],
     queryFn: () => {
       if (enableManagement && targetUser && targetUser !== user?.id) {
         return fetchDailyForUser(targetUser, month);
@@ -45,8 +55,14 @@ export function TimesPage() {
   });
   const days = data?.days ?? {};
 
+  const canEditTarget = useMemo(() => {
+    if (!enableManagement || !targetUser) return false;
+    if (hasRole('admin', 'hr')) return true;
+    return targetUser !== user?.id;
+  }, [enableManagement, hasRole, targetUser, user?.id]);
+
   const totals = useMemo(() => {
-    return Object.values(days).reduce(
+    return Object.values(days).reduce<{ worked: number; planned: number }>(
       (acc, d) => {
         acc.worked += d.worked;
         acc.planned += d.planned;
@@ -72,13 +88,13 @@ export function TimesPage() {
       type: 'CLOCK_IN' | 'CLOCK_OUT' | 'BREAK_START' | 'BREAK_END';
       location?: { lat?: number; lng?: number };
     }) => createManualTimeEntry(targetUser!, { timestamp, type, location }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['daily', month, targetUser] }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['daily'] }),
   });
 
   const manualAbsence = useMutation({
     mutationFn: ({ start_date, end_date, type, duration }: { start_date: string; end_date: string; type: string; duration: 'full' | 'half' }) =>
       createAbsenceForUser(targetUser!, { start_date, end_date, type, duration }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['daily', month, targetUser] }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['daily'] }),
   });
 
   const onManualTime = (e: React.FormEvent<HTMLFormElement>) => {
@@ -161,39 +177,35 @@ export function TimesPage() {
           {isLoading ? <p className="text-sm text-slate-500">Lade…</p> : <Calendar month={month} days={days} />}
         </div>
         <div className="card p-4 space-y-3">
-          <h3 className="text-lg font-semibold">Monatsübersicht</h3>
+          <h3 className="text-lg font-semibold">Monatsübersicht (ausgewählter Mitarbeitender)</h3>
           <div className="grid grid-cols-2 gap-2 text-sm md:grid-cols-3">
             <div className="p-3 rounded-lg bg-slate-50 border border-slate-200">
               <p className="text-xs uppercase text-slate-500">Arbeitszeit</p>
-              <p className="text-xl font-semibold">{totals.worked} Min</p>
+              <p className="text-xl font-semibold">{formatHours(totals.worked)}</p>
             </div>
             <div className="p-3 rounded-lg bg-slate-50 border border-slate-200">
               <p className="text-xs uppercase text-slate-500">Sollzeit</p>
-              <p className="text-xl font-semibold">{totals.planned} Min</p>
+              <p className="text-xl font-semibold">{formatHours(totals.planned)}</p>
             </div>
             <div className="p-3 rounded-lg bg-slate-50 border border-slate-200 md:col-span-1 col-span-2">
               <p className="text-xs uppercase text-slate-500">Delta</p>
-              <p className={`text-xl font-semibold ${totals.worked - totals.planned >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
-                {totals.worked - totals.planned} Min
+              <p
+                className={`text-xl font-semibold ${
+                  totals.worked - totals.planned >= 0 ? 'text-emerald-600' : 'text-rose-600'
+                }`}
+              >
+                {formatHours(totals.worked - totals.planned)}
               </p>
             </div>
           </div>
-          <div className="space-y-2 text-sm max-h-80 overflow-auto">
-            {Object.entries(days).map(([date, summary]) => (
-              <div key={date} className="flex justify-between border-b pb-1">
-                <span className="font-medium">{date}</span>
-                <span className={summary.delta >= 0 ? 'text-emerald-600' : 'text-rose-600'}>
-                  {summary.delta >= 0 ? '+' : ''}
-                  {summary.delta}m
-                </span>
-              </div>
-            ))}
-            {Object.keys(days).length === 0 && <p className="text-slate-500 text-sm">Keine Daten für diesen Monat.</p>}
-          </div>
+          <p className="text-sm text-slate-600">
+            Werte beziehen sich ausschließlich auf den ausgewählten Mitarbeitenden und werden automatisch neu geladen,
+            sobald eine andere Person gewählt wird.
+          </p>
         </div>
       </div>
 
-      {enableManagement && (
+      {enableManagement && canEditTarget && (
         <div className="grid md:grid-cols-2 gap-4">
           <div className="card p-4 space-y-3">
             <h3 className="text-lg font-semibold">Zeitnachtrag</h3>

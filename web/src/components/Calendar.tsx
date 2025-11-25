@@ -8,6 +8,14 @@ type CalendarProps = {
   days: Record<string, DailySummary>;
 };
 
+const formatHours = (minutes: number) => {
+  const sign = minutes < 0 ? '-' : '';
+  const abs = Math.abs(minutes);
+  const hrs = Math.floor(abs / 60);
+  const mins = abs % 60;
+  return `${sign}${hrs}h ${String(mins).padStart(2, '0')}m`;
+};
+
 function statusAccent(summary?: DailySummary) {
   if (!summary) return 'bg-slate-200';
   if (summary.status === 'sick') return 'bg-rose-500';
@@ -72,7 +80,7 @@ export function Calendar({ month, days }: CalendarProps) {
                 <span className="text-xs flex items-center gap-1">
                   <span className={`h-2 w-2 rounded-full ${statusAccent(cell.summary)}`}></span>
                   {cell.summary.delta >= 0 ? '+' : ''}
-                  {cell.summary.delta}m
+                  {formatHours(cell.summary.delta)}
                 </span>
               )}
             </div>
@@ -99,10 +107,10 @@ export function Calendar({ month, days }: CalendarProps) {
               {selectedSummary ? (
                 <div className="text-sm space-y-1">
                   <p>
-                    Arbeitszeit: {selectedSummary.worked} / {selectedSummary.planned} Min
+                    Arbeitszeit: {formatHours(selectedSummary.worked)} / {formatHours(selectedSummary.planned)}
                   </p>
                   <p className={selectedSummary.delta >= 0 ? 'text-emerald-700' : 'text-rose-700'}>
-                    Delta: {selectedSummary.delta} Min
+                    Delta: {formatHours(selectedSummary.delta)}
                   </p>
                   {selectedSummary.pending && <p className="text-amber-700">Antrag wartend</p>}
                   {selectedSummary.absences.length > 0 && (
