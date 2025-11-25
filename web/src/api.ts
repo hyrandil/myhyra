@@ -109,7 +109,10 @@ export async function fetchEntries() {
   return res.data;
 }
 
-export async function punch(type: 'CLOCK_IN' | 'CLOCK_OUT' | 'BREAK_START' | 'BREAK_END') {
+export async function punch(
+  type: 'CLOCK_IN' | 'CLOCK_OUT' | 'BREAK_START' | 'BREAK_END',
+  location?: { lat: number; lng: number }
+) {
   const endpoint =
     type === 'CLOCK_IN'
       ? '/time/clock-in'
@@ -118,7 +121,7 @@ export async function punch(type: 'CLOCK_IN' | 'CLOCK_OUT' | 'BREAK_START' | 'BR
         : type === 'BREAK_START'
           ? '/time/break-start'
           : '/time/break-end';
-  const res = await api.post(endpoint, { source: 'WEB' });
+  const res = await api.post(endpoint, { source: 'WEB', location });
   return res.data;
 }
 

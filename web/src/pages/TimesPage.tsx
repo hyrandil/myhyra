@@ -39,9 +39,10 @@ export function TimesPage() {
 
   useEffect(() => {
     if (enableManagement && employees && employees.length > 0 && !targetUser) {
-      setTargetUser(employees[0].id);
+      const firstOther = employees.find((emp) => emp.id !== user?.id) ?? employees[0];
+      setTargetUser(firstOther.id);
     }
-  }, [enableManagement, employees, targetUser]);
+  }, [enableManagement, employees, targetUser, user?.id]);
 
   const { data, isLoading } = useQuery<{ month: string; days: Record<string, DailySummary> }>({
     queryKey: ['daily', month, targetUser, enableManagement ? 'manager' : 'self'],
@@ -88,13 +89,19 @@ export function TimesPage() {
       type: 'CLOCK_IN' | 'CLOCK_OUT' | 'BREAK_START' | 'BREAK_END';
       location?: { lat?: number; lng?: number };
     }) => createManualTimeEntry(targetUser!, { timestamp, type, location }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['daily'] }),
+    onSuccess: () =>
+      queryClient.invalidateQueries({
+        predicate: (q) => Array.isArray(q.queryKey) && q.queryKey[0] === 'daily' && q.queryKey.includes(targetUser),
+      }),
   });
 
   const manualAbsence = useMutation({
     mutationFn: ({ start_date, end_date, type, duration }: { start_date: string; end_date: string; type: string; duration: 'full' | 'half' }) =>
       createAbsenceForUser(targetUser!, { start_date, end_date, type, duration }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['daily'] }),
+    onSuccess: () =>
+      queryClient.invalidateQueries({
+        predicate: (q) => Array.isArray(q.queryKey) && q.queryKey[0] === 'daily' && q.queryKey.includes(targetUser),
+      }),
   });
 
   const onManualTime = (e: React.FormEvent<HTMLFormElement>) => {

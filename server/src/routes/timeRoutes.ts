@@ -213,6 +213,9 @@ router.post('/clock-in', (req: AuthRequest, res) => {
   const parsedLocation = locationSchema.safeParse(req.body?.location ?? {});
   const source = sourceEnum.parse(req.body?.source ?? 'WEB');
   if (!parsedLocation.success) return res.status(400).json({ errors: parsedLocation.error.format() });
+  if (parsedLocation.data.lat === undefined || parsedLocation.data.lng === undefined) {
+    return res.status(400).json({ message: 'Standort erforderlich' });
+  }
   const last = lastEntry(req.user!.id);
   if (last && (last.type === 'CLOCK_IN' || last.type === 'BREAK_END')) {
     return res.status(409).json({ message: 'Bereits eingestempelt' });
@@ -226,6 +229,9 @@ router.post('/clock-out', (req: AuthRequest, res) => {
   const parsedLocation = locationSchema.safeParse(req.body?.location ?? {});
   const source = sourceEnum.parse(req.body?.source ?? 'WEB');
   if (!parsedLocation.success) return res.status(400).json({ errors: parsedLocation.error.format() });
+  if (parsedLocation.data.lat === undefined || parsedLocation.data.lng === undefined) {
+    return res.status(400).json({ message: 'Standort erforderlich' });
+  }
   const last = lastEntry(req.user!.id);
   if (!last || last.type === 'CLOCK_OUT' || last.type === 'BREAK_START') {
     return res.status(409).json({ message: 'Keine offene Buchung' });

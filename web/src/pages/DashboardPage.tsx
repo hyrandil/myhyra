@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { fetchEntries, punch } from '../api';
 import { TimeEntry } from '../types';
@@ -12,9 +13,27 @@ const labels: Record<TimeEntry['type'], string> = {
 export function DashboardPage() {
   const queryClient = useQueryClient();
   const { data } = useQuery({ queryKey: ['entries'], queryFn: fetchEntries });
+  const [location, setLocation] = useState<{ lat: number; lng: number } | null>(null);
+  const [locationError, setLocationError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!navigator.geolocation) {
+      setLocationError('Standortbestimmung wird von diesem Browser nicht unterstützt.');
+      return;
+    }
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        setLocation({ lat: pos.coords.latitude, lng: pos.coords.longitude });
+        setLocationError(null);
+      },
+      () => setLocationError('Standort erforderlich zum Stempeln. Bitte Freigabe erteilen.'),
+      { enableHighAccuracy: true, timeout: 10000 }
+    );
+  }, []);
 
   const mutate = useMutation({
-    mutationFn: punch,
+    mutationFn: (vars: { type: TimeEntry['type']; location?: { lat: number; lng: number } }) =>
+      punch(vars.type, vars.location),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['entries'] }),
   });
 
@@ -37,8 +56,16 @@ export function DashboardPage() {
               className={`w-full md:w-40 h-14 rounded-lg font-semibold text-white shadow transition ${
                 mainAction === 'CLOCK_IN' ? 'bg-emerald-500 hover:bg-emerald-600' : 'bg-rose-500 hover:bg-rose-600'
               } disabled:opacity-60`}
-              disabled={mutate.isPending}
-              onClick={() => mutate.mutate(mainAction)}
+              disabled={
+                mutate.isPending ||
+                ((mainAction === 'CLOCK_IN' || mainAction === 'CLOCK_OUT') && (!location || !!locationError))
+              }
+              onClick={() =>
+                mutate.mutate({
+                  type: mainAction,
+                  location: location ?? undefined,
+                })
+              }
             >
               {mainAction === 'CLOCK_IN' ? 'Kommen' : 'Gehen'}
             </button>
@@ -46,14 +73,14 @@ export function DashboardPage() {
               <button
                 className="w-full md:w-36 h-14 rounded-lg border border-slate-200 text-slate-800 font-semibold disabled:opacity-40"
                 disabled={mutate.isPending || isOnBreak || !isWorking}
-                onClick={() => mutate.mutate('BREAK_START')}
+                onClick={() => mutate.mutate({ type: 'BREAK_START', location: location ?? undefined })}
               >
                 Pause starten
               </button>
               <button
                 className="w-full md:w-36 h-14 rounded-lg border border-slate-200 text-slate-800 font-semibold disabled:opacity-40"
                 disabled={mutate.isPending || !isOnBreak}
-                onClick={() => mutate.mutate('BREAK_END')}
+                onClick={() => mutate.mutate({ type: 'BREAK_END', location: location ?? undefined })}
               >
                 Pause beenden
               </button>
@@ -67,6 +94,11 @@ export function DashboardPage() {
           <h3 className="text-lg font-semibold">Letzte Buchungen</h3>
           <span className="text-xs uppercase text-slate-500">Chronik</span>
         </div>
+        {locationError && (
+          <p className="text-sm text-amber-600 mb-2">
+            {locationError}
+          </p>
+        )}
         <div className="divide-y">
           {(data ?? []).map((entry) => (
             <div key={entry.id} className="py-3 flex items-center justify-between text-sm">
