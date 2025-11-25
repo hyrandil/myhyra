@@ -514,6 +514,7 @@ const userUpdateSchema = z.object({
   name: z.string().min(2),
   email: z.string().email(),
   role: z.enum(['employee', 'lead', 'hr', 'admin']),
+  personnel_number: z.string().max(80).optional().or(z.literal('')).transform((value) => value || undefined),
   location: z.string().max(120).optional().or(z.literal('')).transform((value) => value || undefined),
   department: z.string().max(120).optional().or(z.literal('')).transform((value) => value || undefined),
   tracking_start_date: z
@@ -570,7 +571,8 @@ router.patch('/:id', (req, res) => {
   }
   db.prepare(
     `UPDATE user_profiles
-     SET location = COALESCE(?, location),
+     SET personnel_number = COALESCE(?, personnel_number),
+         location = COALESCE(?, location),
          department = COALESCE(?, department),
          tracking_start_date = COALESCE(?, tracking_start_date),
          start_date = COALESCE(?, start_date),
@@ -578,6 +580,7 @@ router.patch('/:id', (req, res) => {
          work_model_id = COALESCE(?, work_model_id)
      WHERE user_id = ?`
   ).run(
+    parsed.data.personnel_number ?? null,
     parsed.data.location ?? null,
     parsed.data.department ?? null,
     parsed.data.tracking_start_date ?? null,

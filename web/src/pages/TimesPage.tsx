@@ -21,6 +21,7 @@ export function TimesPage() {
   const [targetUser, setTargetUser] = useState<number | null>(() =>
     hasRole('admin', 'hr', 'lead') ? null : user?.id ?? null
   );
+  const selectedUserId = targetUser ?? user?.id ?? null;
   const enableManagement = hasRole('admin', 'hr', 'lead');
 
   const formatHours = (minutes: number) => {
@@ -45,22 +46,22 @@ export function TimesPage() {
   }, [enableManagement, employees, targetUser, user?.id]);
 
   const { data, isLoading } = useQuery<{ month: string; days: Record<string, DailySummary> }>({
-    queryKey: ['daily', month, targetUser, enableManagement ? 'manager' : 'self'],
+    queryKey: ['daily', month, selectedUserId, enableManagement ? 'manager' : 'self'],
     queryFn: () => {
-      if (enableManagement && targetUser && targetUser !== user?.id) {
-        return fetchDailyForUser(targetUser, month);
+      if (enableManagement && selectedUserId && selectedUserId !== user?.id) {
+        return fetchDailyForUser(selectedUserId, month);
       }
       return fetchDaily(month);
     },
-    enabled: Boolean(targetUser),
+    enabled: Boolean(selectedUserId),
   });
   const days = data?.days ?? {};
 
   const canEditTarget = useMemo(() => {
-    if (!enableManagement || !targetUser) return false;
+    if (!enableManagement || !selectedUserId) return false;
     if (hasRole('admin', 'hr')) return true;
-    return targetUser !== user?.id;
-  }, [enableManagement, hasRole, targetUser, user?.id]);
+    return selectedUserId !== user?.id;
+  }, [enableManagement, hasRole, selectedUserId, user?.id]);
 
   const totals = useMemo(() => {
     return Object.values(days).reduce<{ worked: number; planned: number }>(
@@ -88,25 +89,25 @@ export function TimesPage() {
       timestamp: string;
       type: 'CLOCK_IN' | 'CLOCK_OUT' | 'BREAK_START' | 'BREAK_END';
       location?: { lat?: number; lng?: number };
-    }) => createManualTimeEntry(targetUser!, { timestamp, type, location }),
+    }) => createManualTimeEntry(selectedUserId!, { timestamp, type, location }),
     onSuccess: () =>
       queryClient.invalidateQueries({
-        predicate: (q) => Array.isArray(q.queryKey) && q.queryKey[0] === 'daily' && q.queryKey.includes(targetUser),
+        predicate: (q) => Array.isArray(q.queryKey) && q.queryKey[0] === 'daily' && q.queryKey.includes(selectedUserId),
       }),
   });
 
   const manualAbsence = useMutation({
     mutationFn: ({ start_date, end_date, type, duration }: { start_date: string; end_date: string; type: string; duration: 'full' | 'half' }) =>
-      createAbsenceForUser(targetUser!, { start_date, end_date, type, duration }),
+      createAbsenceForUser(selectedUserId!, { start_date, end_date, type, duration }),
     onSuccess: () =>
       queryClient.invalidateQueries({
-        predicate: (q) => Array.isArray(q.queryKey) && q.queryKey[0] === 'daily' && q.queryKey.includes(targetUser),
+        predicate: (q) => Array.isArray(q.queryKey) && q.queryKey[0] === 'daily' && q.queryKey.includes(selectedUserId),
       }),
   });
 
   const onManualTime = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    if (!targetUser) return;
+    if (!selectedUserId) return;
     const form = new FormData(e.currentTarget);
     manualTime.mutate({
       timestamp: `${form.get('timestamp')}`,
@@ -121,7 +122,7 @@ export function TimesPage() {
 
   const onManualAbsence = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    if (!targetUser) return;
+    if (!selectedUserId) return;
     const form = new FormData(e.currentTarget);
     manualAbsence.mutate({
       start_date: String(form.get('start_date')),

@@ -140,6 +140,7 @@ export function EmployeesPage() {
                   <th className="py-2">Name</th>
                   <th>Email</th>
                   <th>Rolle</th>
+                  <th>Personalnr.</th>
                   <th>Standort</th>
                   <th>Abteilung</th>
                   <th>Erfassungsbeginn</th>
@@ -153,6 +154,7 @@ export function EmployeesPage() {
                     <td className="py-2 font-medium">{emp.name}</td>
                     <td>{emp.email}</td>
                     <td>{emp.role}</td>
+                    <td>{emp.personnelNumber || '—'}</td>
                     <td>{emp.location ?? '-'}</td>
                     <td>{emp.department ?? '-'}</td>
                     <td>{emp.trackingStartDate ?? '—'}</td>
@@ -170,6 +172,7 @@ export function EmployeesPage() {
                               location: emp.location,
                               department: emp.department,
                               trackingStartDate: emp.trackingStartDate,
+                              personnelNumber: emp.personnelNumber,
                             } as any,
                           })
                         }
@@ -207,6 +210,7 @@ export function EmployeesPage() {
                     location: selected.location,
                     department: selected.department,
                     trackingStartDate: selected.trackingStartDate,
+                    personnelNumber: selected.personnelNumber,
                   },
                 });
               }}
@@ -220,6 +224,12 @@ export function EmployeesPage() {
                 className="input"
                 value={selected.email}
                 onChange={(e) => setSelected({ ...selected, email: e.target.value })}
+              />
+              <input
+                className="input"
+                value={selected.personnelNumber ?? ''}
+                placeholder="Personalnummer"
+                onChange={(e) => setSelected({ ...selected, personnelNumber: e.target.value })}
               />
               <select
                 className="input"

@@ -53,6 +53,7 @@ export async function updateEmployee(id: number, payload: Partial<Employee> & { 
     department: payload.department,
     tracking_start_date: payload.trackingStartDate,
     active: payload.active,
+    personnel_number: payload.personnelNumber,
   });
   return res.data as Employee;
 }
