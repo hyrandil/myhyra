@@ -3,6 +3,7 @@ import { z } from 'zod';
 import db from '../db';
 import { authenticate, authorize, AuthRequest } from '../auth';
 import type { Absence, WorkScheduleEntry } from '../types';
+import { canManageUser, managedDepartments } from '../utils/permissions';
 
 const router = Router();
 const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
@@ -45,13 +46,6 @@ const formatDate = (date: Date) => date.toISOString().slice(0, 10);
 const weekdayFromDate = (date: Date) => (date.getUTCDay() + 6) % 7; // Monday = 0
 
 const userExists = (userId: number) => Boolean(db.prepare('SELECT id FROM users WHERE id = ?').get(userId));
-
-const managedDepartments = (userId: number) => {
-  const rows = db
-    .prepare("SELECT department_id FROM department_members WHERE user_id = ? AND role IN ('lead','hr')")
-    .all(userId) as { department_id: number }[];
-  return rows.map((row) => row.department_id);
-};
 
 function getSchedule(userId: number): WorkScheduleEntry[] {
   if (!userExists(userId)) {
@@ -131,6 +125,27 @@ router.get('/requests/me', (req: AuthRequest, res) => {
     .prepare('SELECT * FROM absence_requests WHERE user_id = ? ORDER BY start_date DESC')
     .all(req.user!.id);
   res.json(rows);
+});
+
+router.delete('/requests/:id', (req: AuthRequest, res) => {
+  const id = Number(req.params.id);
+  if (Number.isNaN(id)) {
+    return res.status(400).json({ message: 'Ungültige ID' });
+  }
+  const row = db
+    .prepare('SELECT * FROM absence_requests WHERE id = ?')
+    .get(id) as { id: number; user_id: number; status: string } | undefined;
+  if (!row) {
+    return res.status(404).json({ message: 'Antrag nicht gefunden' });
+  }
+  if (row.user_id !== req.user!.id) {
+    return res.status(403).json({ message: 'Keine Berechtigung' });
+  }
+  if (row.status !== 'pending') {
+    return res.status(400).json({ message: 'Nur offene Anträge können storniert werden' });
+  }
+  db.prepare('DELETE FROM absence_requests WHERE id = ?').run(id);
+  return res.json({ message: 'Antrag storniert' });
 });
 
 router.get('/me', (req: AuthRequest, res) => {
@@ -261,10 +276,13 @@ router.get('/user/:userId', (req, res) => {
   res.json(absences.map((absence) => enrichAbsence(absence, schedule)));
 });
 
-router.post('/user/:userId', (req, res) => {
+router.post('/user/:userId', (req: AuthRequest, res) => {
   const userId = Number(req.params.userId);
   if (Number.isNaN(userId)) {
     return res.status(400).json({ message: 'Ungültige Nutzer-ID' });
+  }
+  if (!canManageUser(req.user!.id, req.user!.role, userId)) {
+    return res.status(403).json({ message: 'Keine Berechtigung für diesen Nutzer' });
   }
   const user = db.prepare('SELECT id FROM users WHERE id = ?').get(userId) as { id: number } | undefined;
   if (!user) {
@@ -289,15 +307,21 @@ router.post('/user/:userId', (req, res) => {
   res.status(201).json(enrichAbsence({ ...created, start_date, end_date }, schedule));
 });
 
-router.delete('/:id', (req, res) => {
+router.delete('/:id', (req: AuthRequest, res) => {
   const absenceId = Number(req.params.id);
   if (Number.isNaN(absenceId)) {
     return res.status(400).json({ message: 'Ungültige Abwesenheits-ID' });
   }
-  const result = db.prepare('DELETE FROM absences WHERE id = ?').run(absenceId);
-  if (result.changes === 0) {
+  const existing = db
+    .prepare('SELECT user_id FROM absences WHERE id = ?')
+    .get(absenceId) as { user_id: number } | undefined;
+  if (!existing) {
     return res.status(404).json({ message: 'Eintrag nicht gefunden' });
   }
+  if (!canManageUser(req.user!.id, req.user!.role, existing.user_id)) {
+    return res.status(403).json({ message: 'Keine Berechtigung für diesen Nutzer' });
+  }
+  const result = db.prepare('DELETE FROM absences WHERE id = ?').run(absenceId);
   res.json({ message: 'Eintrag gelöscht' });
 });
 

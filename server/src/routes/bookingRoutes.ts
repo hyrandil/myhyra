@@ -1,8 +1,9 @@
-import { Router } from 'express';
+import { Router, Response } from 'express';
 import { z } from 'zod';
 import db from '../db';
 import { authenticate, authorize, AuthRequest } from '../auth';
 import type { Booking } from '../types';
+import { canManageUser } from '../utils/permissions';
 
 const router = Router();
 
@@ -40,6 +41,14 @@ const manualBookingSchema = z
   });
 
 router.use(authenticate);
+
+function ensureCanManage(req: AuthRequest, res: Response, targetUserId: number) {
+  if (!req.user) return false;
+  if (req.user.role === 'admin' || req.user.role === 'hr') return true;
+  if (canManageUser(req.user.id, req.user.role, targetUserId)) return true;
+  res.status(403).json({ message: 'Keine Berechtigung für diesen Nutzer' });
+  return false;
+}
 
 router.get('/me', (req: AuthRequest, res) => {
   const bookings = db
@@ -87,7 +96,7 @@ router.post('/clock-out', (req: AuthRequest, res) => {
   res.json({ message: 'Ausgestempelt' });
 });
 
-router.get('/', authorize(['admin']), (_req, res) => {
+router.get('/', authorize(['admin', 'hr']), (_req, res) => {
   const bookings = db
     .prepare(
       `SELECT b.*, u.name as user_name, u.email as user_email FROM bookings b
@@ -97,22 +106,24 @@ router.get('/', authorize(['admin']), (_req, res) => {
   res.json(bookings);
 });
 
-router.get('/user/:userId', authorize(['admin']), (req, res) => {
+router.get('/user/:userId', authorize(['admin', 'hr', 'lead']), (req: AuthRequest, res) => {
   const userId = Number(req.params.userId);
   if (Number.isNaN(userId)) {
     return res.status(400).json({ message: 'Ungültige Nutzer-ID' });
   }
+  if (!ensureCanManage(req, res, userId)) return;
   const bookings = db
     .prepare('SELECT * FROM bookings WHERE user_id = ? ORDER BY clock_in DESC')
     .all(userId) as Booking[];
   res.json(bookings);
 });
 
-router.post('/user/:userId/manual', authorize(['admin']), (req, res) => {
+router.post('/user/:userId/manual', authorize(['admin', 'hr', 'lead']), (req: AuthRequest, res) => {
   const userId = Number(req.params.userId);
   if (Number.isNaN(userId)) {
     return res.status(400).json({ message: 'Ungültige Nutzer-ID' });
   }
+  if (!ensureCanManage(req, res, userId)) return;
   const user = db
     .prepare('SELECT id FROM users WHERE id = ?')
     .get(userId) as { id: number } | undefined;
@@ -158,11 +169,18 @@ router.post('/user/:userId/manual', authorize(['admin']), (req, res) => {
   return res.json(updated);
 });
 
-router.patch('/:bookingId', authorize(['admin']), (req, res) => {
+router.patch('/:bookingId', authorize(['admin', 'hr', 'lead']), (req: AuthRequest, res) => {
   const bookingId = Number(req.params.bookingId);
   if (Number.isNaN(bookingId)) {
     return res.status(400).json({ message: 'Ungültige Buchungs-ID' });
   }
+  const owner = db
+    .prepare('SELECT user_id FROM bookings WHERE id = ?')
+    .get(bookingId) as { user_id: number } | undefined;
+  if (!owner) {
+    return res.status(404).json({ message: 'Buchung nicht gefunden' });
+  }
+  if (!ensureCanManage(req, res, owner.user_id)) return;
   const parsed = bookingEditSchema.safeParse(req.body);
   if (!parsed.success) {
     return res.status(400).json({ errors: parsed.error.format() });

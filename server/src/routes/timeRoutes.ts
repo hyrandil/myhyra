@@ -138,6 +138,16 @@ router.get('/me/daily', (req: AuthRequest, res) => {
       status: string;
     }[];
 
+  const pendingRequests = db
+    .prepare(
+      "SELECT * FROM absence_requests WHERE user_id = ? AND status = 'pending' AND NOT (end_date < ? OR start_date > ?)"
+    )
+    .all(req.user!.id, start.toISOString().slice(0, 10), end.toISOString().slice(0, 10)) as {
+      start_date: string;
+      end_date: string;
+      type: string;
+    }[];
+
   const grouped = new Map<string, TimeEntry[]>();
   entryRows.forEach((row) => {
     const key = row.timestamp.slice(0, 10);
@@ -146,9 +156,10 @@ router.get('/me/daily', (req: AuthRequest, res) => {
     grouped.set(key, list);
   });
 
-  const statusForDay = (entries: TimeEntry[], abs: string[]): string => {
+  const statusForDay = (entries: TimeEntry[], abs: string[], pending: boolean): string => {
     if (abs.includes('sick')) return 'sick';
     if (abs.includes('vacation')) return 'vacation';
+    if (pending) return 'pending';
     if (entries.length === 0) return 'empty';
     const sorted = [...entries].sort(
       (a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
@@ -161,7 +172,7 @@ router.get('/me/daily', (req: AuthRequest, res) => {
   const cursor = new Date(start);
   const days: Record<
     string,
-    { worked: number; planned: number; delta: number; absences: string[]; status: string }
+    { worked: number; planned: number; delta: number; absences: string[]; status: string; pending?: boolean }
   > = {};
   while (cursor.getTime() <= end.getTime()) {
     const key = cursor.toISOString().slice(0, 10);
@@ -175,12 +186,23 @@ router.get('/me/daily', (req: AuthRequest, res) => {
         absenceLabels.push(item.type);
       }
     });
+    const hasPending = pendingRequests.some((item) => item.start_date <= key && item.end_date >= key);
     const inactiveBeforeTracking = trackingStartDate && cursor.getTime() < trackingStartDate.getTime();
     const effectivePlanned = inactiveBeforeTracking ? 0 : planned;
     const effectiveWorked = inactiveBeforeTracking ? 0 : worked;
     const delta = computeDelta(effectivePlanned, effectiveWorked);
-    const status = inactiveBeforeTracking ? 'inactive' : statusForDay(entries, absenceLabels);
-    days[key] = { worked: effectiveWorked, planned: effectivePlanned, delta, absences: absenceLabels, status };
+    const status = inactiveBeforeTracking ? 'inactive' : statusForDay(entries, absenceLabels, hasPending);
+    if (hasPending) {
+      absenceLabels.push('pending');
+    }
+    days[key] = {
+      worked: effectiveWorked,
+      planned: effectivePlanned,
+      delta,
+      absences: absenceLabels,
+      status,
+      pending: hasPending,
+    };
     cursor.setUTCDate(cursor.getUTCDate() + 1);
   }
 

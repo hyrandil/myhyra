@@ -48,6 +48,7 @@ export interface DailySummary {
   delta: number;
   absences: string[];
   status: string;
+  pending?: boolean;
 }
 
 export interface AbsenceRequest {
