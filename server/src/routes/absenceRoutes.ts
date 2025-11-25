@@ -46,6 +46,13 @@ const weekdayFromDate = (date: Date) => (date.getUTCDay() + 6) % 7; // Monday = 
 
 const userExists = (userId: number) => Boolean(db.prepare('SELECT id FROM users WHERE id = ?').get(userId));
 
+const managedDepartments = (userId: number) => {
+  const rows = db
+    .prepare("SELECT department_id FROM department_members WHERE user_id = ? AND role IN ('lead','hr')")
+    .all(userId) as { department_id: number }[];
+  return rows.map((row) => row.department_id);
+};
+
 function getSchedule(userId: number): WorkScheduleEntry[] {
   if (!userExists(userId)) {
     return [];
@@ -149,19 +156,30 @@ router.get('/me/summary', (req: AuthRequest, res) => {
 
 router.use(authorize(['admin', 'hr', 'lead']));
 
-router.get('/requests', (_req, res) => {
+router.get('/requests', (req: AuthRequest, res) => {
+  const baseQuery =
+    `SELECT ar.*, u.name as user_name
+     FROM absence_requests ar
+     JOIN users u ON u.id = ar.user_id`;
+  if (req.user!.role === 'admin') {
+    const rows = db.prepare(`${baseQuery} ORDER BY ar.start_date DESC, ar.created_at DESC`).all();
+    return res.json(rows);
+  }
+  const allowedDepartments = managedDepartments(req.user!.id);
+  if (allowedDepartments.length === 0) return res.json([]);
+  const placeholders = allowedDepartments.map(() => '?').join(',');
   const rows = db
     .prepare(
-      `SELECT ar.*, u.name as user_name
-       FROM absence_requests ar
-       JOIN users u ON u.id = ar.user_id
+      `${baseQuery}
+       JOIN department_members dm ON dm.user_id = ar.user_id
+       WHERE dm.department_id IN (${placeholders})
        ORDER BY ar.start_date DESC, ar.created_at DESC`
     )
-    .all();
+    .all(...allowedDepartments);
   res.json(rows);
 });
 
-router.patch('/requests/:id/status', (req, res) => {
+router.patch('/requests/:id/status', (req: AuthRequest, res) => {
   const id = Number(req.params.id);
   if (Number.isNaN(id)) {
     return res.status(400).json({ message: 'Ungültige ID' });
@@ -175,6 +193,22 @@ router.patch('/requests/:id/status', (req, res) => {
     .get(id) as { user_id: number; start_date: string; end_date: string; type: string } | undefined;
   if (!requestRow) {
     return res.status(404).json({ message: 'Antrag nicht gefunden' });
+  }
+  if (req.user!.role !== 'admin') {
+    const allowedDepartments = managedDepartments(req.user!.id);
+    if (allowedDepartments.length === 0) {
+      return res.status(403).json({ message: 'Keine Berechtigung für diese Abteilung' });
+    }
+    const match = db
+      .prepare(
+        `SELECT 1 FROM department_members WHERE user_id = ? AND department_id IN (${allowedDepartments
+          .map(() => '?')
+          .join(',')})`
+      )
+      .get(requestRow.user_id, ...allowedDepartments) as { 1: number } | undefined;
+    if (!match) {
+      return res.status(403).json({ message: 'Keine Berechtigung für diese Abteilung' });
+    }
   }
   db.prepare('UPDATE absence_requests SET status = ? WHERE id = ?').run(parsed.data, id);
   if (parsed.data === 'approved') {

@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { AbsenceRequest, AttendanceReport, DailySummary, Employee, TimeEntry, UserInfo } from './types';
+import { AbsenceRequest, AttendanceReport, DailySummary, Department, Employee, TimeEntry, UserInfo } from './types';
 
 const api = axios.create({
   // Default to the Express port (4000) so local dev works without extra env config
@@ -55,6 +55,53 @@ export async function updateEmployee(id: number, payload: Partial<Employee> & { 
     active: payload.active,
   });
   return res.data as Employee;
+}
+
+export async function fetchDepartments() {
+  const res = await api.get<{ departments: any[]; members: any[] }>('/departments');
+  const map = new Map<number, Department>();
+  res.data.departments.forEach((dept: any) => {
+    map.set(dept.id, { ...dept, members: [] });
+  });
+  res.data.members.forEach((m: any) => {
+    const dept = map.get(m.department_id);
+    if (dept) {
+      dept.members.push({
+        userId: m.user_id,
+        name: m.name,
+        email: m.email,
+        role: m.role,
+      });
+    }
+  });
+  return Array.from(map.values()) as Department[];
+}
+
+export async function createDepartment(payload: { name: string; description?: string }) {
+  const res = await api.post('/departments', payload);
+  return res.data as { id: number; name: string; description?: string };
+}
+
+export async function upsertDepartmentMember(
+  departmentId: number,
+  payload: { userId: number; role?: 'member' | 'lead' | 'hr' }
+) {
+  const res = await api.post(`/departments/${departmentId}/members`, payload);
+  return res.data;
+}
+
+export async function updateDepartmentMemberRole(
+  departmentId: number,
+  userId: number,
+  role: 'member' | 'lead' | 'hr'
+) {
+  const res = await api.patch(`/departments/${departmentId}/members/${userId}`, { role });
+  return res.data;
+}
+
+export async function removeDepartmentMember(departmentId: number, userId: number) {
+  const res = await api.delete(`/departments/${departmentId}/members/${userId}`);
+  return res.data;
 }
 
 export async function fetchEntries() {

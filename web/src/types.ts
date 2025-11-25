@@ -17,6 +17,21 @@ export interface Employee extends UserInfo {
   endDate?: string;
 }
 
+export interface DepartmentMember {
+  userId: number;
+  role: 'member' | 'lead' | 'hr';
+  name: string;
+  email: string;
+}
+
+export interface Department {
+  id: number;
+  name: string;
+  description?: string | null;
+  created_at?: string;
+  members: DepartmentMember[];
+}
+
 export interface TimeEntry {
   id: number;
   user_id: number;
