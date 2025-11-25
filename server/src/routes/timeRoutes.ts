@@ -286,6 +286,67 @@ router.get('/user/:userId/daily', authorize(['admin', 'hr', 'lead']), (req: Auth
   res.json(buildDailySummary(userId, month));
 });
 
+router.get('/overview', (req: AuthRequest, res) => {
+  const { month, department } = req.query as { month?: string; department?: string };
+  const today = new Date();
+  const monthValue = month || `${today.getUTCFullYear()}-${String(today.getUTCMonth() + 1).padStart(2, '0')}`;
+  const base = new Date(`${monthValue}-01T00:00:00Z`);
+  const start = new Date(Date.UTC(base.getUTCFullYear(), base.getUTCMonth(), 1));
+  const end = new Date(Date.UTC(base.getUTCFullYear(), base.getUTCMonth() + 1, 0));
+
+  const deptFilter = department?.trim();
+  const userRows = deptFilter
+    ? (db
+        .prepare('SELECT user_id FROM user_profiles WHERE department = ?')
+        .all(deptFilter) as { user_id: number }[])
+    : (db.prepare('SELECT id FROM users').all() as { id: number }[]);
+
+  const userIds = userRows.map((row: any) => row.user_id ?? row.id);
+  if (userIds.length === 0) return res.json({ month: monthValue, days: {} });
+
+  const placeholders = userIds.map(() => '?').join(',');
+  const manualAbsences = db
+    .prepare(
+      `SELECT * FROM absences WHERE user_id IN (${placeholders}) AND NOT (end_date < ? OR start_date > ?)`
+    )
+    .all(...userIds, start.toISOString().slice(0, 10), end.toISOString().slice(0, 10)) as Absence[];
+
+  const approvedRequests = db
+    .prepare(
+      `SELECT user_id, start_date, end_date, type, 'full' as duration, NULL as note, created_at, id
+       FROM absence_requests
+       WHERE status = 'approved' AND user_id IN (${placeholders}) AND NOT (end_date < ? OR start_date > ?)`
+    )
+    .all(...userIds, start.toISOString().slice(0, 10), end.toISOString().slice(0, 10)) as Absence[];
+
+  const days: Record<string, any> = {};
+
+  const addRange = (startDate: string, endDate: string, type: string) => {
+    const cursor = new Date(`${startDate}T00:00:00Z`);
+    const endValue = new Date(`${endDate}T00:00:00Z`);
+    while (cursor.getTime() <= endValue.getTime()) {
+      const key = cursor.toISOString().slice(0, 10);
+      if (!days[key]) {
+        days[key] = { date: key, planned: 0, worked: 0, delta: 0, absences: [], status: 'ok', pending: false };
+      }
+      if (type === 'vacation') {
+        days[key].status = 'vacation';
+        if (!days[key].absences.includes('Urlaub')) days[key].absences.push('Urlaub');
+      } else {
+        if (days[key].status !== 'vacation') days[key].status = 'away';
+        if (!days[key].absences.includes('Nicht im Haus')) days[key].absences.push('Nicht im Haus');
+      }
+      cursor.setUTCDate(cursor.getUTCDate() + 1);
+    }
+  };
+
+  [...manualAbsences, ...approvedRequests].forEach((absence) => {
+    addRange(absence.start_date, absence.end_date, absence.type);
+  });
+
+  res.json({ month: monthValue, days });
+});
+
 router.post('/user/:userId/manual', authorize(['admin', 'hr', 'lead']), (req: AuthRequest, res) => {
   const userId = Number(req.params.userId);
   if (Number.isNaN(userId)) {

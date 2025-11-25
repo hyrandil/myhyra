@@ -5,6 +5,7 @@ export interface UserInfo {
   name: string;
   email: string;
   role: Role;
+  department?: string;
 }
 
 export interface Employee extends UserInfo {

@@ -3,9 +3,11 @@ import { useState } from 'react';
 import {
   createDepartment,
   createEmployee,
+  deleteDepartment,
   fetchDepartments,
   fetchEmployees,
   removeDepartmentMember,
+  updateDepartment,
   updateDepartmentMemberRole,
   updateEmployee,
   upsertDepartmentMember,
@@ -59,6 +61,15 @@ export function EmployeesPage() {
   const memberRemoveMutation = useMutation({
     mutationFn: ({ departmentId, userId }: { departmentId: number; userId: number }) =>
       removeDepartmentMember(departmentId, userId),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['departments'] }),
+  });
+  const departmentUpdateMutation = useMutation({
+    mutationFn: ({ id, name, description }: { id: number; name: string; description?: string }) =>
+      updateDepartment(id, { name, description }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['departments'] }),
+  });
+  const departmentDeleteMutation = useMutation({
+    mutationFn: (id: number) => deleteDepartment(id),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['departments'] }),
   });
 
@@ -311,10 +322,42 @@ export function EmployeesPage() {
           {(departments ?? []).map((dept) => (
             <div key={dept.id} className="border rounded-lg p-3">
               <div className="flex justify-between items-center">
-                <div>
-                  <p className="font-semibold">{dept.name}</p>
-                  <p className="text-sm text-slate-500">{dept.description || 'Keine Beschreibung'}</p>
-                </div>
+                <form
+                  className="flex gap-2 items-center"
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    const form = new FormData(e.currentTarget);
+                    const name = String(form.get('name') || dept.name);
+                    const description = String(form.get('description') || '');
+                    departmentUpdateMutation.mutate({ id: dept.id, name, description });
+                  }}
+                >
+                  <div>
+                    <input name="name" defaultValue={dept.name} className="input mb-1" />
+                    <input
+                      name="description"
+                      defaultValue={dept.description || ''}
+                      className="input text-sm"
+                      placeholder="Beschreibung"
+                    />
+                  </div>
+                  <div className="flex flex-col gap-2">
+                    <button className="btn-ghost text-xs" type="submit" disabled={departmentUpdateMutation.isPending}>
+                      Speichern
+                    </button>
+                    <button
+                      className="btn-ghost text-xs text-rose-600"
+                      type="button"
+                      onClick={() => {
+                        if (confirm('Abteilung wirklich löschen? Zuordnungen werden entfernt.')) {
+                          departmentDeleteMutation.mutate(dept.id);
+                        }
+                      }}
+                    >
+                      Löschen
+                    </button>
+                  </div>
+                </form>
                 <form
                   className="flex gap-2"
                   onSubmit={(e) => {

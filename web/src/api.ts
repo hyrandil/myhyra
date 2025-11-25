@@ -83,6 +83,11 @@ export async function createDepartment(payload: { name: string; description?: st
   return res.data as { id: number; name: string; description?: string };
 }
 
+export async function updateDepartment(id: number, payload: { name: string; description?: string }) {
+  const res = await api.patch(`/departments/${id}`, payload);
+  return res.data;
+}
+
 export async function upsertDepartmentMember(
   departmentId: number,
   payload: { userId: number; role?: 'member' | 'lead' | 'hr' }
@@ -102,6 +107,11 @@ export async function updateDepartmentMemberRole(
 
 export async function removeDepartmentMember(departmentId: number, userId: number) {
   const res = await api.delete(`/departments/${departmentId}/members/${userId}`);
+  return res.data;
+}
+
+export async function deleteDepartment(id: number) {
+  const res = await api.delete(`/departments/${id}`);
   return res.data;
 }
 
@@ -136,6 +146,13 @@ export async function fetchDaily(month?: string) {
 export async function fetchDailyForUser(userId: number, month?: string) {
   const res = await api.get<{ month: string; days: Record<string, DailySummary> }>(`/time/user/${userId}/daily`, {
     params: month ? { month } : undefined,
+  });
+  return res.data;
+}
+
+export async function fetchDailyOverview(month?: string, department?: string) {
+  const res = await api.get<{ month: string; days: Record<string, DailySummary> }>('/time/overview', {
+    params: { month, department },
   });
   return res.data;
 }

@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { DailySummary } from '../types';
 
 const weekdays = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'];
@@ -6,6 +6,10 @@ const weekdays = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'];
 type CalendarProps = {
   month: string;
   days: Record<string, DailySummary>;
+  selectedDate?: string | null;
+  onSelect?: (date: string) => void;
+  maskAbsences?: boolean;
+  hideDetails?: boolean;
 };
 
 const formatHours = (minutes: number) => {
@@ -36,8 +40,14 @@ function dayColor(summary?: DailySummary) {
   return 'bg-white text-slate-900 border-slate-300';
 }
 
-export function Calendar({ month, days }: CalendarProps) {
-  const [selected, setSelected] = useState<string | null>(null);
+export function Calendar({ month, days, selectedDate, onSelect, maskAbsences, hideDetails }: CalendarProps) {
+  const [internalSelected, setInternalSelected] = useState<string | null>(selectedDate ?? null);
+
+  useEffect(() => {
+    if (selectedDate) {
+      setInternalSelected(selectedDate);
+    }
+  }, [selectedDate]);
 
   const { cells, selectedSummary } = useMemo(() => {
     const base = new Date(`${month}-01T00:00:00Z`);
@@ -53,9 +63,10 @@ export function Calendar({ month, days }: CalendarProps) {
       const key = `${month}-${String(d).padStart(2, '0')}`;
       arr.push({ date: key, label: d, summary: days[key] });
     }
-    const selectedSummary = selected ? days[selected] : undefined;
+    const key = selectedDate ?? internalSelected;
+    const selectedSummary = key ? days[key] : undefined;
     return { cells: arr, selectedSummary };
-  }, [days, month, selected]);
+  }, [days, month, internalSelected, selectedDate]);
 
   return (
     <div className="space-y-3">
@@ -71,9 +82,13 @@ export function Calendar({ month, days }: CalendarProps) {
           <button
             key={idx}
             className={`rounded-xl p-2 h-20 text-sm text-left border ${
-              cell.date === selected ? 'ring-2 ring-sky-400' : ''
+              cell.date === (selectedDate ?? internalSelected) ? 'ring-2 ring-sky-400' : ''
             } ${dayColor(cell.summary)} shadow-sm transition`}
-            onClick={() => cell.date && setSelected(cell.date)}
+            onClick={() => {
+              if (!cell.date) return;
+              setInternalSelected(cell.date);
+              onSelect?.(cell.date);
+            }}
             disabled={!cell.date}
           >
             <div className="flex justify-between items-start">
@@ -87,7 +102,11 @@ export function Calendar({ month, days }: CalendarProps) {
               )}
             </div>
             {cell.summary?.absences?.length ? (
-              <p className="text-[11px] mt-1 truncate">{cell.summary.absences.join(', ')}</p>
+              <p className="text-[11px] mt-1 truncate">
+                {maskAbsences
+                  ? cell.summary.absences.map((a) => (a.toLowerCase().includes('urlaub') ? 'Urlaub' : 'Nicht im Haus')).join(', ')
+                  : cell.summary.absences.join(', ')}
+              </p>
             ) : null}
             {cell.summary?.status === 'pending' && (
               <p className="text-[11px] text-amber-700 mt-1">○ Antrag vorgemerkt</p>
@@ -101,11 +120,11 @@ export function Calendar({ month, days }: CalendarProps) {
           </button>
         ))}
       </div>
-      {selected && (
+      {!hideDetails && (selectedDate ?? internalSelected) && (
         <div className="p-3 card">
           <div className="flex items-center justify-between">
             <div>
-              <h4 className="font-semibold text-sm mb-1">{selected}</h4>
+              <h4 className="font-semibold text-sm mb-1">{selectedDate ?? internalSelected}</h4>
               {selectedSummary ? (
                 <div className="text-sm space-y-1">
                   <p>
@@ -116,7 +135,14 @@ export function Calendar({ month, days }: CalendarProps) {
                   </p>
                   {selectedSummary.pending && <p className="text-amber-700">Antrag wartend</p>}
                   {selectedSummary.absences.length > 0 && (
-                    <p>Abwesenheiten: {selectedSummary.absences.join(', ')}</p>
+                    <p>
+                      Abwesenheiten:{' '}
+                      {maskAbsences
+                        ? selectedSummary.absences
+                            .map((a) => (a.toLowerCase().includes('urlaub') ? 'Urlaub' : 'Nicht im Haus'))
+                            .join(', ')
+                        : selectedSummary.absences.join(', ')}
+                    </p>
                   )}
                 </div>
               ) : (

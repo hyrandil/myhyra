@@ -50,6 +50,31 @@ router.post('/', (req, res) => {
   }
 });
 
+router.patch('/:id', (req, res) => {
+  const departmentId = Number(req.params.id);
+  if (Number.isNaN(departmentId)) return res.status(400).json({ message: 'Ungültige Abteilungs-ID' });
+  const parsed = deptSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ errors: parsed.error.format() });
+  const exists = db.prepare('SELECT id FROM departments WHERE id = ?').get(departmentId);
+  if (!exists) return res.status(404).json({ message: 'Abteilung nicht gefunden' });
+  db.prepare('UPDATE departments SET name = ?, description = ? WHERE id = ?').run(
+    parsed.data.name.trim(),
+    parsed.data.description ?? null,
+    departmentId
+  );
+  res.json({ message: 'Aktualisiert' });
+});
+
+router.delete('/:id', (req, res) => {
+  const departmentId = Number(req.params.id);
+  if (Number.isNaN(departmentId)) return res.status(400).json({ message: 'Ungültige Abteilungs-ID' });
+  const exists = db.prepare('SELECT id FROM departments WHERE id = ?').get(departmentId);
+  if (!exists) return res.status(404).json({ message: 'Abteilung nicht gefunden' });
+  db.prepare('DELETE FROM department_members WHERE department_id = ?').run(departmentId);
+  db.prepare('DELETE FROM departments WHERE id = ?').run(departmentId);
+  res.json({ message: 'Abteilung gelöscht' });
+});
+
 router.post('/:id/members', (req, res) => {
   const departmentId = Number(req.params.id);
   if (Number.isNaN(departmentId)) return res.status(400).json({ message: 'Ungültige Abteilungs-ID' });

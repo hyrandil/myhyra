@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Calendar } from '../components/Calendar';
-import { fetchDaily, fetchDailyForUser, fetchEmployees } from '../api';
+import { fetchDaily, fetchDailyForUser, fetchDailyOverview, fetchEmployees } from '../api';
 import { useAuth } from '../AuthProvider';
 import { DailySummary, Employee } from '../types';
 
@@ -44,23 +44,29 @@ export function OverviewCalendarPage() {
   }, [auth.user, departmentFilter, enableManagement, employees]);
 
   useEffect(() => {
-    if (visibleEmployees.length > 0 && !selectedUser) {
+    if (enableManagement && visibleEmployees.length > 0 && !selectedUser) {
       setSelectedUser(visibleEmployees[0].id);
     }
-  }, [selectedUser, visibleEmployees]);
+  }, [enableManagement, selectedUser, visibleEmployees]);
 
   const { data, isLoading } = useQuery<{ month: string; days: Record<string, DailySummary> }>({
-    queryKey: ['overview', month, selectedUser, enableManagement ? 'managed' : 'self'],
+    queryKey: ['overview', month, selectedUser, departmentFilter, enableManagement ? 'managed' : 'self'],
     queryFn: () => {
-      if (enableManagement && selectedUser && selectedUser !== auth.user?.id) {
+      if (!enableManagement) {
+        return fetchDailyOverview(month, departmentFilter || undefined);
+      }
+      if (selectedUser && selectedUser !== auth.user?.id) {
         return fetchDailyForUser(selectedUser, month);
       }
       return fetchDaily(month);
     },
-    enabled: Boolean(selectedUser),
+    enabled: enableManagement ? Boolean(selectedUser) : true,
   });
 
-  const transformed = useMemo(() => transformDays(data?.days ?? {}), [data?.days]);
+  const transformed = useMemo(() => {
+    if (enableManagement) return data?.days ?? {};
+    return transformDays(data?.days ?? {});
+  }, [data?.days, enableManagement]);
 
   const goto = (delta: number) => {
     const base = new Date(`${month}-01T00:00:00Z`);
@@ -82,7 +88,7 @@ export function OverviewCalendarPage() {
         </div>
       </div>
 
-      {enableManagement && (
+      {enableManagement ? (
         <div className="card p-4 grid gap-3 md:grid-cols-3 items-end">
           <div className="md:col-span-2 space-y-2">
             <label className="text-sm text-slate-600">Mitarbeiter</label>
@@ -108,6 +114,23 @@ export function OverviewCalendarPage() {
             />
           </div>
         </div>
+      ) : (
+        <div className="card p-4 grid gap-3 md:grid-cols-3 items-end">
+          <div className="space-y-2 md:col-span-2">
+            <label className="text-sm text-slate-600">Ansicht</label>
+            <select
+              className="input"
+              value={departmentFilter}
+              onChange={(e) => setDepartmentFilter(e.target.value)}
+            >
+              <option value="">Alle Mitarbeitenden</option>
+              {auth.user?.department && <option value={auth.user.department}>Abteilung: {auth.user.department}</option>}
+            </select>
+          </div>
+          <p className="text-sm text-slate-500">
+            Urlaubsübersicht ohne Details. Andere Abwesenheiten erscheinen gesammelt als "Nicht im Haus".
+          </p>
+        </div>
       )}
 
       <div className="card p-4">
@@ -122,7 +145,11 @@ export function OverviewCalendarPage() {
             </span>
           </div>
         </div>
-        {isLoading || !selectedUser ? <p className="text-sm text-slate-500">Lade…</p> : <Calendar month={month} days={transformed} />}
+        {isLoading || (!enableManagement && !data) || (enableManagement && !selectedUser) ? (
+          <p className="text-sm text-slate-500">Lade…</p>
+        ) : (
+          <Calendar month={month} days={transformed} maskAbsences={!enableManagement} hideDetails={!enableManagement} />
+        )}
       </div>
     </div>
   );

@@ -18,6 +18,19 @@ export function TimesPage() {
     const now = new Date();
     return `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, '0')}`;
   });
+  const [selectedDate, setSelectedDate] = useState<string | null>(null);
+  const [manualTimestamp, setManualTimestamp] = useState('');
+
+  useEffect(() => {
+    if (!selectedDate) {
+      const today = new Date();
+      const key = `${today.getUTCFullYear()}-${String(today.getUTCMonth() + 1).padStart(2, '0')}-${String(
+        today.getUTCDate()
+      ).padStart(2, '0')}`;
+      setSelectedDate(key);
+      setManualTimestamp(`${key}T09:00`);
+    }
+  }, [selectedDate]);
   const [targetUser, setTargetUser] = useState<number | null>(() =>
     hasRole('admin', 'hr', 'lead') ? null : user?.id ?? null
   );
@@ -78,7 +91,14 @@ export function TimesPage() {
     const base = new Date(`${month}-01T00:00:00Z`);
     base.setUTCMonth(base.getUTCMonth() + delta);
     setMonth(`${base.getUTCFullYear()}-${String(base.getUTCMonth() + 1).padStart(2, '0')}`);
+    setSelectedDate(null);
   };
+
+  useEffect(() => {
+    if (selectedDate) {
+      setManualTimestamp(`${selectedDate}T09:00`);
+    }
+  }, [selectedDate]);
 
   const manualTime = useMutation({
     mutationFn: ({
@@ -110,7 +130,7 @@ export function TimesPage() {
     if (!selectedUserId) return;
     const form = new FormData(e.currentTarget);
     manualTime.mutate({
-      timestamp: `${form.get('timestamp')}`,
+      timestamp: `${form.get('timestamp') || manualTimestamp}`,
       type: form.get('type') as any,
       location: {
         lat: form.get('lat') ? Number(form.get('lat')) : undefined,
@@ -118,6 +138,7 @@ export function TimesPage() {
       },
     });
     e.currentTarget.reset();
+    if (selectedDate) setManualTimestamp(`${selectedDate}T09:00`);
   };
 
   const onManualAbsence = (e: React.FormEvent<HTMLFormElement>) => {
@@ -191,10 +212,25 @@ export function TimesPage() {
                 </span>
               </div>
             </div>
-          {isLoading ? <p className="text-sm text-slate-500">Lade…</p> : <Calendar month={month} days={days} />}
+          {isLoading ? (
+            <p className="text-sm text-slate-500">Lade…</p>
+          ) : (
+            <Calendar
+              month={month}
+              days={days}
+              selectedDate={selectedDate}
+              onSelect={(value) => {
+                setSelectedDate(value);
+                setManualTimestamp(`${value}T09:00`);
+              }}
+            />
+          )}
         </div>
         <div className="card p-4 space-y-3">
-          <h3 className="text-lg font-semibold">Monatsübersicht (Auswahl)</h3>
+          <div className="flex items-center justify-between">
+            <h3 className="text-lg font-semibold">Monatsübersicht (Auswahl)</h3>
+            {selectedDate && <p className="text-sm text-slate-500">Ausgewählt: {selectedDate}</p>}
+          </div>
           <div className="grid grid-cols-2 gap-2 text-sm md:grid-cols-3">
             <div className="p-3 rounded-lg bg-slate-50 border border-slate-200">
               <p className="text-xs uppercase text-slate-500">Arbeitszeit</p>
@@ -228,7 +264,14 @@ export function TimesPage() {
             <h3 className="text-lg font-semibold">Zeitnachtrag</h3>
             <form className="space-y-2" onSubmit={onManualTime}>
               <label className="block text-sm text-slate-600">Zeitpunkt</label>
-              <input name="timestamp" type="datetime-local" required className="input w-full" />
+              <input
+                name="timestamp"
+                type="datetime-local"
+                required
+                className="input w-full"
+                value={manualTimestamp}
+                onChange={(e) => setManualTimestamp(e.target.value)}
+              />
               <label className="block text-sm text-slate-600">Typ</label>
               <select name="type" className="input w-full">
                 <option value="CLOCK_IN">Kommen</option>
@@ -250,8 +293,8 @@ export function TimesPage() {
             <h3 className="text-lg font-semibold">Abwesenheit eintragen</h3>
             <form className="space-y-2" onSubmit={onManualAbsence}>
               <div className="grid grid-cols-2 gap-2">
-                <input name="start_date" type="date" required className="input" />
-                <input name="end_date" type="date" required className="input" />
+                <input name="start_date" type="date" required className="input" defaultValue={selectedDate ?? ''} />
+                <input name="end_date" type="date" required className="input" defaultValue={selectedDate ?? ''} />
               </div>
               <select name="type" className="input w-full">
                 <option value="vacation">Urlaub</option>
