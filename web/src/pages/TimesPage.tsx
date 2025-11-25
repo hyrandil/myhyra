@@ -34,7 +34,7 @@ export function TimesPage() {
         <div>
           <p className="text-xs uppercase text-slate-500">Monat</p>
           <h2 className="text-2xl font-semibold">{month}</h2>
-          <p className="text-sm text-slate-500">Kompakte Kalenderansicht wie timeCard 10</p>
+          <p className="text-sm text-slate-500">Kompakte Kalenderansicht mit Statusfarben</p>
         </div>
         <div className="flex gap-2">
           <button className="btn-ghost" onClick={() => goto(-1)}>← Vorheriger</button>

@@ -40,7 +40,7 @@ function insertEntry(
   location?: { lat?: number | null; lng?: number | null }
 ) {
   const stmt = db.prepare(
-    'INSERT INTO time_entries (user_id, timestamp, type, source, lat, lng) VALUES (?, datetime("now"), ?, ?, ?, ?)'
+    "INSERT INTO time_entries (user_id, timestamp, type, source, lat, lng) VALUES (?, datetime('now'), ?, ?, ?, ?)"
   );
   return stmt.run(userId, type, source, location?.lat ?? null, location?.lng ?? null);
 }
@@ -111,6 +111,11 @@ router.get('/me/daily', (req: AuthRequest, res) => {
   const now = month ? new Date(`${month}-01T00:00:00Z`) : new Date();
   const start = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
   const end = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 0));
+  const profile = db
+    .prepare('SELECT tracking_start_date, start_date FROM user_profiles WHERE user_id = ?')
+    .get(req.user!.id) as { tracking_start_date?: string | null; start_date?: string | null } | undefined;
+  const trackingStartValue = profile?.tracking_start_date || profile?.start_date;
+  const trackingStartDate = trackingStartValue ? new Date(`${trackingStartValue}T00:00:00Z`) : undefined;
   const schedule = getSchedule(req.user!.id);
   const planMap = new Map(schedule.map((entry) => [entry.weekday, entry.minutes]));
 
@@ -170,8 +175,12 @@ router.get('/me/daily', (req: AuthRequest, res) => {
         absenceLabels.push(item.type);
       }
     });
-    const delta = computeDelta(planned, worked);
-    days[key] = { worked, planned, delta, absences: absenceLabels, status: statusForDay(entries, absenceLabels) };
+    const inactiveBeforeTracking = trackingStartDate && cursor.getTime() < trackingStartDate.getTime();
+    const effectivePlanned = inactiveBeforeTracking ? 0 : planned;
+    const effectiveWorked = inactiveBeforeTracking ? 0 : worked;
+    const delta = computeDelta(effectivePlanned, effectiveWorked);
+    const status = inactiveBeforeTracking ? 'inactive' : statusForDay(entries, absenceLabels);
+    days[key] = { worked: effectiveWorked, planned: effectivePlanned, delta, absences: absenceLabels, status };
     cursor.setUTCDate(cursor.getUTCDate() + 1);
   }
 

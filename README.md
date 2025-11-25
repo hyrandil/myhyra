@@ -1,6 +1,6 @@
 # MyHyra Zeiterfassung
 
-Browserbasierte Beispiel-Anwendung für eine zeiterfassung à la „timeCard 10“ mit Express/SQLite-API und React-Frontend.
+Browserbasierte Beispiel-Anwendung für eine Zeiterfassung mit Express/SQLite-API und React-Frontend.
 
 ## Features
 - Rollenbasierte Anmeldung (Mitarbeiter, Teamleiter, HR, Administrator) mit JWT und Passwort-Hashing.

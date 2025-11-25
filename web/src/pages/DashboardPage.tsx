@@ -29,7 +29,7 @@ export function DashboardPage() {
         <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
           <div>
             <p className="text-sm uppercase tracking-[0.25em] text-sky-100">Live Stempeln</p>
-            <h1 className="text-3xl font-bold">timeCard 10 Stil – zentrale Stempeluhr</h1>
+            <h1 className="text-3xl font-bold">Zentrale Stempeluhr</h1>
             <p className="text-sky-100 mt-1">
               Status: {isOnBreak ? 'In Pause' : isWorking ? 'Anwesend' : 'Abgemeldet'}
             </p>
@@ -74,11 +74,6 @@ export function DashboardPage() {
           <p className="text-xs uppercase text-slate-500">Quelle</p>
           <h3 className="text-xl font-semibold mt-1">{last?.source ?? 'WEB'}</h3>
           <p className="text-sm text-slate-500 mt-2">GPS {last?.lat && last?.lng ? 'erfasst' : 'nicht vorhanden'}</p>
-        </div>
-        <div className="card p-4">
-          <p className="text-xs uppercase text-slate-500">Buttons</p>
-          <h3 className="text-xl font-semibold mt-1">Kommen/Gehen + Pause</h3>
-          <p className="text-sm text-slate-500 mt-2">Zentraler Button wie in timeCard 10</p>
         </div>
       </div>
 

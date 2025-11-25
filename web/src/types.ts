@@ -12,6 +12,7 @@ export interface Employee extends UserInfo {
   personnelNumber?: string;
   location?: string;
   department?: string;
+  trackingStartDate?: string;
   startDate?: string;
   endDate?: string;
 }

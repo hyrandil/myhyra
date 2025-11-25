@@ -10,7 +10,7 @@ export function ReportsPage() {
         <div>
           <p className="text-xs uppercase text-slate-500">Reports</p>
           <h2 className="text-2xl font-semibold">Anwesenheits- & Urlaubsstatistik</h2>
-          <p className="text-sm text-slate-500">Gefiltert wie in timeCard 10 – kompakte Tabelle</p>
+          <p className="text-sm text-slate-500">Gefiltert nach Zeitraum, Team und Abteilung</p>
         </div>
       </div>
 

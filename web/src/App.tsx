@@ -39,9 +39,9 @@ function Shell({ children }: { children: React.ReactNode }) {
       <aside className="w-72 bg-gradient-to-b from-sky-900 via-sky-950 to-slate-950 text-sky-50 flex flex-col shadow-2xl relative">
         <div className="absolute inset-0 opacity-20 bg-[radial-gradient(circle_at_top,_rgba(255,255,255,0.2)_0,_transparent_60%)]" />
         <div className="p-6 border-b border-white/10 relative">
-          <p className="text-[11px] uppercase tracking-[0.35em] text-sky-200">TimeCard Look</p>
+          <p className="text-[11px] uppercase tracking-[0.35em] text-sky-200">Zeiterfassung</p>
           <p className="text-3xl font-black">ZeitPilot</p>
-          <p className="text-sky-200 text-sm mt-1">Kiosk-Layout wie timeCard 10</p>
+          <p className="text-sky-200 text-sm mt-1">Kiosk-Layout für schnelles Stempeln</p>
         </div>
         <nav className="p-4 space-y-1 flex-1 relative">
           <NavItem to="/" icon="⏱️" label="Dashboard" />
@@ -73,8 +73,8 @@ function Shell({ children }: { children: React.ReactNode }) {
         <header className="border-b bg-white/80 backdrop-blur sticky top-0 z-10 shadow-sm">
           <div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
             <div>
-              <p className="text-[11px] uppercase tracking-[0.2em] text-slate-500">timeCard 10 inspiriert</p>
-              <p className="text-xl font-bold">Cockpit & Auswertungen</p>
+              <p className="text-[11px] uppercase tracking-[0.2em] text-slate-500">Übersicht & Auswertungen</p>
+              <p className="text-xl font-bold">Cockpit</p>
             </div>
             <div className="flex items-center gap-3">
               <span className="badge bg-emerald-100 text-emerald-700">{auth.user?.role ?? 'User'}</span>

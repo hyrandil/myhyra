@@ -30,6 +30,7 @@ export function EmployeesPage() {
       personnelNumber: String(form.get('personnelNumber') || ''),
       department: String(form.get('department') || ''),
       location: String(form.get('location') || ''),
+      trackingStartDate: String(form.get('trackingStartDate') || ''),
     });
     e.currentTarget.reset();
   };
@@ -69,6 +70,7 @@ export function EmployeesPage() {
           <input name="personnelNumber" placeholder="Personalnummer" className="input" />
           <input name="department" placeholder="Abteilung" className="input" />
           <input name="location" placeholder="Standort" className="input" />
+          <input name="trackingStartDate" placeholder="Erfassungsbeginn (YYYY-MM-DD)" className="input" />
           <button className="btn-primary md:col-span-3" type="submit" disabled={createMutation.isPending}>
             Speichern
           </button>
@@ -89,6 +91,7 @@ export function EmployeesPage() {
                 <th>Rolle</th>
                 <th>Standort</th>
                 <th>Abteilung</th>
+                <th>Erfassungsbeginn</th>
                 <th>Status</th>
               </tr>
             </thead>
@@ -100,6 +103,7 @@ export function EmployeesPage() {
                   <td>{emp.role}</td>
                   <td>{emp.location ?? '-'}</td>
                   <td>{emp.department ?? '-'}</td>
+                  <td>{emp.trackingStartDate ?? '—'}</td>
                   <td>
                     <button
                       className={`px-2 py-1 rounded text-xs ${emp.active ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-200 text-slate-600'}`}

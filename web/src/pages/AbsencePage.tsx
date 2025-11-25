@@ -40,7 +40,7 @@ export function AbsencePage() {
         <div>
           <p className="text-xs uppercase text-slate-500">Abwesenheitsworkflow</p>
           <h2 className="text-2xl font-semibold">Urlaub & Krankmeldungen</h2>
-          <p className="text-sm text-slate-500">Anträge im timeCard-Stil mit Genehmigungslisten</p>
+          <p className="text-sm text-slate-500">Anträge mit Genehmigungslisten und Status</p>
         </div>
         <div className="badge bg-slate-200 text-slate-700">{auth.user?.role}</div>
       </div>

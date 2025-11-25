@@ -78,6 +78,7 @@ CREATE TABLE IF NOT EXISTS user_profiles (
   location TEXT,
   department TEXT,
   work_model_id INTEGER,
+  tracking_start_date TEXT,
   start_date TEXT,
   end_date TEXT,
   birth_date TEXT,
@@ -140,6 +141,7 @@ ensureTableColumn('bookings', 'clock_in_lat', 'REAL');
 ensureTableColumn('bookings', 'clock_in_lng', 'REAL');
 ensureTableColumn('bookings', 'clock_out_lat', 'REAL');
 ensureTableColumn('bookings', 'clock_out_lng', 'REAL');
+ensureTableColumn('user_profiles', 'tracking_start_date', 'TEXT');
 ensureTableColumn('users', 'active', 'INTEGER NOT NULL DEFAULT 1');
 ensureTableColumn('users', 'role', "TEXT NOT NULL DEFAULT 'employee'");
 ensureTableColumn('user_settings', 'week_start', "TEXT NOT NULL DEFAULT 'monday'");

@@ -39,6 +39,7 @@ export async function createEmployee(payload: Partial<Employee> & { email: strin
     personnel_number: payload.personnelNumber,
     department: payload.department,
     location: payload.location,
+    tracking_start_date: payload.trackingStartDate,
   });
   return res.data as Employee;
 }
@@ -50,6 +51,7 @@ export async function updateEmployee(id: number, payload: Partial<Employee> & { 
     role: payload.role,
     location: payload.location,
     department: payload.department,
+    tracking_start_date: payload.trackingStartDate,
     active: payload.active,
   });
   return res.data as Employee;
