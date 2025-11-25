@@ -228,10 +228,39 @@ router.patch('/requests/:id/status', (req: AuthRequest, res) => {
   db.prepare('UPDATE absence_requests SET status = ? WHERE id = ?').run(parsed.data, id);
   if (parsed.data === 'approved') {
     db.prepare(
-      'INSERT INTO absences (user_id, start_date, end_date, type, duration) VALUES (?, ?, ?, ?, "full")'
+      "INSERT INTO absences (user_id, start_date, end_date, type, duration) VALUES (?, ?, ?, ?, 'full')"
     ).run(requestRow.user_id, requestRow.start_date, requestRow.end_date, requestRow.type);
   }
   res.json({ message: 'Aktualisiert' });
+});
+
+function ensureManageable(req: AuthRequest, res: any, targetUserId: number) {
+  if (!req.user) return false;
+  if (req.user.role === 'admin' || req.user.role === 'hr') return true;
+  if (canManageUser(req.user.id, req.user.role, targetUserId)) return true;
+  res.status(403).json({ message: 'Keine Berechtigung für diesen Mitarbeitenden' });
+  return false;
+}
+
+router.post('/user/:userId', (req: AuthRequest, res) => {
+  const userId = Number(req.params.userId);
+  if (Number.isNaN(userId)) {
+    return res.status(400).json({ message: 'Ungültige Nutzer-ID' });
+  }
+  if (!ensureManageable(req, res, userId)) return;
+  if (!userExists(userId)) {
+    return res.status(404).json({ message: 'Nutzer nicht gefunden' });
+  }
+  const parsed = absenceSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ errors: parsed.error.format() });
+  }
+  const { start_date, end_date, type, duration, note } = parsed.data;
+  const stmt = db.prepare(
+    "INSERT INTO absences (user_id, start_date, end_date, type, duration, note) VALUES (?, ?, ?, ?, ?, ?)"
+  );
+  const result = stmt.run(userId, start_date, end_date, type, duration, note ?? null);
+  res.status(201).json({ id: result.lastInsertRowid });
 });
 
 router.get('/summary', (_req, res) => {

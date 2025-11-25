@@ -129,6 +129,13 @@ export async function fetchDaily(month?: string) {
   return res.data;
 }
 
+export async function fetchDailyForUser(userId: number, month?: string) {
+  const res = await api.get<{ month: string; days: Record<string, DailySummary> }>(`/time/user/${userId}/daily`, {
+    params: month ? { month } : undefined,
+  });
+  return res.data;
+}
+
 export async function createAbsenceRequest(data: { start_date: string; end_date: string; type: string; comment?: string }) {
   const res = await api.post('/absences/request', data);
   return res.data;
@@ -146,6 +153,22 @@ export async function fetchAbsenceInbox() {
 
 export async function updateAbsenceStatus(id: number, status: 'approved' | 'rejected') {
   const res = await api.patch(`/absences/requests/${id}/status`, { status });
+  return res.data;
+}
+
+export async function createAbsenceForUser(
+  userId: number,
+  payload: { start_date: string; end_date: string; type: string; duration?: 'full' | 'half'; note?: string }
+) {
+  const res = await api.post(`/absences/user/${userId}`, payload);
+  return res.data;
+}
+
+export async function createManualTimeEntry(
+  userId: number,
+  payload: { timestamp: string; type: 'CLOCK_IN' | 'CLOCK_OUT' | 'BREAK_START' | 'BREAK_END'; source?: string; location?: { lat?: number; lng?: number } }
+) {
+  const res = await api.post(`/time/user/${userId}/manual`, payload);
   return res.data;
 }
 
