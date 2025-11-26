@@ -171,7 +171,9 @@ const ensureTableColumn = (table: string, name: string, definition: string) => {
   const exists = columns.some((column) => column.name === name);
   if (!exists) {
     db.exec(`ALTER TABLE ${table} ADD COLUMN ${definition}`);
+    return false;
   }
+  return true;
 };
 
 ensureTableColumn('bookings', 'clock_in_lat', 'REAL');
@@ -197,7 +199,14 @@ db.prepare('UPDATE absences SET end_date = date WHERE end_date IS NULL').run();
 ensureTableColumn('user_profiles', 'location', 'TEXT');
 ensureTableColumn('user_profiles', 'department', 'TEXT');
 ensureTableColumn('user_profiles', 'work_model_id', 'INTEGER');
-ensureTableColumn('user_profiles', 'holiday_profile_id', 'INTEGER');
+const hasHolidayProfileColumn = ensureTableColumn('user_profiles', 'holiday_profile_id', 'INTEGER');
+if (!hasHolidayProfileColumn) {
+  try {
+    db.exec('ALTER TABLE user_profiles ADD COLUMN holiday_profile_id INTEGER');
+  } catch (err) {
+    console.error('Konnte holiday_profile_id nicht hinzufügen:', err);
+  }
+}
 ensureTableColumn('user_profiles', 'start_date', 'TEXT');
 ensureTableColumn('user_profiles', 'end_date', 'TEXT');
 

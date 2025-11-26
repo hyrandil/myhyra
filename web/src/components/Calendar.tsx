@@ -24,6 +24,7 @@ const formatHours = (minutes: number) => {
 function statusAccent(summary?: DailySummary) {
   if (!summary) return 'bg-slate-200';
   if (summary.status === 'sick') return 'bg-rose-500';
+  if (summary.status === 'holiday') return 'bg-sky-500';
   if (summary.status === 'vacation') return 'bg-amber-500';
   if (summary.status === 'away') return 'bg-slate-500';
   if (summary.status === 'pending') return 'bg-white border border-amber-500';
@@ -34,6 +35,7 @@ function statusAccent(summary?: DailySummary) {
 function dayColor(summary?: DailySummary) {
   if (!summary) return 'bg-white text-slate-500 border-slate-200';
   if (summary.status === 'sick') return 'bg-rose-50 text-rose-800 border-rose-200';
+  if (summary.status === 'holiday') return 'bg-sky-50 text-sky-900 border-sky-200';
   if (summary.status === 'vacation') return 'bg-amber-50 text-amber-900 border-amber-200';
   if (summary.status === 'away') return 'bg-slate-50 text-slate-700 border-slate-200';
   if (summary.status === 'pending') return 'bg-amber-50 text-amber-800 border-amber-300';
@@ -160,6 +162,9 @@ export function Calendar({ month, days, selectedDate, onSelect, maskAbsences, hi
               )}
             </div>
             <div className="text-xs text-slate-500 space-y-1 text-right">
+              <p className="flex items-center gap-2 justify-end">
+                <span className="h-2 w-2 rounded-full bg-sky-500"></span> Feiertag
+              </p>
               <p className="flex items-center gap-2 justify-end">
                 <span className="h-2 w-2 rounded-full bg-amber-500"></span> Urlaub
               </p>

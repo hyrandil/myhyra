@@ -162,8 +162,8 @@ export function EmployeesPage() {
         </form>
       </div>
 
-      <div className="grid md:grid-cols-3 gap-4">
-        <div className="card p-4 md:col-span-2">
+      <div className="space-y-4">
+        <div className="card p-4">
           <div className="flex justify-between items-center mb-2">
             <h3 className="font-semibold">Teamübersicht</h3>
             <span className="text-xs text-slate-500">{(data ?? []).length} Personen</span>

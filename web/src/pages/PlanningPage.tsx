@@ -22,6 +22,8 @@ export function PlanningPage() {
   const [dayMinutes, setDayMinutes] = useState<number[]>([480, 480, 480, 480, 480, 0, 0]);
   const [selectedProfile, setSelectedProfile] = useState<number | null>(null);
   const [holidayYear, setHolidayYear] = useState<number>(new Date().getFullYear());
+  const [holidayStart, setHolidayStart] = useState<number | ''>('');
+  const [holidayEnd, setHolidayEnd] = useState<number | ''>('');
 
   const { data: employees } = useQuery({
     queryKey: ['employees', 'planning'],
@@ -57,14 +59,16 @@ export function PlanningPage() {
   });
 
   const profileCreateMutation = useMutation({
-    mutationFn: (payload: { name: string; state: string; year?: number }) => createHolidayProfile(payload),
+    mutationFn: (payload: { name: string; state: string; year?: number; years?: number[]; startYear?: number; endYear?: number }) =>
+      createHolidayProfile(payload),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ['holiday-profiles'] });
     },
   });
 
   const profileImportMutation = useMutation({
-    mutationFn: ({ id, year }: { id: number; year: number }) => importHolidayProfile(id, year),
+    mutationFn: ({ id, payload }: { id: number; payload: { year?: number; years?: number[]; startYear?: number; endYear?: number } }) =>
+      importHolidayProfile(id, payload),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['holiday-profile'] }),
   });
 
@@ -178,10 +182,15 @@ export function PlanningPage() {
             onSubmit={(e) => {
               e.preventDefault();
               const form = new FormData(e.currentTarget);
+              const yearValue = Number(form.get('year') || '') || undefined;
+              const startYearValue = Number(form.get('startYear') || '') || undefined;
+              const endYearValue = Number(form.get('endYear') || '') || undefined;
               profileCreateMutation.mutate({
                 name: String(form.get('profileName') || ''),
                 state: String(form.get('state') || ''),
-                year: Number(form.get('year') || '') || undefined,
+                year: yearValue,
+                startYear: startYearValue,
+                endYear: endYearValue,
               });
               e.currentTarget.reset();
             }}
@@ -196,7 +205,9 @@ export function PlanningPage() {
                   </option>
                 ))}
               </select>
-              <input name="year" type="number" min="2020" max="2100" placeholder="Jahr" className="input" />
+              <input name="year" type="number" min="2020" max="2100" placeholder="Jahr (optional)" className="input" />
+              <input name="startYear" type="number" min="2020" max="2100" placeholder="Startjahr (optional)" className="input" />
+              <input name="endYear" type="number" min="2020" max="2100" placeholder="Endjahr (optional)" className="input" />
             </div>
             <button className="btn-primary self-start" type="submit" disabled={profileCreateMutation.isPending}>
               Profil anlegen & Feiertage importieren
@@ -222,11 +233,35 @@ export function PlanningPage() {
                 value={holidayYear}
                 onChange={(e) => setHolidayYear(Number(e.target.value) || holidayYear)}
               />
+              <input
+                type="number"
+                className="input w-24"
+                placeholder="Start"
+                value={holidayStart}
+                onChange={(e) => setHolidayStart(e.target.value === '' ? '' : Number(e.target.value))}
+              />
+              <input
+                type="number"
+                className="input w-24"
+                placeholder="Ende"
+                value={holidayEnd}
+                onChange={(e) => setHolidayEnd(e.target.value === '' ? '' : Number(e.target.value))}
+              />
               <button
                 className="btn-ghost"
                 type="button"
                 disabled={!selectedProfile || profileImportMutation.isPending}
-                onClick={() => selectedProfile && profileImportMutation.mutate({ id: selectedProfile, year: holidayYear })}
+                onClick={() =>
+                  selectedProfile &&
+                  profileImportMutation.mutate({
+                    id: selectedProfile,
+                    payload: {
+                      year: holidayYear,
+                      startYear: holidayStart || undefined,
+                      endYear: holidayEnd || undefined,
+                    },
+                  })
+                }
               >
                 Jahr neu laden
               </button>

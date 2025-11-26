@@ -7,12 +7,13 @@ import { DailySummary } from '../types';
 function transformDays(days: Record<string, DailySummary>): Record<string, DailySummary> {
   const next: Record<string, DailySummary> = {};
   Object.entries(days).forEach(([key, summary]) => {
+    const hasHoliday = summary.absences.some((a) => a.toLowerCase().includes('feiertag'));
     const hasVacation = summary.absences.some((a) => a.toLowerCase().includes('urlaub'));
     const hasAnyAbsence = summary.absences.length > 0;
     next[key] = {
       ...summary,
-      absences: hasVacation ? ['Urlaub'] : hasAnyAbsence ? ['Nicht im Haus'] : [],
-      status: hasVacation ? 'vacation' : hasAnyAbsence ? 'away' : summary.status,
+      absences: hasHoliday ? ['Feiertag'] : hasVacation ? ['Urlaub'] : hasAnyAbsence ? ['Nicht im Haus'] : [],
+      status: hasHoliday ? 'holiday' : hasVacation ? 'vacation' : hasAnyAbsence ? 'away' : summary.status,
     };
   });
   return next;
@@ -85,6 +86,9 @@ export function OverviewCalendarPage() {
         <div className="flex items-center justify-between mb-3">
           <h3 className="font-semibold">Kalender</h3>
           <div className="flex gap-3 text-xs text-slate-600 items-center">
+            <span className="flex items-center gap-1">
+              <span className="h-2 w-2 rounded-full bg-sky-500"></span> Feiertag
+            </span>
             <span className="flex items-center gap-1">
               <span className="h-2 w-2 rounded-full bg-amber-500"></span> Urlaub
             </span>

@@ -10,6 +10,9 @@ const profileSchema = z.object({
   name: z.string().min(3),
   state: z.string().regex(/^[A-Z]{2}$/),
   year: z.number().int().min(2000).max(2100).optional(),
+  years: z.array(z.number().int().min(2000).max(2100)).optional(),
+  startYear: z.number().int().min(2000).max(2100).optional(),
+  endYear: z.number().int().min(2000).max(2100).optional(),
 });
 
 const customHolidaySchema = z.object({
@@ -21,6 +24,24 @@ const customHolidaySchema = z.object({
 router.use(authenticate);
 router.use(authorize(['admin', 'hr']));
 
+const resolveYears = (payload: {
+  year?: number | null | undefined;
+  years?: (number | undefined)[] | null | undefined;
+  startYear?: number | null | undefined;
+  endYear?: number | null | undefined;
+}) => {
+  if (payload.years && payload.years.length > 0) {
+    return Array.from(new Set(payload.years.filter((y): y is number => typeof y === 'number'))).sort();
+  }
+  if (payload.startYear && payload.endYear && payload.endYear >= payload.startYear) {
+    const arr: number[] = [];
+    for (let y = payload.startYear; y <= payload.endYear; y += 1) arr.push(y);
+    return arr;
+  }
+  if (payload.year) return [payload.year];
+  return [new Date().getUTCFullYear()];
+};
+
 router.get('/profiles', (_req, res) => {
   const rows = db.prepare('SELECT * FROM holiday_profiles ORDER BY created_at DESC').all();
   res.json(rows);
@@ -29,11 +50,11 @@ router.get('/profiles', (_req, res) => {
 router.post('/profiles', (req, res) => {
   const parsed = profileSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ errors: parsed.error.format() });
-  const { name, state, year } = parsed.data;
+  const { name, state, ...rest } = parsed.data;
   const result = db.prepare('INSERT INTO holiday_profiles (name, state) VALUES (?, ?)').run(name, state);
   const profileId = Number(result.lastInsertRowid);
-  const importYear = year ?? new Date().getUTCFullYear();
-  const holidays = buildHolidayList(state, importYear);
+  const years = resolveYears(rest);
+  const holidays = years.flatMap((importYear) => buildHolidayList(state, importYear));
   const insert = db.prepare(
     'INSERT OR IGNORE INTO holidays (profile_id, date, name, duration, source) VALUES (?, ?, ?, ?, ?)' as string
   );
@@ -44,12 +65,14 @@ router.post('/profiles', (req, res) => {
 router.post('/profiles/:id/import', (req, res) => {
   const profileId = Number(req.params.id);
   if (Number.isNaN(profileId)) return res.status(400).json({ message: 'Ungültige Profil-ID' });
-  const body = profileSchema.pick({ year: true }).safeParse(req.body);
-  const year = body.success && body.data.year ? body.data.year : new Date().getUTCFullYear();
+  const parsed = profileSchema.pick({ year: true, years: true, startYear: true, endYear: true }).safeParse(req.body);
   const profile = db.prepare('SELECT * FROM holiday_profiles WHERE id = ?').get(profileId) as any;
   if (!profile) return res.status(404).json({ message: 'Profil nicht gefunden' });
-  db.prepare("DELETE FROM holidays WHERE profile_id = ? AND strftime('%Y', date) = ?").run(profileId, `${year}`);
-  const holidays = buildHolidayList(profile.state, year);
+  const years = parsed.success ? resolveYears(parsed.data) : [new Date().getUTCFullYear()];
+  years.forEach((year) => {
+    db.prepare("DELETE FROM holidays WHERE profile_id = ? AND strftime('%Y', date) = ?").run(profileId, `${year}`);
+  });
+  const holidays = years.flatMap((year) => buildHolidayList(profile.state, year));
   const insert = db.prepare(
     'INSERT OR IGNORE INTO holidays (profile_id, date, name, duration, source) VALUES (?, ?, ?, ?, ?)' as string
   );

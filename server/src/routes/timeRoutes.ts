@@ -30,10 +30,15 @@ function getSchedule(userId: number): WorkScheduleEntry[] {
 }
 
 function getHolidayProfileId(userId: number): number | null {
-  const row = db
-    .prepare('SELECT holiday_profile_id FROM user_profiles WHERE user_id = ?')
-    .get(userId) as { holiday_profile_id?: number | null } | undefined;
-  return row?.holiday_profile_id ?? null;
+  try {
+    const row = db
+      .prepare('SELECT holiday_profile_id FROM user_profiles WHERE user_id = ?')
+      .get(userId) as { holiday_profile_id?: number | null } | undefined;
+    return row?.holiday_profile_id ?? null;
+  } catch (err) {
+    console.error('Holiday profile column missing, fallback without Feiertage', err);
+    return null;
+  }
 }
 
 function getHolidays(userId: number, startDate: string, endDate: string): Holiday[] {
@@ -484,11 +489,37 @@ router.get('/overview', (req: AuthRequest, res) => {
   if (userIds.length === 0) return res.json({ month: monthValue, days: {} });
 
   const placeholders = userIds.map(() => '?').join(',');
+  const startStr = start.toISOString().slice(0, 10);
+  const endStr = end.toISOString().slice(0, 10);
+  const profileRows = db
+    .prepare(`SELECT user_id, holiday_profile_id FROM user_profiles WHERE user_id IN (${placeholders})`)
+    .all(...userIds) as { user_id: number; holiday_profile_id?: number | null }[];
+  const holidayRanges: { user_id: number; start_date: string; end_date: string; type: 'holiday'; name: string; duration: string }[]
+    = [];
+  profileRows.forEach((row) => {
+    if (!row.holiday_profile_id) return;
+    const holidayList = db
+      .prepare(
+        'SELECT date as start_date, date as end_date, name, duration FROM holidays WHERE profile_id = ? AND date BETWEEN ? AND ? ORDER BY date ASC'
+      )
+      .all(row.holiday_profile_id, startStr, endStr) as { start_date: string; end_date: string; name: string; duration: string }[];
+    holidayList.forEach((h) =>
+      holidayRanges.push({
+        user_id: row.user_id,
+        start_date: h.start_date,
+        end_date: h.end_date,
+        type: 'holiday',
+        name: h.name,
+        duration: h.duration,
+      })
+    );
+  });
+
   const manualAbsences = db
     .prepare(
       `SELECT * FROM absences WHERE user_id IN (${placeholders}) AND NOT (end_date < ? OR start_date > ?)`
     )
-    .all(...userIds, start.toISOString().slice(0, 10), end.toISOString().slice(0, 10)) as Absence[];
+    .all(...userIds, startStr, endStr) as Absence[];
 
   const approvedRequests = db
     .prepare(
@@ -496,7 +527,7 @@ router.get('/overview', (req: AuthRequest, res) => {
        FROM absence_requests
        WHERE status = 'approved' AND user_id IN (${placeholders}) AND NOT (end_date < ? OR start_date > ?)`
     )
-    .all(...userIds, start.toISOString().slice(0, 10), end.toISOString().slice(0, 10)) as Absence[];
+    .all(...userIds, startStr, endStr) as Absence[];
 
   const days: Record<string, any> = {};
 
@@ -520,21 +551,24 @@ router.get('/overview', (req: AuthRequest, res) => {
       if (!days[key].users.some((u: any) => u.id === user.id)) {
         days[key].users.push(user);
       }
-      if (type === 'vacation') {
-        days[key].status = 'vacation';
-        if (!days[key].absences.includes('Urlaub')) days[key].absences.push('Urlaub');
-      } else {
-        if (days[key].status !== 'vacation') days[key].status = 'away';
-        if (!days[key].absences.includes('Nicht im Haus')) days[key].absences.push('Nicht im Haus');
+    if (type === 'holiday') {
+      days[key].status = 'holiday';
+      if (!days[key].absences.includes('Feiertag')) days[key].absences.push('Feiertag');
+    } else if (type === 'vacation') {
+      days[key].status = 'vacation';
+      if (!days[key].absences.includes('Urlaub')) days[key].absences.push('Urlaub');
+    } else {
+      if (days[key].status !== 'vacation') days[key].status = 'away';
+      if (!days[key].absences.includes('Nicht im Haus')) days[key].absences.push('Nicht im Haus');
       }
       cursor.setUTCDate(cursor.getUTCDate() + 1);
     }
   };
 
-  [...manualAbsences, ...approvedRequests].forEach((absence) => {
+  [...manualAbsences, ...approvedRequests, ...holidayRanges].forEach((absence) => {
     const meta = userMap.get((absence as any).user_id);
     if (!meta) return;
-    addRange(absence.start_date, absence.end_date, absence.type, {
+    addRange(absence.start_date, absence.end_date, (absence as any).type, {
       id: (absence as any).user_id,
       name: meta.name,
       department: meta.department ?? null,

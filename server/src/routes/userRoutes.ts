@@ -43,6 +43,24 @@ const guardMissingUser = (userId: number, res: Response) => {
   return false;
 };
 
+let holidayProfileColumnReady = false;
+const ensureHolidayProfileColumn = () => {
+  if (holidayProfileColumnReady) return;
+  const hasColumn = db
+    .prepare("SELECT name FROM pragma_table_info('user_profiles') WHERE name = 'holiday_profile_id'")
+    .get() as { name: string } | undefined;
+  if (!hasColumn) {
+    try {
+      db.exec('ALTER TABLE user_profiles ADD COLUMN holiday_profile_id INTEGER');
+    } catch (err) {
+      console.error('holiday_profile_id konnte nicht angelegt werden', err);
+    }
+  }
+  holidayProfileColumnReady = true;
+};
+
+ensureHolidayProfileColumn();
+
 const toUserPayload = (
   user: Pick<User, 'id' | 'name' | 'email' | 'role' | 'created_at'> & {
     active: number;

@@ -9,7 +9,7 @@ Browserbasierte Beispiel-Anwendung für eine Zeiterfassung mit Express/SQLite-AP
 - Arbeitszeitmodelle je Wochentag, automatische Pausenregel (Abzug bis 30 min nach >6 h ohne echte Pause).
 - Urlaubs- und Abwesenheitsanträge (Urlaub/Krank/Remote/Sonstige) mit Genehmigung durch Lead/HR/Admin.
 - Monatsübersicht mit Plan-/Ist-Minuten pro Tag und Abwesenheitsmarkern, plus Anwesenheitsreport.
-- Feiertagsprofile pro Bundesland (Import + eigene ganze/halbe Tage), bei Mitarbeitenden hinterlegbar und in Plan/Ist-Berechnung
+- Feiertagsprofile pro Bundesland (Mehrjahres-Import + eigene ganze/halbe Tage), bei Mitarbeitenden hinterlegbar und in Plan/Ist-Berechnung
   sowie Kalenderansichten berücksichtigt.
 - Beispiel-Unit-Test für die Kernlogik der Tagesberechnung.
 

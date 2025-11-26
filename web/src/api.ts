@@ -51,13 +51,23 @@ export async function fetchHolidayProfiles() {
   return res.data;
 }
 
-export async function createHolidayProfile(payload: { name: string; state: string; year?: number }) {
+export async function createHolidayProfile(payload: {
+  name: string;
+  state: string;
+  year?: number;
+  years?: number[];
+  startYear?: number;
+  endYear?: number;
+}) {
   const res = await api.post('/holidays/profiles', payload);
   return res.data as HolidayProfile;
 }
 
-export async function importHolidayProfile(id: number, year: number) {
-  const res = await api.post(`/holidays/profiles/${id}/import`, { year });
+export async function importHolidayProfile(
+  id: number,
+  payload: { year?: number; years?: number[]; startYear?: number; endYear?: number }
+) {
+  const res = await api.post(`/holidays/profiles/${id}/import`, payload);
   return res.data as { message: string; count: number };
 }
 
