@@ -84,9 +84,10 @@ export async function fetchProfileHolidays(id: number, year?: number) {
   return res.data;
 }
 
-export async function createEmployee(payload: Partial<Employee> & { email: string; name: string; password: string; role: Employee['role'] }) {
+export async function createEmployee(payload: Partial<Employee> & { email: string; firstName: string; lastName: string; password: string; role: Employee['role'] }) {
   const res = await api.post('/users', {
-    name: payload.name,
+    first_name: payload.firstName,
+    last_name: payload.lastName,
     email: payload.email,
     password: payload.password,
     role: payload.role,
@@ -101,7 +102,8 @@ export async function createEmployee(payload: Partial<Employee> & { email: strin
 
 export async function updateEmployee(id: number, payload: Partial<Employee> & { role: Employee['role'] }) {
   const res = await api.patch(`/users/${id}`, {
-    name: payload.name,
+    first_name: payload.firstName,
+    last_name: payload.lastName,
     email: payload.email,
     role: payload.role,
     location: payload.location,

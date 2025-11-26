@@ -88,7 +88,8 @@ export function EmployeesPage() {
     e.preventDefault();
     const form = new FormData(e.currentTarget);
     createMutation.mutate({
-      name: String(form.get('name')),
+      firstName: String(form.get('firstName')),
+      lastName: String(form.get('lastName')),
       email: String(form.get('email')),
       password: String(form.get('password')),
       role: (form.get('role') as Employee['role']) ?? 'employee',
@@ -128,7 +129,8 @@ export function EmployeesPage() {
       <div className="card p-4">
         <h2 className="font-semibold mb-3">Mitarbeiter anlegen</h2>
         <form className="grid grid-cols-1 md:grid-cols-3 gap-3" onSubmit={onCreate}>
-          <input name="name" required placeholder="Name" className="input" />
+          <input name="firstName" required placeholder="Vorname" className="input" />
+          <input name="lastName" required placeholder="Nachname" className="input" />
           <input name="email" required placeholder="E-Mail" className="input" />
           <input name="password" required placeholder="Passwort" className="input" type="password" />
           <select name="role" className="input">
@@ -187,7 +189,7 @@ export function EmployeesPage() {
               <tbody>
                 {(data ?? []).map((emp) => (
                   <tr key={emp.id} className="border-b hover:bg-slate-50">
-                    <td className="py-2 font-medium">{emp.name}</td>
+                    <td className="py-2 font-medium">{[emp.firstName, emp.lastName].filter(Boolean).join(' ') || emp.name}</td>
                     <td>{emp.email}</td>
                     <td>{emp.role}</td>
                     <td>{emp.personnelNumber || '—'}</td>
@@ -201,19 +203,20 @@ export function EmployeesPage() {
                         onClick={() =>
                           updateMutation.mutate({
                             id: emp.id,
-                            payload: {
-                              role: emp.role,
-                              active: !emp.active,
-                              name: emp.name,
-                              email: emp.email,
-                              location: emp.location,
-                              department: emp.department,
-                              trackingStartDate: emp.trackingStartDate,
-                              personnelNumber: emp.personnelNumber,
-                            } as any,
-                          })
-                        }
-                      >
+                              payload: {
+                                role: emp.role,
+                                active: !emp.active,
+                                firstName: emp.firstName ?? emp.name.split(' ')[0] ?? '',
+                                lastName: emp.lastName ?? emp.name.split(' ').slice(1).join(' '),
+                                email: emp.email,
+                                location: emp.location,
+                                department: emp.department,
+                                trackingStartDate: emp.trackingStartDate,
+                                personnelNumber: emp.personnelNumber,
+                              },
+                            })
+                          }
+                        >
                         {emp.active ? 'aktiv' : 'deaktiviert'}
                       </button>
                     </td>
@@ -242,7 +245,8 @@ export function EmployeesPage() {
                   payload: {
                     role: selected.role,
                     active: selected.active,
-                    name: selected.name,
+                    firstName: selected.firstName ?? selected.name.split(' ')[0] ?? '',
+                    lastName: selected.lastName ?? selected.name.split(' ').slice(1).join(' '),
                     email: selected.email,
                     location: selected.location,
                     department: selected.department,
@@ -253,11 +257,20 @@ export function EmployeesPage() {
                 });
               }}
             >
-              <input
-                className="input"
-                value={selected.name}
-                onChange={(e) => setSelected({ ...selected, name: e.target.value })}
-              />
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                <input
+                  className="input"
+                  value={selected.firstName ?? ''}
+                  placeholder="Vorname"
+                  onChange={(e) => setSelected({ ...selected, firstName: e.target.value })}
+                />
+                <input
+                  className="input"
+                  value={selected.lastName ?? ''}
+                  placeholder="Nachname"
+                  onChange={(e) => setSelected({ ...selected, lastName: e.target.value })}
+                />
+              </div>
               <input
                 className="input"
                 value={selected.email}

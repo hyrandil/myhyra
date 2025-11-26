@@ -3,6 +3,8 @@ export type Role = 'employee' | 'lead' | 'hr' | 'admin';
 export interface UserInfo {
   id: number;
   name: string;
+  firstName?: string;
+  lastName?: string;
   email: string;
   role: Role;
   department?: string;

@@ -3,6 +3,8 @@ export type Role = 'employee' | 'lead' | 'hr' | 'admin';
 export interface User {
   id: number;
   name: string;
+  first_name?: string | null;
+  last_name?: string | null;
   email: string;
   password_hash: string;
   role: Role;

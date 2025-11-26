@@ -13,6 +13,8 @@ db.pragma('foreign_keys = ON');
 db.exec(`
 CREATE TABLE IF NOT EXISTS users (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
+  first_name TEXT,
+  last_name TEXT,
   name TEXT NOT NULL,
   email TEXT UNIQUE NOT NULL,
   password_hash TEXT NOT NULL,
@@ -180,6 +182,8 @@ ensureTableColumn('bookings', 'clock_in_lat', 'REAL');
 ensureTableColumn('bookings', 'clock_in_lng', 'REAL');
 ensureTableColumn('bookings', 'clock_out_lat', 'REAL');
 ensureTableColumn('bookings', 'clock_out_lng', 'REAL');
+ensureTableColumn('users', 'first_name', 'TEXT');
+ensureTableColumn('users', 'last_name', 'TEXT');
 ensureTableColumn('user_profiles', 'tracking_start_date', 'TEXT');
 ensureTableColumn('users', 'active', 'INTEGER NOT NULL DEFAULT 1');
 ensureTableColumn('users', 'role', "TEXT NOT NULL DEFAULT 'employee'");
@@ -217,15 +221,21 @@ function ensureAdminUser() {
   const passwordHash = bcrypt.hashSync(ADMIN_PASSWORD, 10);
   if (!existing) {
     const result = db
-      .prepare('INSERT INTO users (name, email, password_hash, role, active) VALUES (?, ?, ?, ?, 1)')
-      .run('Administrator', ADMIN_EMAIL, passwordHash, 'admin');
+      .prepare(
+        'INSERT INTO users (name, first_name, last_name, email, password_hash, role, active) VALUES (?, ?, ?, ?, ?, ?, 1)'
+      )
+      .run('Administrator', 'Administrator', '', ADMIN_EMAIL, passwordHash, 'admin');
     return Number(result.lastInsertRowid);
   }
 
-  db.prepare('UPDATE users SET password_hash = ?, role = ?, active = 1, name = ? WHERE id = ?').run(
+  db.prepare(
+    'UPDATE users SET password_hash = ?, role = ?, active = 1, name = ?, first_name = ?, last_name = ? WHERE id = ?'
+  ).run(
     passwordHash,
     'admin',
     'Administrator',
+    'Administrator',
+    '',
     existing.id
   );
   return existing.id;

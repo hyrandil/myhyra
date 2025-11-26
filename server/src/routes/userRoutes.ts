@@ -61,8 +61,13 @@ const ensureHolidayProfileColumn = () => {
 
 ensureHolidayProfileColumn();
 
+const displayName = (first?: string | null, last?: string | null, fallback?: string) => {
+  const combined = [first, last].filter(Boolean).join(' ').trim();
+  return combined || fallback || '';
+};
+
 const toUserPayload = (
-  user: Pick<User, 'id' | 'name' | 'email' | 'role' | 'created_at'> & {
+  user: Pick<User, 'id' | 'name' | 'email' | 'role' | 'created_at' | 'first_name' | 'last_name'> & {
     active: number;
     vacation_allowance?: number;
     personnel_number?: string | null;
@@ -77,7 +82,9 @@ const toUserPayload = (
   }
 ) => ({
   id: user.id,
-  name: user.name,
+  name: displayName(user.first_name, user.last_name, user.name),
+  firstName: user.first_name ?? undefined,
+  lastName: user.last_name ?? undefined,
   email: user.email,
   role: user.role,
   created_at: user.created_at,
@@ -386,7 +393,8 @@ router.get('/me/flex', (req: AuthRequest, res) => {
 router.use(authorize(['admin', 'hr']));
 
 const userSchema = z.object({
-  name: z.string().min(2),
+  first_name: z.string().min(1),
+  last_name: z.string().min(1),
   email: z.string().email(),
   password: z.string().min(6),
   role: z.enum(['employee', 'lead', 'hr', 'admin']).optional().default('employee'),
@@ -431,7 +439,7 @@ router.get('/', (req: AuthRequest, res) => {
   const search = typeof req.query.q === 'string' ? `%${req.query.q}%` : '%';
   const users = db
     .prepare(
-      `SELECT u.id, u.name, u.email, u.role, u.created_at, u.active, IFNULL(us.vacation_allowance, 0) as vacation_allowance
+      `SELECT u.id, u.name, u.first_name, u.last_name, u.email, u.role, u.created_at, u.active, IFNULL(us.vacation_allowance, 0) as vacation_allowance
        , IFNULL(us.flex_enabled, 0) as flex_enabled, up.personnel_number, up.location, up.department, up.tracking_start_date, up.start_date, up.end_date, up.work_model_id, up.holiday_profile_id
        FROM users u
        LEFT JOIN user_settings us ON us.user_id = u.id
@@ -439,7 +447,7 @@ router.get('/', (req: AuthRequest, res) => {
        WHERE u.id != ? AND (u.name LIKE ? OR u.email LIKE ? OR IFNULL(up.personnel_number,'') LIKE ?)
        ORDER BY u.name ASC`
     )
-    .all(req.user!.id, search, search, search) as (Pick<User, 'id' | 'name' | 'email' | 'role' | 'created_at'> & {
+    .all(req.user!.id, search, search, search) as (Pick<User, 'id' | 'name' | 'email' | 'role' | 'created_at' | 'first_name' | 'last_name'> & {
       active: number;
       vacation_allowance: number;
       personnel_number?: string | null;
@@ -452,15 +460,18 @@ router.post('/', (req, res) => {
   if (!parsed.success) {
     return res.status(400).json({ errors: parsed.error.format() });
   }
-  const { name, email, password, role, vacationAllowance, ...profile } = parsed.data;
+  const { first_name, last_name, email, password, role, vacationAllowance, ...profile } = parsed.data;
   const normalizedEmail = normalizeEmail(email);
   const existing = db.prepare('SELECT id FROM users WHERE email = ?').get(normalizedEmail) as { id: number } | undefined;
   if (existing) {
     return res.status(409).json({ message: 'E-Mail bereits vorhanden' });
   }
   const passwordHash = bcrypt.hashSync(password, 10);
-  const stmt = db.prepare('INSERT INTO users (name, email, password_hash, role, active) VALUES (?, ?, ?, ?, 1)');
-  const result = stmt.run(name, normalizedEmail, passwordHash, role);
+  const fullName = `${first_name} ${last_name}`.trim();
+  const stmt = db.prepare(
+    'INSERT INTO users (name, first_name, last_name, email, password_hash, role, active) VALUES (?, ?, ?, ?, ?, ?, 1)'
+  );
+  const result = stmt.run(fullName, first_name, last_name, normalizedEmail, passwordHash, role);
   const createdUserId = Number(result.lastInsertRowid);
   db.prepare('INSERT INTO user_settings (user_id, vacation_allowance) VALUES (?, ?)').run(
     createdUserId,
@@ -495,14 +506,14 @@ router.post('/', (req, res) => {
   }
   const created = db
     .prepare(
-      `SELECT u.id, u.name, u.email, u.role, u.created_at, u.active, IFNULL(us.vacation_allowance, 0) as vacation_allowance
+      `SELECT u.id, u.name, u.first_name, u.last_name, u.email, u.role, u.created_at, u.active, IFNULL(us.vacation_allowance, 0) as vacation_allowance
        , IFNULL(us.flex_enabled, 0) as flex_enabled, up.personnel_number, up.location, up.department, up.tracking_start_date, up.start_date, up.end_date, up.work_model_id, up.holiday_profile_id
        FROM users u
        LEFT JOIN user_settings us ON us.user_id = u.id
        LEFT JOIN user_profiles up ON up.user_id = u.id
        WHERE u.id = ?`
     )
-    .get(result.lastInsertRowid) as Pick<User, 'id' | 'name' | 'email' | 'role' | 'created_at'> & {
+    .get(result.lastInsertRowid) as Pick<User, 'id' | 'name' | 'email' | 'role' | 'created_at' | 'first_name' | 'last_name'> & {
       active: number;
       vacation_allowance: number;
       personnel_number?: string | null;
@@ -548,14 +559,14 @@ router.patch('/:id/status', (req, res) => {
   }
   const updated = db
     .prepare(
-      `SELECT u.id, u.name, u.email, u.role, u.created_at, u.active, IFNULL(us.vacation_allowance, 0) as vacation_allowance
+      `SELECT u.id, u.name, u.first_name, u.last_name, u.email, u.role, u.created_at, u.active, IFNULL(us.vacation_allowance, 0) as vacation_allowance
        , IFNULL(us.flex_enabled, 0) as flex_enabled, up.personnel_number, up.location, up.department, up.start_date, up.end_date, up.work_model_id, up.holiday_profile_id
        FROM users u
        LEFT JOIN user_settings us ON us.user_id = u.id
        LEFT JOIN user_profiles up ON up.user_id = u.id
        WHERE u.id = ?`
     )
-    .get(userId) as Pick<User, 'id' | 'name' | 'email' | 'role' | 'created_at'> & {
+    .get(userId) as Pick<User, 'id' | 'name' | 'email' | 'role' | 'created_at' | 'first_name' | 'last_name'> & {
       active: number;
       vacation_allowance: number;
       personnel_number?: string | null;
@@ -564,7 +575,8 @@ router.patch('/:id/status', (req, res) => {
 });
 
 const userUpdateSchema = z.object({
-  name: z.string().min(2),
+  first_name: z.string().min(1),
+  last_name: z.string().min(1),
   email: z.string().email(),
   role: z.enum(['employee', 'lead', 'hr', 'admin']),
   personnel_number: z.string().max(80).optional().or(z.literal('')).transform((value) => value || undefined),
@@ -614,9 +626,10 @@ router.patch('/:id', (req, res) => {
   if (duplicate) {
     return res.status(409).json({ message: 'E-Mail ist bereits vergeben' });
   }
+  const fullName = `${parsed.data.first_name} ${parsed.data.last_name}`.trim();
   const result = db
-    .prepare('UPDATE users SET name = ?, email = ?, role = ? WHERE id = ?')
-    .run(parsed.data.name, normalizedEmail, parsed.data.role, userId);
+    .prepare('UPDATE users SET name = ?, first_name = ?, last_name = ?, email = ?, role = ? WHERE id = ?')
+    .run(fullName, parsed.data.first_name, parsed.data.last_name, normalizedEmail, parsed.data.role, userId);
   if (result.changes === 0) {
     return res.status(404).json({ message: 'Nutzer nicht gefunden' });
   }
@@ -647,14 +660,14 @@ router.patch('/:id', (req, res) => {
   );
   const updated = db
     .prepare(
-      `SELECT u.id, u.name, u.email, u.role, u.created_at, u.active, IFNULL(us.vacation_allowance, 0) as vacation_allowance
+      `SELECT u.id, u.name, u.first_name, u.last_name, u.email, u.role, u.created_at, u.active, IFNULL(us.vacation_allowance, 0) as vacation_allowance
        , IFNULL(us.flex_enabled, 0) as flex_enabled, up.personnel_number, up.location, up.department, up.tracking_start_date, up.start_date, up.end_date, up.work_model_id, up.holiday_profile_id
        FROM users u
        LEFT JOIN user_settings us ON us.user_id = u.id
        LEFT JOIN user_profiles up ON up.user_id = u.id
        WHERE u.id = ?`
     )
-    .get(userId) as Pick<User, 'id' | 'name' | 'email' | 'role' | 'created_at'> & {
+    .get(userId) as Pick<User, 'id' | 'name' | 'email' | 'role' | 'created_at' | 'first_name' | 'last_name'> & {
       active: number;
       vacation_allowance: number;
       personnel_number?: string | null;
@@ -716,13 +729,13 @@ router.patch('/:id/settings', (req, res) => {
   );
   const updated = db
     .prepare(
-      `SELECT u.id, u.name, u.email, u.role, u.created_at, u.active, IFNULL(us.vacation_allowance, 0) as vacation_allowance
+      `SELECT u.id, u.name, u.first_name, u.last_name, u.email, u.role, u.created_at, u.active, IFNULL(us.vacation_allowance, 0) as vacation_allowance
        , IFNULL(us.flex_enabled, 0) as flex_enabled
        FROM users u
        LEFT JOIN user_settings us ON us.user_id = u.id
        WHERE u.id = ?`
     )
-    .get(userId) as Pick<User, 'id' | 'name' | 'email' | 'role' | 'created_at'> & {
+    .get(userId) as Pick<User, 'id' | 'name' | 'email' | 'role' | 'created_at' | 'first_name' | 'last_name'> & {
       active: number;
       vacation_allowance: number;
     };

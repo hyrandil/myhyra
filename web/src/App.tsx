@@ -16,7 +16,7 @@ function Protected({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
-function NavItem({ to, icon, label }: { to: string; icon: string; label: string }) {
+function NavItem({ to, label }: { to: string; label: string }) {
   return (
     <NavLink
       to={to}
@@ -29,7 +29,7 @@ function NavItem({ to, icon, label }: { to: string; icon: string; label: string 
         }`
       }
     >
-      <span className="text-lg">{icon}</span>
+      <span className="h-2 w-2 rounded-full bg-white/70" aria-hidden />
       {label}
     </NavLink>
   );
@@ -37,6 +37,7 @@ function NavItem({ to, icon, label }: { to: string; icon: string; label: string 
 
 function Shell({ children }: { children: React.ReactNode }) {
   const auth = useAuth();
+  const displayName = [auth.user?.firstName, auth.user?.lastName].filter(Boolean).join(' ') || auth.user?.name;
   return (
     <div className="min-h-screen flex bg-surface">
       <aside className="w-72 bg-gradient-to-b from-sky-900 via-sky-950 to-slate-950 text-sky-50 flex flex-col shadow-2xl relative">
@@ -46,22 +47,22 @@ function Shell({ children }: { children: React.ReactNode }) {
           <p className="text-3xl font-black">ZeitPilot</p>
         </div>
         <nav className="p-4 space-y-1 flex-1 relative">
-          <NavItem to="/" icon="⏱️" label="Dashboard" />
-          <NavItem to="/zeiten" icon="📅" label="Kalender & Zeiten" />
-          <NavItem to="/uebersicht" icon="🗂️" label="Übersichtkalender" />
-          <NavItem to="/abwesenheiten" icon="🧭" label="Abwesenheiten" />
-          {auth.hasRole('hr', 'admin') && <NavItem to="/planung" icon="⏳" label="Stundenplanung" />}
-          {auth.hasRole('lead', 'hr', 'admin') && <NavItem to="/mitarbeitende" icon="👥" label="Team" />}
-          {auth.hasRole('hr', 'admin') && <NavItem to="/berichte" icon="📊" label="Berichte" />}
+          <NavItem to="/" label="Dashboard" />
+          <NavItem to="/zeiten" label="Kalender & Zeiten" />
+          <NavItem to="/uebersicht" label="Übersichtkalender" />
+          <NavItem to="/abwesenheiten" label="Abwesenheiten" />
+          {auth.hasRole('hr', 'admin') && <NavItem to="/planung" label="Stundenplanung" />}
+          {auth.hasRole('lead', 'hr', 'admin') && <NavItem to="/mitarbeitende" label="Team" />}
+          {auth.hasRole('hr', 'admin') && <NavItem to="/berichte" label="Berichte" />}
         </nav>
         <div className="p-4 border-t border-white/10 bg-white/5 backdrop-blur relative">
           <div className="flex items-center gap-3">
             <div className="h-11 w-11 rounded-full bg-white/20 flex items-center justify-center text-lg font-bold">
-              {auth.user?.name?.[0] ?? '?'}
+              {displayName?.[0] ?? '?'}
             </div>
             <div className="flex-1">
               <p className="text-xs uppercase text-sky-200">{auth.user?.role ?? 'User'}</p>
-              <p className="font-semibold leading-tight">{auth.user?.name}</p>
+              <p className="font-semibold leading-tight">{displayName}</p>
               <p className="text-xs text-sky-200 truncate">{auth.user?.email}</p>
             </div>
           </div>
