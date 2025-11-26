@@ -71,6 +71,19 @@ function ensureManageable(req: AuthRequest, res: any, targetUserId: number) {
   return false;
 }
 
+function ensureEntryManageable(req: AuthRequest, res: any, entryId: number) {
+  const entry = db.prepare('SELECT * FROM time_entries WHERE id = ?').get(entryId) as TimeEntry | undefined;
+  if (!entry) {
+    res.status(404).json({ message: 'Buchung nicht gefunden' });
+    return null;
+  }
+  if (!req.user) return null;
+  if (req.user.role === 'admin' || req.user.role === 'hr') return entry;
+  if (canManageUser(req.user.id, req.user.role, entry.user_id)) return entry;
+  res.status(403).json({ message: 'Keine Berechtigung für diese Buchung' });
+  return null;
+}
+
 function buildDailySummary(userId: number, month?: string, maskAbsences = false) {
   const now = month ? new Date(`${month}-01T00:00:00Z`) : new Date();
   const start = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
@@ -330,6 +343,26 @@ router.get('/user/:userId/daily', authorize(['admin', 'hr', 'lead']), (req: Auth
   res.json(buildDailySummary(userId, month));
 });
 
+router.get('/user/:userId/day', authorize(['admin', 'hr', 'lead']), (req: AuthRequest, res) => {
+  const userId = Number(req.params.userId);
+  const { date } = req.query as { date?: string };
+  if (!date) return res.status(400).json({ message: 'Datum erforderlich' });
+  if (Number.isNaN(userId)) return res.status(400).json({ message: 'Ungültige Nutzer-ID' });
+  const exists = db.prepare('SELECT id FROM users WHERE id = ?').get(userId) as { id: number } | undefined;
+  if (!exists) return res.status(404).json({ message: 'Nutzer nicht gefunden' });
+  if (!ensureManageable(req, res, userId)) return;
+  const entries = db
+    .prepare('SELECT * FROM time_entries WHERE user_id = ? AND date(timestamp) = ? ORDER BY timestamp ASC')
+    .all(userId, date) as TimeEntry[];
+  const absences = db
+    .prepare('SELECT * FROM absences WHERE user_id = ? AND start_date <= ? AND end_date >= ?')
+    .all(userId, date, date) as Absence[];
+  const pending = db
+    .prepare("SELECT * FROM absence_requests WHERE user_id = ? AND status = 'pending' AND start_date <= ? AND end_date >= ?")
+    .all(userId, date, date) as any[];
+  res.json({ entries, absences, pending: pending.length > 0 });
+});
+
 router.get('/overview', (req: AuthRequest, res) => {
   const { month, department, userId } = req.query as { month?: string; department?: string; userId?: string };
   const today = new Date();
@@ -440,6 +473,43 @@ router.post('/user/:userId/manual', authorize(['admin', 'hr', 'lead']), (req: Au
   const result = stmt.run(userId, timestamp, type, source ?? 'WEB', location?.lat ?? null, location?.lng ?? null);
   const entry = db.prepare('SELECT * FROM time_entries WHERE id = ?').get(result.lastInsertRowid) as TimeEntry;
   res.status(201).json(entry);
+});
+
+const updateEntrySchema = z.object({
+  timestamp: z
+    .string()
+    .min(16)
+    .transform((value) => {
+      const normalized = value.endsWith('Z') ? value : `${value}Z`;
+      const date = new Date(normalized);
+      if (Number.isNaN(date.getTime())) {
+        throw new Error('Ungültiger Zeitstempel');
+      }
+      return date.toISOString();
+    }),
+  type: z.enum(['CLOCK_IN', 'CLOCK_OUT', 'BREAK_START', 'BREAK_END']),
+});
+
+router.patch('/entry/:entryId', authorize(['admin', 'hr', 'lead']), (req: AuthRequest, res) => {
+  const entryId = Number(req.params.entryId);
+  if (Number.isNaN(entryId)) return res.status(400).json({ message: 'Ungültige Buchungs-ID' });
+  const entry = ensureEntryManageable(req, res, entryId);
+  if (!entry) return;
+  const parsed = updateEntrySchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ errors: parsed.error.format() });
+  const { timestamp, type } = parsed.data;
+  db.prepare('UPDATE time_entries SET timestamp = ?, type = ? WHERE id = ?').run(timestamp, type, entryId);
+  const updated = db.prepare('SELECT * FROM time_entries WHERE id = ?').get(entryId) as TimeEntry;
+  res.json(updated);
+});
+
+router.delete('/entry/:entryId', authorize(['admin', 'hr', 'lead']), (req: AuthRequest, res) => {
+  const entryId = Number(req.params.entryId);
+  if (Number.isNaN(entryId)) return res.status(400).json({ message: 'Ungültige Buchungs-ID' });
+  const entry = ensureEntryManageable(req, res, entryId);
+  if (!entry) return;
+  db.prepare('DELETE FROM time_entries WHERE id = ?').run(entryId);
+  res.status(204).send();
 });
 
 export default router;

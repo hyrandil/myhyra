@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { fetchEmployees, fetchSchedule, updateSchedule } from '../api';
 import { Employee } from '../types';
@@ -10,6 +10,7 @@ export function PlanningPage() {
   const auth = useAuth();
   const queryClient = useQueryClient();
   const [selectedUser, setSelectedUser] = useState<number | null>(null);
+  const [dayMinutes, setDayMinutes] = useState<number[]>([480, 480, 480, 480, 480, 0, 0]);
 
   const { data: employees } = useQuery({
     queryKey: ['employees', 'planning'],
@@ -38,13 +39,15 @@ export function PlanningPage() {
     }
   }, [selectedUser, employees]);
 
-  const dayMinutes = useMemo(() => {
+  useEffect(() => {
     const base = new Map<number, number>();
     if (schedules.data?.days) {
       schedules.data.days.forEach((d) => base.set(d.weekday, d.minutes));
+      setDayMinutes(weekdayLabels.map((_, idx) => base.get(idx) ?? (idx < 5 ? 480 : 0)));
+    } else {
+      setDayMinutes(weekdayLabels.map((_, idx) => (idx < 5 ? 480 : 0)));
     }
-    return weekdayLabels.map((_, idx) => base.get(idx) ?? (idx < 5 ? 480 : 0));
-  }, [schedules.data]);
+  }, [schedules.data, selectedUser]);
 
   return (
     <div className="space-y-4">
@@ -94,7 +97,12 @@ export function PlanningPage() {
                   type="number"
                   step="0.25"
                   min="0"
-                  defaultValue={(dayMinutes[idx] ?? 0) / 60}
+                  value={(dayMinutes[idx] ?? 0) / 60}
+                  onChange={(e) => {
+                    const clone = [...dayMinutes];
+                    clone[idx] = Number(e.target.value) * 60;
+                    setDayMinutes(clone);
+                  }}
                   className="input flex-1"
                 />
                 <span className="text-xs text-slate-500">Stunden</span>

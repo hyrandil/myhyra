@@ -165,6 +165,13 @@ export async function fetchDailyOverview(month?: string, department?: string, us
   return res.data;
 }
 
+export async function fetchDayEntriesForUser(userId: number, date: string) {
+  const res = await api.get<{ entries: TimeEntry[]; absences: any[]; pending: boolean }>(`/time/user/${userId}/day`, {
+    params: { date },
+  });
+  return res.data;
+}
+
 export async function createAbsenceRequest(data: { start_date: string; end_date: string; type: string; comment?: string }) {
   const res = await api.post('/absences/request', data);
   return res.data;
@@ -219,6 +226,18 @@ export async function createManualTimeEntry(
 ) {
   const res = await api.post(`/time/user/${userId}/manual`, payload);
   return res.data;
+}
+
+export async function updateTimeEntry(
+  entryId: number,
+  payload: { timestamp: string; type: 'CLOCK_IN' | 'CLOCK_OUT' | 'BREAK_START' | 'BREAK_END' }
+) {
+  const res = await api.patch(`/time/entry/${entryId}`, payload);
+  return res.data as TimeEntry;
+}
+
+export async function deleteTimeEntry(entryId: number) {
+  await api.delete(`/time/entry/${entryId}`);
 }
 
 export async function fetchAttendance(month?: string) {

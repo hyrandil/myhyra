@@ -7,10 +7,13 @@ import {
   deleteAbsenceForUser,
   fetchDaily,
   fetchDailyForUser,
+  fetchDayEntriesForUser,
   fetchEmployees,
+  updateTimeEntry,
+  deleteTimeEntry,
 } from '../api';
 import { useAuth } from '../AuthProvider';
-import { DailySummary, Employee } from '../types';
+import { DailySummary, Employee, TimeEntry } from '../types';
 
 export function TimesPage() {
   const { user, hasRole } = useAuth();
@@ -72,6 +75,11 @@ export function TimesPage() {
     enabled: Boolean(selectedUserId),
   });
   const days = data?.days ?? {};
+  const dayDetail = useQuery({
+    queryKey: ['dayEntries', selectedUserId, selectedDate],
+    queryFn: () => fetchDayEntriesForUser(selectedUserId!, selectedDate!),
+    enabled: enableManagement && Boolean(selectedUserId && selectedDate),
+  });
 
   const canEditTarget = useMemo(() => {
     if (!enableManagement || !selectedUserId) return false;
@@ -120,6 +128,7 @@ export function TimesPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['daily', month, selectedUserId] });
       queryClient.invalidateQueries({ queryKey: ['overview'] });
+      queryClient.invalidateQueries({ queryKey: ['dayEntries', selectedUserId, selectedDate] });
     },
   });
 
@@ -129,6 +138,7 @@ export function TimesPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['daily', month, selectedUserId] });
       queryClient.invalidateQueries({ queryKey: ['overview'] });
+      queryClient.invalidateQueries({ queryKey: ['dayEntries', selectedUserId, selectedDate] });
     },
   });
 
@@ -138,6 +148,24 @@ export function TimesPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['daily', month, selectedUserId] });
       queryClient.invalidateQueries({ queryKey: ['overview'] });
+      queryClient.invalidateQueries({ queryKey: ['dayEntries', selectedUserId, selectedDate] });
+    },
+  });
+
+  const updateEntryMutation = useMutation({
+    mutationFn: ({ entryId, timestamp, type }: { entryId: number; timestamp: string; type: TimeEntry['type'] }) =>
+      updateTimeEntry(entryId, { timestamp, type }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['dayEntries', selectedUserId, selectedDate] });
+      queryClient.invalidateQueries({ queryKey: ['daily', month, selectedUserId] });
+    },
+  });
+
+  const deleteEntryMutation = useMutation({
+    mutationFn: (entryId: number) => deleteTimeEntry(entryId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['dayEntries', selectedUserId, selectedDate] });
+      queryClient.invalidateQueries({ queryKey: ['daily', month, selectedUserId] });
     },
   });
 
@@ -228,7 +256,7 @@ export function TimesPage() {
                 </span>
               </div>
             </div>
-          {isLoading ? (
+            {isLoading ? (
             <p className="text-sm text-slate-500">Lade…</p>
           ) : (
             <Calendar
@@ -242,6 +270,94 @@ export function TimesPage() {
             />
           )}
         </div>
+        {enableManagement && selectedDate && (
+          <div className="card p-4 space-y-3">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-lg font-semibold">Buchungen am {selectedDate}</h3>
+                <p className="text-sm text-slate-500">Einzelne Stempel bearbeiten oder löschen.</p>
+              </div>
+              {dayDetail.isFetching && <span className="text-xs text-slate-500">Aktualisiere…</span>}
+            </div>
+            {dayDetail.data?.entries?.length ? (
+              <div className="space-y-2">
+                {dayDetail.data.entries.map((entry) => {
+                  const local = entry.timestamp.replace('Z', '');
+                  const mapUrl =
+                    entry.lat && entry.lng
+                      ? `https://www.google.com/maps?q=${entry.lat},${entry.lng}`
+                      : null;
+                  return (
+                    <div key={entry.id} className="border border-slate-200 rounded-lg p-3 space-y-2">
+                      <div className="flex items-center justify-between text-sm">
+                        <div className="space-y-1">
+                          <p className="font-semibold">
+                            {new Date(entry.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}{' '}
+                            – {entry.type}
+                          </p>
+                          <p className="text-xs text-slate-500">Quelle: {entry.source}</p>
+                          {mapUrl && (
+                            <a className="text-xs text-sky-600 hover:underline" href={mapUrl} target="_blank" rel="noreferrer">
+                              Standort öffnen (Google Maps)
+                            </a>
+                          )}
+                        </div>
+                        <button
+                          className="text-rose-600 text-xs"
+                          onClick={() => deleteEntryMutation.mutate(entry.id)}
+                          disabled={deleteEntryMutation.isPending}
+                        >
+                          Löschen
+                        </button>
+                      </div>
+                      <form
+                        className="grid md:grid-cols-3 gap-2 text-sm"
+                        onSubmit={(e) => {
+                          e.preventDefault();
+                          const data = new FormData(e.currentTarget);
+                          const ts = String(data.get('timestamp'));
+                          const withZ = ts.endsWith('Z') ? ts : `${ts}Z`;
+                          updateEntryMutation.mutate({
+                            entryId: entry.id,
+                            timestamp: withZ,
+                            type: data.get('type') as TimeEntry['type'],
+                          });
+                        }}
+                      >
+                        <div>
+                          <label className="text-xs text-slate-500">Zeitpunkt</label>
+                          <input name="timestamp" type="datetime-local" defaultValue={local} className="input w-full" required />
+                        </div>
+                        <div>
+                          <label className="text-xs text-slate-500">Typ</label>
+                          <select name="type" defaultValue={entry.type} className="input w-full">
+                            <option value="CLOCK_IN">Kommen</option>
+                            <option value="CLOCK_OUT">Gehen</option>
+                            <option value="BREAK_START">Pause starten</option>
+                            <option value="BREAK_END">Pause beenden</option>
+                          </select>
+                        </div>
+                        <div className="flex items-end">
+                          <button className="btn-primary w-full" type="submit" disabled={updateEntryMutation.isPending}>
+                            Aktualisieren
+                          </button>
+                        </div>
+                      </form>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <p className="text-sm text-slate-500">Keine Buchungen am ausgewählten Tag.</p>
+            )}
+            {dayDetail.data?.absences?.length ? (
+              <p className="text-sm text-slate-600">
+                Abwesenheiten: {dayDetail.data.absences.map((a: any) => a.type).join(', ')}
+                {dayDetail.data.pending ? ' (Antrag offen)' : ''}
+              </p>
+            ) : null}
+          </div>
+        )}
         <div className="card p-4 space-y-3">
           <div className="flex items-center justify-between">
             <h3 className="text-lg font-semibold">Monatsübersicht (Auswahl)</h3>
