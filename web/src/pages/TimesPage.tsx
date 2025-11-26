@@ -58,6 +58,12 @@ export function TimesPage() {
     return `${sign}${hrs}h ${String(mins).padStart(2, '0')}m`;
   };
 
+  const formatUtcTime = (iso: string) => {
+    if (!iso) return '';
+    const value = iso.includes('Z') ? iso : `${iso}Z`;
+    return value.slice(11, 16);
+  };
+
   const { data: employees } = useQuery({
     queryKey: ['employees', 'all'],
     queryFn: () => fetchEmployees(),
@@ -300,8 +306,7 @@ export function TimesPage() {
                       <div className="flex items-center justify-between text-sm">
                         <div className="space-y-1">
                           <p className="font-semibold">
-                            {new Date(entry.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}{' '}
-                            – {labels[entry.type]}
+                            {formatUtcTime(entry.timestamp)} – {labels[entry.type]}
                           </p>
                           <p className="text-xs text-slate-500">Quelle: {entry.source}</p>
                           {mapUrl && (
