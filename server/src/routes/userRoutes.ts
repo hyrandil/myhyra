@@ -181,8 +181,14 @@ const computeFlexBalance = (userId: number) => {
     .prepare('SELECT * FROM bookings WHERE user_id = ? ORDER BY clock_in ASC')
     .all(userId) as Booking[];
   const absences = db
-    .prepare('SELECT * FROM absences WHERE user_id = ?')
+    .prepare('SELECT * FROM absences WHERE user_id = ? ORDER BY start_date ASC')
     .all(userId) as Absence[];
+  const trackingStartRow = db
+    .prepare('SELECT tracking_start_date FROM user_profiles WHERE user_id = ?')
+    .get(userId) as { tracking_start_date: string | null } | undefined;
+  const trackingStartDate = trackingStartRow?.tracking_start_date
+    ? new Date(`${trackingStartRow.tracking_start_date}T00:00:00Z`)
+    : null;
 
   const bookingsByDay = new Map<string, Booking[]>();
   bookings.forEach((booking) => {
@@ -202,11 +208,23 @@ const computeFlexBalance = (userId: number) => {
     });
   });
 
-  const dayKeys = new Set<string>([...bookingsByDay.keys(), ...absenceMap.keys()]);
+  const earliestBooking = bookings.length ? dateKey(bookings[0]!.clock_in) : null;
+  const earliestAbsence = absences.length ? absences[0]!.start_date : null;
+  const today = new Date();
+  const startCursor = (() => {
+    const candidates = [trackingStartDate ? trackingStartDate.toISOString().slice(0, 10) : null, earliestBooking, earliestAbsence]
+      .filter(Boolean) as string[];
+    if (candidates.length === 0) return today.toISOString().slice(0, 10);
+    return candidates.reduce((min, curr) => (curr < min ? curr : min));
+  })();
+
   let plannedTotal = 0;
   let workedTotal = 0;
+  let flexCarry = 0;
+  let cursor = new Date(`${startCursor}T00:00:00Z`);
 
-  dayKeys.forEach((dayKey) => {
+  while (cursor.getTime() <= today.getTime()) {
+    const dayKey = cursor.toISOString().slice(0, 10);
     const weekday = weekdayFromDate(dayKey);
     const planned = planMap.get(weekday) ?? 0;
     const baseWork = computeDayWorkMinutes(bookingsByDay.get(dayKey) ?? []);
@@ -227,19 +245,26 @@ const computeFlexBalance = (userId: number) => {
       }
     });
 
-    const totalForDay = baseWork + creditVacation + topUpOther;
-    if (planned > 0 || totalForDay > 0 || absencesForDay.length > 0) {
-      plannedTotal += planned;
-      workedTotal += totalForDay;
+    const inactiveBeforeTracking = trackingStartDate && cursor.getTime() < trackingStartDate.getTime();
+    const effectivePlanned = inactiveBeforeTracking ? 0 : planned;
+    const effectiveWorked = inactiveBeforeTracking ? 0 : baseWork + creditVacation + topUpOther;
+    const delta = effectiveWorked - effectivePlanned;
+
+    if (effectivePlanned > 0 || effectiveWorked > 0 || absencesForDay.length > 0) {
+      plannedTotal += effectivePlanned;
+      workedTotal += effectiveWorked;
+      flexCarry += delta;
     }
-  });
+
+    cursor.setUTCDate(cursor.getUTCDate() + 1);
+  }
 
   const adjustmentRow = db
     .prepare('SELECT flex_adjust_minutes, flex_enabled FROM user_settings WHERE user_id = ?')
     .get(userId) as { flex_adjust_minutes?: number; flex_enabled?: number } | undefined;
   const adjustment = adjustmentRow?.flex_adjust_minutes ?? 0;
   const enabled = Boolean(adjustmentRow?.flex_enabled ?? 0);
-  return { balanceMinutes: workedTotal - plannedTotal + adjustment, plannedTotal, workedTotal, adjustment, enabled };
+  return { balanceMinutes: flexCarry + adjustment, plannedTotal, workedTotal, adjustment, enabled };
 };
 
 router.use(authenticate);
