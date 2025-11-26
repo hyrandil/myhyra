@@ -9,3 +9,5 @@ export const ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'admin@example.com';
 export const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'ChangeMe!123';
 export const DATABASE_FILE =
   process.env.DATABASE_FILE || path.resolve(process.cwd(), 'data', 'time_tracking.db');
+export const SESSION_SECRET = process.env.SESSION_SECRET || 'dev-session-secret-change-me';
+export const WEB_ORIGIN = process.env.WEB_ORIGIN || 'http://localhost:5173';

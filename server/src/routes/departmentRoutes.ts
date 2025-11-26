@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { z } from 'zod';
-import { authenticate, authorize } from '../auth';
+import { requireAuth, authorize } from '../auth';
 import db from '../db';
 
 const router = Router();
@@ -15,7 +15,7 @@ const memberSchema = z.object({
   role: z.enum(['member', 'lead', 'hr']).default('member'),
 });
 
-router.use(authenticate);
+router.use(requireAuth);
 
 router.get('/public', (_req, res) => {
   const departments = db.prepare('SELECT id, name, description FROM departments ORDER BY name ASC').all();

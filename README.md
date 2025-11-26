@@ -3,7 +3,7 @@
 Browserbasierte Beispiel-Anwendung für eine Zeiterfassung mit Express/SQLite-API und React-Frontend.
 
 ## Features
-- Rollenbasierte Anmeldung (Mitarbeiter, Teamleiter, HR, Administrator) mit JWT und Passwort-Hashing.
+- Rollenbasierte Anmeldung (Mitarbeiter, Teamleiter, HR, Administrator) mit serverseitigen Sitzungen (HttpOnly-Cookie) und Passwort-Hashing.
 - Mitarbeitendenverwaltung (Personalnummer, Standort, Abteilung, Eintritt/Austritt, Aktiv-Status) inkl. Suche.
 - Stempeluhr mit Kommen/Gehen/Pausen, Quellen (WEB/APP/TERMINAL) und optionalen GPS-Daten.
 - Arbeitszeitmodelle je Wochentag, automatische Pausenregel (Abzug bis 30 min nach >6 h ohne echte Pause).
@@ -30,10 +30,10 @@ cd web
 npm install
 npm run dev
 ```
-`VITE_API_URL` zeigt auf die API (Standard: `http://localhost:4000/api`).
+`VITE_API_URL` zeigt auf die API (Standard: `http://localhost:4000/api`). Cookies werden automatisch (withCredentials) gesendet.
 
 ## Wichtige Endpunkte
-- `POST /api/auth/login` – Login, liefert JWT.
+- `POST /api/auth/login` – Login, legt Session-Cookie an.
 - `POST /api/auth/register` – Admin/HR legen neue Nutzer an.
 - `GET /api/users?q=` – Liste mit Suche; `POST /api/users` anlegen; `PATCH /api/users/:id` Stammdaten/Rolle/Status.
 - `GET /api/time/me` – eigene Buchungen; `POST /api/time/clock-in|clock-out|break-start|break-end` – Stempelvorgänge.

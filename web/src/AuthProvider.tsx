@@ -1,9 +1,10 @@
-import { createContext, useContext, useMemo, useState } from 'react';
-import { login as apiLogin } from './api';
+import { createContext, useContext, useEffect, useMemo, useState } from 'react';
+import { fetchSession, login as apiLogin, logout as apiLogout } from './api';
 import { Role, UserInfo } from './types';
 
 interface AuthContextValue {
-  user: (UserInfo & { token: string }) | null;
+  user: UserInfo | null;
+  ready: boolean;
   login: (email: string, password: string) => Promise<void>;
   logout: () => void;
   hasRole: (...roles: Role[]) => boolean;
@@ -12,36 +13,31 @@ interface AuthContextValue {
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [user, setUser] = useState<(UserInfo & { token: string }) | null>(() => {
-    const token = localStorage.getItem('token');
-    const payload = localStorage.getItem('user');
-    if (token && payload) {
-      try {
-        const parsed = JSON.parse(payload) as UserInfo;
-        return { ...parsed, token };
-      } catch (error) {
-        return null;
-      }
-    }
-    return null;
-  });
+  const [user, setUser] = useState<UserInfo | null>(null);
+  const [ready, setReady] = useState(false);
+
+  useEffect(() => {
+    fetchSession()
+      .then((res) => setUser(res.user))
+      .catch(() => setUser(null))
+      .finally(() => setReady(true));
+  }, []);
 
   const login = async (email: string, password: string) => {
     const res = await apiLogin(email.trim(), password);
-    localStorage.setItem('token', res.token);
-    localStorage.setItem('user', JSON.stringify(res.user));
-    setUser({ ...res.user, token: res.token });
+    setUser(res.user);
   };
 
   const logout = () => {
-    localStorage.removeItem('token');
-    localStorage.removeItem('user');
-    setUser(null);
+    apiLogout()
+      .catch(() => undefined)
+      .finally(() => setUser(null));
   };
 
   const value = useMemo<AuthContextValue>(
     () => ({
       user,
+      ready,
       login,
       logout,
       hasRole: (...roles: Role[]) => {
@@ -49,7 +45,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         return roles.includes(user.role);
       },
     }),
-    [user]
+    [user, ready]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

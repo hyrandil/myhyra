@@ -1,11 +1,11 @@
 import { Router } from 'express';
 import db from '../db';
-import { authenticate, authorize } from '../auth';
+import { requireAuth, authorize } from '../auth';
 import type { WorkScheduleEntry } from '../types';
 
 const router = Router();
 
-router.use(authenticate);
+router.use(requireAuth);
 router.use(authorize(['admin', 'hr']));
 
 const monthRegex = /^\d{4}-\d{2}$/;

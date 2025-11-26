@@ -10,7 +10,8 @@ import { PlanningPage } from './pages/PlanningPage';
 import { useAuth } from './AuthProvider';
 
 function Protected({ children }: { children: React.ReactNode }) {
-  const { user } = useAuth();
+  const { user, ready } = useAuth();
+  if (!ready) return null;
   if (!user) return <Navigate to="/login" replace />;
   return <>{children}</>;
 }

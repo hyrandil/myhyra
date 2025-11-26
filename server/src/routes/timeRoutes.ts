@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import db from '../db';
-import { authenticate, AuthRequest, authorize } from '../auth';
+import { requireAuth, AuthRequest, authorize } from '../auth';
 import { Absence, TimeEntry, WorkScheduleEntry } from '../types';
 import { Holiday } from '../utils/holidays';
 import { computeDayWorkMinutes, computeDayWorkStats, computeDelta } from '../services/timeService';
@@ -299,7 +299,7 @@ function buildDailySummary(userId: number, month?: string, maskAbsences = false)
   };
 }
 
-router.use(authenticate);
+router.use(requireAuth);
 
 router.get('/me', (req: AuthRequest, res) => {
   const entries = db

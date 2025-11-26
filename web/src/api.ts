@@ -15,20 +15,21 @@ import {
 const api = axios.create({
   // Default to the Express port (4000) so local dev works without extra env config
   baseURL: import.meta.env.VITE_API_URL || 'http://localhost:4000/api',
-});
-
-api.interceptors.request.use((config) => {
-  const token = localStorage.getItem('token');
-  if (token) {
-    config.headers = config.headers || {};
-    config.headers.Authorization = `Bearer ${token}`;
-  }
-  return config;
+  withCredentials: true,
 });
 
 export async function login(email: string, password: string) {
   const res = await api.post('/auth/login', { email, password });
-  return res.data as { token: string; user: UserInfo };
+  return res.data as { user: UserInfo };
+}
+
+export async function fetchSession() {
+  const res = await api.get('/auth/me');
+  return res.data as { user: UserInfo };
+}
+
+export async function logout() {
+  await api.post('/auth/logout');
 }
 
 export async function fetchMe() {

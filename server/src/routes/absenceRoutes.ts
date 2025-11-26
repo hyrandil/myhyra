@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import db from '../db';
-import { authenticate, authorize, AuthRequest } from '../auth';
+import { requireAuth, authorize, AuthRequest } from '../auth';
 import type { Absence, WorkScheduleEntry } from '../types';
 import { canManageUser, managedDepartments } from '../utils/permissions';
 
@@ -104,7 +104,7 @@ const buildVacationUsage = (absences: Absence[], schedule: WorkScheduleEntry[]) 
   return total;
 };
 
-router.use(authenticate);
+router.use(requireAuth);
 
 router.post('/request', (req: AuthRequest, res) => {
   const parsed = absenceRequestSchema.safeParse(req.body);

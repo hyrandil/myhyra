@@ -1,7 +1,8 @@
 import express from 'express';
 import cors from 'cors';
 import bodyParser from 'body-parser';
-import { PORT } from './config';
+import session from 'express-session';
+import { PORT, SESSION_SECRET, WEB_ORIGIN } from './config';
 import authRoutes from './routes/authRoutes';
 import bookingRoutes from './routes/bookingRoutes';
 import userRoutes from './routes/userRoutes';
@@ -13,7 +14,27 @@ import holidayRoutes from './routes/holidayRoutes';
 import './db';
 
 const app = express();
-app.use(cors());
+app.set('trust proxy', 1);
+app.use(
+  cors({
+    origin: WEB_ORIGIN,
+    credentials: true,
+  })
+);
+app.use(
+  session({
+    name: 'sid',
+    secret: SESSION_SECRET,
+    resave: false,
+    saveUninitialized: false,
+    cookie: {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      maxAge: 1000 * 60 * 60 * 24 * 7,
+    },
+  })
+);
 app.use(bodyParser.json());
 
 app.get('/', (_req, res) => {

@@ -1,7 +1,7 @@
 import { Router, Response } from 'express';
 import { z } from 'zod';
 import db from '../db';
-import { authenticate, authorize, AuthRequest } from '../auth';
+import { requireAuth, authorize, AuthRequest } from '../auth';
 import type { Booking } from '../types';
 import { canManageUser } from '../utils/permissions';
 
@@ -40,7 +40,7 @@ const manualBookingSchema = z
     path: ['clock_out_location'],
   });
 
-router.use(authenticate);
+router.use(requireAuth);
 
 function ensureCanManage(req: AuthRequest, res: Response, targetUserId: number) {
   if (!req.user) return false;

@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import db from '../db';
-import { authenticate, authorize } from '../auth';
+import { requireAuth, authorize } from '../auth';
 import { buildHolidayList } from '../utils/holidays';
 
 const router = Router();
@@ -21,7 +21,7 @@ const customHolidaySchema = z.object({
   duration: z.enum(['full', 'half']).default('full'),
 });
 
-router.use(authenticate);
+router.use(requireAuth);
 router.use(authorize(['admin', 'hr']));
 
 const resolveYears = (payload: {

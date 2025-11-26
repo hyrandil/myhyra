@@ -1,7 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
-import jwt from 'jsonwebtoken';
 import db from './db';
-import { JWT_SECRET } from './config';
 import { Role } from './types';
 
 export interface AuthRequest extends Request {
@@ -11,29 +9,28 @@ export interface AuthRequest extends Request {
   };
 }
 
-export function signToken(payload: { id: number; role: Role }) {
-  return jwt.sign(payload, JWT_SECRET, { expiresIn: '7d' });
+function applyNoCacheHeaders(res: Response) {
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Expires', '0');
 }
 
-export function authenticate(req: AuthRequest, res: Response, next: NextFunction) {
-  const header = req.headers.authorization;
-  if (!header) {
-    return res.status(401).json({ message: 'Fehlendes Authorization Header' });
+export function requireAuth(req: AuthRequest, res: Response, next: NextFunction) {
+  const userId = req.session.userId;
+  if (!userId) {
+    return res.redirect('/login');
   }
-  const token = header.replace('Bearer ', '');
-  try {
-    const decoded = jwt.verify(token, JWT_SECRET) as { id: number; role: Role };
-    const user = db
-      .prepare('SELECT id, role, active FROM users WHERE id = ?')
-      .get(decoded.id) as { id: number; role: Role; active: number } | undefined;
-    if (!user || !user.active) {
-      return res.status(401).json({ message: 'Dieser Zugang ist deaktiviert' });
-    }
-    req.user = { id: user.id, role: user.role };
-    next();
-  } catch (error) {
-    return res.status(401).json({ message: 'Ungültiges Token' });
+  const user = db
+    .prepare('SELECT id, role, active FROM users WHERE id = ?')
+    .get(userId) as { id: number; role: Role; active: number } | undefined;
+  if (!user || !user.active) {
+    req.session.destroy(() => undefined);
+    res.clearCookie('sid');
+    return res.redirect('/login');
   }
+  req.user = { id: user.id, role: user.role };
+  applyNoCacheHeaders(res);
+  next();
 }
 
 export function authorize(roles: Role[]) {

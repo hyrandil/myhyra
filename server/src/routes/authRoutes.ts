@@ -2,8 +2,7 @@ import { Router } from 'express';
 import bcrypt from 'bcryptjs';
 import { z } from 'zod';
 import db from '../db';
-import { signToken } from '../auth';
-import { authorize, authenticate, AuthRequest } from '../auth';
+import { authorize, requireAuth, AuthRequest } from '../auth';
 import type { User } from '../types';
 
 const router = Router();
@@ -17,7 +16,7 @@ const registerSchema = z.object({
 
 const normalizeEmail = (email: string) => email.trim().toLowerCase();
 
-router.post('/register', authenticate, authorize(['admin', 'hr']), (req: AuthRequest, res) => {
+router.post('/register', requireAuth, authorize(['admin', 'hr']), (req: AuthRequest, res) => {
   const parsed = registerSchema.safeParse(req.body);
   if (!parsed.success) {
     return res.status(400).json({ errors: parsed.error.format() });
@@ -38,7 +37,7 @@ router.post('/register', authenticate, authorize(['admin', 'hr']), (req: AuthReq
 
 const loginSchema = z.object({ email: z.string().email(), password: z.string().min(6) });
 
-router.post('/login', (req, res) => {
+router.post('/login', (req: AuthRequest, res) => {
   const parsed = loginSchema.safeParse(req.body);
   if (!parsed.success) {
     return res.status(400).json({ errors: parsed.error.format() });
@@ -56,8 +55,26 @@ router.post('/login', (req, res) => {
   if (!valid) {
     return res.status(401).json({ message: 'Ungültige Zugangsdaten' });
   }
-  const token = signToken({ id: user.id, role: user.role });
-  res.json({ token, user: { id: user.id, name: user.name, email: user.email, role: user.role } });
+  req.session.userId = user.id;
+  req.session.role = user.role;
+  res.json({ user: { id: user.id, name: user.name, email: user.email, role: user.role } });
+});
+
+router.get('/me', requireAuth, (req: AuthRequest, res) => {
+  const user = db
+    .prepare('SELECT id, name, email, role FROM users WHERE id = ?')
+    .get(req.user!.id) as { id: number; name: string; email: string; role: string } | undefined;
+  if (!user) {
+    req.session.destroy(() => undefined);
+    return res.redirect('/login');
+  }
+  res.json({ user });
+});
+
+router.post('/logout', requireAuth, (req, res) => {
+  req.session.destroy(() => undefined);
+  res.clearCookie('sid');
+  res.redirect('/login');
 });
 
 export default router;

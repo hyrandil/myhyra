@@ -2,7 +2,7 @@ import { Router, Response } from 'express';
 import bcrypt from 'bcryptjs';
 import { z } from 'zod';
 import db from '../db';
-import { authenticate, authorize, AuthRequest } from '../auth';
+import { requireAuth, authorize, AuthRequest } from '../auth';
 import type { User, Booking, Absence, WorkScheduleEntry } from '../types';
 
 const router = Router();
@@ -292,7 +292,7 @@ const computeFlexBalance = (userId: number) => {
   return { balanceMinutes: flexCarry + adjustment, plannedTotal, workedTotal, adjustment, enabled };
 };
 
-router.use(authenticate);
+router.use(requireAuth);
 
 const selfPasswordSchema = z
   .object({
