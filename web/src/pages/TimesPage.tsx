@@ -410,7 +410,7 @@ export function TimesPage() {
             )}
             {dayDetail.data?.absences?.length ? (
               <p className="text-sm text-slate-600">
-                Abwesenheiten: {dayDetail.data.absences.map((a: any) => a.type).join(', ')}
+                Abwesenheiten: {dayDetail.data.absences.map((a: any) => a.note || a.type).join(', ')}
                 {dayDetail.data.pending ? ' (Antrag offen)' : ''}
               </p>
             ) : null}

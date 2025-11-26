@@ -21,6 +21,24 @@ CREATE TABLE IF NOT EXISTS users (
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE TABLE IF NOT EXISTS holiday_profiles (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL,
+  state TEXT NOT NULL,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS holidays (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  profile_id INTEGER NOT NULL,
+  date TEXT NOT NULL,
+  name TEXT NOT NULL,
+  duration TEXT NOT NULL CHECK(duration IN ('full','half')) DEFAULT 'full',
+  source TEXT NOT NULL DEFAULT 'imported',
+  UNIQUE(profile_id, date, name),
+  FOREIGN KEY(profile_id) REFERENCES holiday_profiles(id) ON DELETE CASCADE
+);
+
 CREATE TABLE IF NOT EXISTS bookings (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   user_id INTEGER NOT NULL,
@@ -78,6 +96,7 @@ CREATE TABLE IF NOT EXISTS user_profiles (
   location TEXT,
   department TEXT,
   work_model_id INTEGER,
+  holiday_profile_id INTEGER,
   tracking_start_date TEXT,
   start_date TEXT,
   end_date TEXT,
@@ -89,7 +108,8 @@ CREATE TABLE IF NOT EXISTS user_profiles (
   postal_code TEXT,
   note TEXT,
   FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE,
-  FOREIGN KEY(work_model_id) REFERENCES work_models(id)
+  FOREIGN KEY(work_model_id) REFERENCES work_models(id),
+  FOREIGN KEY(holiday_profile_id) REFERENCES holiday_profiles(id)
 );
 
 CREATE TABLE IF NOT EXISTS work_schedules (
@@ -177,6 +197,7 @@ db.prepare('UPDATE absences SET end_date = date WHERE end_date IS NULL').run();
 ensureTableColumn('user_profiles', 'location', 'TEXT');
 ensureTableColumn('user_profiles', 'department', 'TEXT');
 ensureTableColumn('user_profiles', 'work_model_id', 'INTEGER');
+ensureTableColumn('user_profiles', 'holiday_profile_id', 'INTEGER');
 ensureTableColumn('user_profiles', 'start_date', 'TEXT');
 ensureTableColumn('user_profiles', 'end_date', 'TEXT');
 

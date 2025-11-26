@@ -1,5 +1,16 @@
 import axios from 'axios';
-import { AbsenceRequest, AttendanceReport, DailySummary, DayDetail, Department, Employee, TimeEntry, UserInfo } from './types';
+import {
+  AbsenceRequest,
+  AttendanceReport,
+  DailySummary,
+  DayDetail,
+  Department,
+  Employee,
+  HolidayEntry,
+  HolidayProfile,
+  TimeEntry,
+  UserInfo,
+} from './types';
 
 const api = axios.create({
   // Default to the Express port (4000) so local dev works without extra env config
@@ -35,6 +46,33 @@ export async function fetchPublicDepartments() {
   return res.data;
 }
 
+export async function fetchHolidayProfiles() {
+  const res = await api.get<HolidayProfile[]>('/holidays/profiles');
+  return res.data;
+}
+
+export async function createHolidayProfile(payload: { name: string; state: string; year?: number }) {
+  const res = await api.post('/holidays/profiles', payload);
+  return res.data as HolidayProfile;
+}
+
+export async function importHolidayProfile(id: number, year: number) {
+  const res = await api.post(`/holidays/profiles/${id}/import`, { year });
+  return res.data as { message: string; count: number };
+}
+
+export async function addCustomHoliday(id: number, payload: { date: string; name: string; duration: 'full' | 'half' }) {
+  const res = await api.post(`/holidays/profiles/${id}/holidays`, payload);
+  return res.data;
+}
+
+export async function fetchProfileHolidays(id: number, year?: number) {
+  const res = await api.get<HolidayEntry[]>(`/holidays/profiles/${id}/holidays`, {
+    params: year ? { year } : undefined,
+  });
+  return res.data;
+}
+
 export async function createEmployee(payload: Partial<Employee> & { email: string; name: string; password: string; role: Employee['role'] }) {
   const res = await api.post('/users', {
     name: payload.name,
@@ -45,6 +83,7 @@ export async function createEmployee(payload: Partial<Employee> & { email: strin
     department: payload.department,
     location: payload.location,
     tracking_start_date: payload.trackingStartDate,
+    holiday_profile_id: payload.holidayProfileId,
   });
   return res.data as Employee;
 }
@@ -59,6 +98,7 @@ export async function updateEmployee(id: number, payload: Partial<Employee> & { 
     tracking_start_date: payload.trackingStartDate,
     active: payload.active,
     personnel_number: payload.personnelNumber,
+    holiday_profile_id: payload.holidayProfileId,
   });
   return res.data as Employee;
 }

@@ -15,6 +15,7 @@ export interface UserProfile {
   location?: string | null;
   department?: string | null;
   work_model_id?: number | null;
+  holiday_profile_id?: number | null;
   start_date?: string | null;
   end_date?: string | null;
   birth_date?: string | null;
@@ -87,7 +88,7 @@ export interface Absence {
   user_id: number;
   start_date: string;
   end_date: string;
-  type: 'vacation' | 'sick' | 'remote' | 'other';
+  type: 'vacation' | 'sick' | 'remote' | 'other' | 'holiday';
   duration: 'full' | 'half';
   note?: string | null;
   created_at: string;

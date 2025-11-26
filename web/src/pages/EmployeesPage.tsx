@@ -6,6 +6,7 @@ import {
   deleteDepartment,
   fetchDepartments,
   fetchEmployees,
+  fetchHolidayProfiles,
   removeDepartmentMember,
   resetUserPassword,
   updateDepartment,
@@ -24,6 +25,7 @@ export function EmployeesPage() {
   const [resetPasswordValue, setResetPasswordValue] = useState('');
   const { data } = useQuery({ queryKey: ['employees', search], queryFn: () => fetchEmployees(search || undefined) });
   const { data: departments } = useQuery({ queryKey: ['departments'], queryFn: fetchDepartments });
+  const { data: holidayProfiles } = useQuery({ queryKey: ['holiday-profiles'], queryFn: fetchHolidayProfiles });
 
   const memberMutation = useMutation({
     mutationFn: ({ departmentId, userId, role }: { departmentId: number; userId: number; role?: 'member' | 'lead' | 'hr' }) =>
@@ -94,6 +96,7 @@ export function EmployeesPage() {
       department: String(form.get('department') || ''),
       location: String(form.get('location') || ''),
       trackingStartDate: String(form.get('trackingStartDate') || ''),
+      holidayProfileId: Number(form.get('holidayProfileId') || '') || undefined,
     });
     e.currentTarget.reset();
   };
@@ -143,6 +146,14 @@ export function EmployeesPage() {
               </option>
             ))}
           </select>
+          <select name="holidayProfileId" className="input" defaultValue="">
+            <option value="">Feiertagsprofil wählen</option>
+            {(holidayProfiles ?? []).map((profile) => (
+              <option key={profile.id} value={profile.id}>
+                {profile.name} ({profile.state})
+              </option>
+            ))}
+          </select>
           <input name="location" placeholder="Standort" className="input" />
           <input name="trackingStartDate" type="date" placeholder="Erfassungsbeginn" className="input" />
           <button className="btn-primary md:col-span-3" type="submit" disabled={createMutation.isPending}>
@@ -167,6 +178,7 @@ export function EmployeesPage() {
                   <th>Personalnr.</th>
                   <th>Standort</th>
                   <th>Abteilung</th>
+                  <th>Feiertagsprofil</th>
                   <th>Erfassungsbeginn</th>
                   <th>Status</th>
                   <th>Aktion</th>
@@ -181,6 +193,7 @@ export function EmployeesPage() {
                     <td>{emp.personnelNumber || '—'}</td>
                     <td>{emp.location ?? '-'}</td>
                     <td>{emp.department ?? '-'}</td>
+                    <td>{emp.holidayProfileId ? holidayProfiles?.find((p) => p.id === emp.holidayProfileId)?.name ?? 'Profil' : '—'}</td>
                     <td>{emp.trackingStartDate ?? '—'}</td>
                     <td>
                       <button
@@ -235,6 +248,7 @@ export function EmployeesPage() {
                     department: selected.department,
                     trackingStartDate: selected.trackingStartDate,
                     personnelNumber: selected.personnelNumber,
+                    holidayProfileId: selected.holidayProfileId,
                   },
                 });
               }}
@@ -274,6 +288,20 @@ export function EmployeesPage() {
                 {(departments ?? []).map((dept) => (
                   <option key={dept.id} value={dept.name}>
                     {dept.name}
+                  </option>
+                ))}
+              </select>
+              <select
+                className="input"
+                value={selected.holidayProfileId ?? ''}
+                onChange={(e) =>
+                  setSelected({ ...selected, holidayProfileId: Number(e.target.value) || undefined })
+                }
+              >
+                <option value="">Feiertagsprofil</option>
+                {(holidayProfiles ?? []).map((profile) => (
+                  <option key={profile.id} value={profile.id}>
+                    {profile.name} ({profile.state})
                   </option>
                 ))}
               </select>

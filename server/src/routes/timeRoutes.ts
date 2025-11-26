@@ -3,6 +3,7 @@ import { z } from 'zod';
 import db from '../db';
 import { authenticate, AuthRequest, authorize } from '../auth';
 import { Absence, TimeEntry, WorkScheduleEntry } from '../types';
+import { Holiday } from '../utils/holidays';
 import { computeDayWorkMinutes, computeDayWorkStats, computeDelta } from '../services/timeService';
 import { canManageUser } from '../utils/permissions';
 
@@ -26,6 +27,21 @@ function getSchedule(userId: number): WorkScheduleEntry[] {
   return db
     .prepare('SELECT weekday, minutes FROM work_schedules WHERE user_id = ? ORDER BY weekday ASC')
     .all(userId) as WorkScheduleEntry[];
+}
+
+function getHolidayProfileId(userId: number): number | null {
+  const row = db
+    .prepare('SELECT holiday_profile_id FROM user_profiles WHERE user_id = ?')
+    .get(userId) as { holiday_profile_id?: number | null } | undefined;
+  return row?.holiday_profile_id ?? null;
+}
+
+function getHolidays(userId: number, startDate: string, endDate: string): Holiday[] {
+  const profileId = getHolidayProfileId(userId);
+  if (!profileId) return [];
+  return db
+    .prepare('SELECT date, name, duration FROM holidays WHERE profile_id = ? AND date BETWEEN ? AND ? ORDER BY date ASC')
+    .all(profileId, startDate, endDate) as Holiday[];
 }
 
 function lastEntry(userId: number): TimeEntry | undefined {
@@ -137,7 +153,18 @@ function buildDailySummary(userId: number, month?: string, maskAbsences = false)
   });
 
   const absenceMap = new Map<string, Absence[]>();
-  absences.forEach((absence) => {
+  const holidayRows = getHolidays(userId, start.toISOString().slice(0, 10), end.toISOString().slice(0, 10));
+  const holidays = holidayRows.map((holiday) => ({
+    id: -1,
+    user_id: userId,
+    start_date: holiday.date,
+    end_date: holiday.date,
+    type: 'holiday',
+    duration: holiday.duration,
+    note: holiday.name,
+    created_at: holiday.date,
+  })) as (Absence & { type: Absence['type'] | 'holiday' })[];
+  [...absences, ...holidays].forEach((absence) => {
     const days = (() => {
       const workingMap = new Map(schedule.map((entry) => [entry.weekday, entry.minutes]));
       const results: string[] = [];
@@ -160,6 +187,7 @@ function buildDailySummary(userId: number, month?: string, maskAbsences = false)
   });
 
   const statusForDay = (entries: TimeEntry[], abs: Absence[], pending: boolean): string => {
+    if (abs.some((a) => (a as any).type === 'holiday')) return 'holiday';
     if (abs.some((a) => a.type === 'vacation')) return 'vacation';
     if (abs.length > 0) return 'away';
     if (pending) return 'pending';
@@ -208,14 +236,17 @@ function buildDailySummary(userId: number, month?: string, maskAbsences = false)
     const baseWork = workStats.workedMinutes;
 
     let creditVacation = 0;
+    let creditHoliday = 0;
     let topUpOther = 0;
     absencesForDay.forEach((absence) => {
       const factor = absence.duration === 'half' ? 0.5 : 1;
       const target = Math.round(planned * factor);
-      if (absence.type === 'vacation') {
+      if ((absence as any).type === 'holiday') {
+        creditHoliday += target;
+      } else if (absence.type === 'vacation') {
         creditVacation += target;
       } else {
-        const covered = baseWork + creditVacation + topUpOther;
+        const covered = baseWork + creditVacation + creditHoliday + topUpOther;
         const topUp = Math.max(target - covered, 0);
         topUpOther += topUp;
       }
@@ -224,7 +255,7 @@ function buildDailySummary(userId: number, month?: string, maskAbsences = false)
     const hasPending = pendingRequests.some((item) => item.start_date <= key && item.end_date >= key);
     const inactiveBeforeTracking = trackingStartDate && cursor.getTime() < trackingStartDate.getTime();
     const effectivePlanned = inactiveBeforeTracking ? 0 : planned;
-    const effectiveWorked = inactiveBeforeTracking ? 0 : baseWork + creditVacation + topUpOther;
+    const effectiveWorked = inactiveBeforeTracking ? 0 : baseWork + creditVacation + creditHoliday + topUpOther;
     const delta = computeDelta(effectivePlanned, effectiveWorked);
     if (cursor.getTime() <= cutoff.getTime()) {
       flexCarry += delta;
@@ -233,6 +264,7 @@ function buildDailySummary(userId: number, month?: string, maskAbsences = false)
       ? 'inactive'
       : statusForDay(entries, absencesForDay, hasPending);
     const absenceLabels: string[] = absencesForDay.map((a) => {
+      if ((a as any).type === 'holiday') return a.note ?? 'Feiertag';
       if (a.type === 'vacation') return 'Urlaub';
       if (maskAbsences) return 'Nicht im Haus';
       if (a.type === 'sick') return 'Krank';
@@ -362,6 +394,16 @@ router.get('/user/:userId/day', authorize(['admin', 'hr', 'lead']), (req: AuthRe
   const absences = db
     .prepare('SELECT * FROM absences WHERE user_id = ? AND start_date <= ? AND end_date >= ?')
     .all(userId, date, date) as Absence[];
+  const holidays = getHolidays(userId, date, date).map((holiday) => ({
+    id: -1,
+    user_id: userId,
+    start_date: holiday.date,
+    end_date: holiday.date,
+    type: 'holiday',
+    duration: holiday.duration,
+    note: holiday.name,
+    created_at: holiday.date,
+  }));
   const pending = db
     .prepare("SELECT * FROM absence_requests WHERE user_id = ? AND status = 'pending' AND start_date <= ? AND end_date >= ?")
     .all(userId, date, date) as any[];
@@ -381,7 +423,7 @@ router.get('/user/:userId/day', authorize(['admin', 'hr', 'lead']), (req: AuthRe
 
   res.json({
     entries,
-    absences,
+    absences: [...absences, ...holidays],
     pending: pending.length > 0,
     autoBreakMinutes: stats.autoDeduction,
     recordedBreakMinutes: stats.recordedBreakMinutes,

@@ -16,6 +16,7 @@ export interface Employee extends UserInfo {
   trackingStartDate?: string;
   startDate?: string;
   endDate?: string;
+  holidayProfileId?: number;
 }
 
 export interface DepartmentMember {
@@ -55,12 +56,27 @@ export interface DailySummary {
 
 export interface DayDetail {
   entries: TimeEntry[];
-  absences: { type: string; duration?: string }[];
+  absences: { type: string; duration?: string; note?: string | null }[];
   pending: boolean;
   autoBreakMinutes?: number;
   recordedBreakMinutes?: number;
   spanMinutes?: number;
   inconsistent?: boolean;
+}
+
+export interface HolidayProfile {
+  id: number;
+  name: string;
+  state: string;
+}
+
+export interface HolidayEntry {
+  id?: number;
+  profile_id?: number;
+  date: string;
+  name: string;
+  duration: 'full' | 'half';
+  source?: string;
 }
 
 export interface AbsenceRequest {
