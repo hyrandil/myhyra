@@ -58,10 +58,14 @@ export function TimesPage() {
     return `${sign}${hrs}h ${String(mins).padStart(2, '0')}m`;
   };
 
-  const formatUtcTime = (iso: string) => {
-    if (!iso) return '';
-    const value = iso.includes('Z') ? iso : `${iso}Z`;
-    return value.slice(11, 16);
+  const formatLocalTime = (value: string) => {
+    if (!value) return '';
+    const match = value.replace('T', ' ').match(/^(\d{4}-\d{2}-\d{2}) (\d{2}):(\d{2})/);
+    if (match) {
+      return `${match[2]}:${match[3]}`;
+    }
+    const date = new Date(value);
+    return date.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit', hour12: false });
   };
 
   const { data: employees } = useQuery({
@@ -201,7 +205,7 @@ export function TimesPage() {
     if (!selectedUserId) return;
     const form = new FormData(e.currentTarget);
     manualTime.mutate({
-      timestamp: `${form.get('timestamp') || manualTimestamp}${String(form.get('timestamp') || manualTimestamp).toString().endsWith('Z') ? '' : 'Z'}`,
+      timestamp: String(form.get('timestamp') || manualTimestamp),
       type: form.get('type') as any,
       location: {
         lat: form.get('lat') ? Number(form.get('lat')) : undefined,
@@ -334,7 +338,7 @@ export function TimesPage() {
                       <div className="flex items-center justify-between text-sm">
                         <div className="space-y-1">
                           <p className="font-semibold">
-                            {formatUtcTime(entry.timestamp)} – {labels[entry.type]}
+                            {formatLocalTime(entry.timestamp)} – {labels[entry.type]}
                           </p>
                           <p className="text-xs text-slate-500">Quelle: {entry.source}</p>
                           {mapUrl && (
@@ -366,10 +370,9 @@ export function TimesPage() {
                             e.preventDefault();
                             const data = new FormData(e.currentTarget);
                             const ts = String(data.get('timestamp'));
-                            const withZ = ts.endsWith('Z') ? ts : `${ts}Z`;
                             updateEntryMutation.mutate({
                               entryId: entry.id,
-                              timestamp: withZ,
+                              timestamp: ts,
                               type: data.get('type') as TimeEntry['type'],
                             });
                             setEditingEntryId(null);

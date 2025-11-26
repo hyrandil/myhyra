@@ -178,41 +178,34 @@ const ensureTableColumn = (table: string, name: string, definition: string) => {
   return true;
 };
 
-ensureTableColumn('bookings', 'clock_in_lat', 'REAL');
-ensureTableColumn('bookings', 'clock_in_lng', 'REAL');
-ensureTableColumn('bookings', 'clock_out_lat', 'REAL');
-ensureTableColumn('bookings', 'clock_out_lng', 'REAL');
-ensureTableColumn('users', 'first_name', 'TEXT');
-ensureTableColumn('users', 'last_name', 'TEXT');
-ensureTableColumn('user_profiles', 'tracking_start_date', 'TEXT');
-ensureTableColumn('users', 'active', 'INTEGER NOT NULL DEFAULT 1');
-ensureTableColumn('users', 'role', "TEXT NOT NULL DEFAULT 'employee'");
-ensureTableColumn('user_settings', 'week_start', "TEXT NOT NULL DEFAULT 'monday'");
-ensureTableColumn('user_settings', 'time_format', "TEXT NOT NULL DEFAULT '24h'");
-ensureTableColumn('user_settings', 'flex_enabled', 'INTEGER NOT NULL DEFAULT 0');
-ensureTableColumn('user_settings', 'flex_adjust_minutes', 'INTEGER NOT NULL DEFAULT 0');
+ensureTableColumn('bookings', 'clock_in_lat', 'clock_in_lat REAL');
+ensureTableColumn('bookings', 'clock_in_lng', 'clock_in_lng REAL');
+ensureTableColumn('bookings', 'clock_out_lat', 'clock_out_lat REAL');
+ensureTableColumn('bookings', 'clock_out_lng', 'clock_out_lng REAL');
+ensureTableColumn('users', 'first_name', 'first_name TEXT');
+ensureTableColumn('users', 'last_name', 'last_name TEXT');
+ensureTableColumn('user_profiles', 'tracking_start_date', 'tracking_start_date TEXT');
+ensureTableColumn('users', 'active', 'active INTEGER NOT NULL DEFAULT 1');
+ensureTableColumn('users', 'role', "role TEXT NOT NULL DEFAULT 'employee'");
+ensureTableColumn('user_settings', 'week_start', "week_start TEXT NOT NULL DEFAULT 'monday'");
+ensureTableColumn('user_settings', 'time_format', "time_format TEXT NOT NULL DEFAULT '24h'");
+ensureTableColumn('user_settings', 'flex_enabled', 'flex_enabled INTEGER NOT NULL DEFAULT 0');
+ensureTableColumn('user_settings', 'flex_adjust_minutes', 'flex_adjust_minutes INTEGER NOT NULL DEFAULT 0');
 db.prepare("UPDATE user_settings SET week_start = 'monday' WHERE week_start IS NULL").run();
 db.prepare("UPDATE user_settings SET time_format = '24h' WHERE time_format IS NULL").run();
 db.prepare('UPDATE user_settings SET flex_enabled = 0 WHERE flex_enabled IS NULL').run();
 db.prepare('UPDATE user_settings SET flex_adjust_minutes = 0 WHERE flex_adjust_minutes IS NULL').run();
 db.exec(`INSERT OR IGNORE INTO user_settings (user_id) SELECT id FROM users;`);
-ensureTableColumn('absences', 'start_date', 'TEXT');
-ensureTableColumn('absences', 'end_date', 'TEXT');
+ensureTableColumn('absences', 'start_date', 'start_date TEXT');
+ensureTableColumn('absences', 'end_date', 'end_date TEXT');
 db.prepare('UPDATE absences SET start_date = date WHERE start_date IS NULL').run();
 db.prepare('UPDATE absences SET end_date = date WHERE end_date IS NULL').run();
-ensureTableColumn('user_profiles', 'location', 'TEXT');
-ensureTableColumn('user_profiles', 'department', 'TEXT');
-ensureTableColumn('user_profiles', 'work_model_id', 'INTEGER');
-const hasHolidayProfileColumn = ensureTableColumn('user_profiles', 'holiday_profile_id', 'INTEGER');
-if (!hasHolidayProfileColumn) {
-  try {
-    db.exec('ALTER TABLE user_profiles ADD COLUMN holiday_profile_id INTEGER');
-  } catch (err) {
-    console.error('Konnte holiday_profile_id nicht hinzufügen:', err);
-  }
-}
-ensureTableColumn('user_profiles', 'start_date', 'TEXT');
-ensureTableColumn('user_profiles', 'end_date', 'TEXT');
+ensureTableColumn('user_profiles', 'location', 'location TEXT');
+ensureTableColumn('user_profiles', 'department', 'department TEXT');
+ensureTableColumn('user_profiles', 'work_model_id', 'work_model_id INTEGER');
+ensureTableColumn('user_profiles', 'holiday_profile_id', 'holiday_profile_id INTEGER');
+ensureTableColumn('user_profiles', 'start_date', 'start_date TEXT');
+ensureTableColumn('user_profiles', 'end_date', 'end_date TEXT');
 
 function ensureAdminUser() {
   const existing = db.prepare('SELECT id FROM users WHERE email = ?').get(ADMIN_EMAIL) as

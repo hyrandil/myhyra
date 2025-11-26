@@ -180,7 +180,7 @@ export function Calendar({ month, days, selectedDate, onSelect, maskAbsences, hi
                 <span className="h-2 w-2 rounded-full bg-slate-500"></span> Nicht im Haus
               </p>
               <p className="flex items-center gap-2 justify-end">
-                <span className="h-2 w-2 rounded-full bg-rose-500"></span> Krank/Offen
+                <span className="h-2 w-2 rounded-full bg-rose-500"></span> Krank
               </p>
               <p className="flex items-center gap-2 justify-end">
                 <span className="h-2 w-2 rounded-full bg-rose-700"></span> Inkonsistent

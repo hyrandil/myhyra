@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { utils, write } from 'xlsx';
 import db from '../db';
 import { requireAuth, authorize } from '../auth';
 import type { WorkScheduleEntry } from '../types';
@@ -58,10 +59,7 @@ type AbsenceDayUsage = {
   other: Map<string, number>;
 };
 
-router.get('/attendance', (req, res) => {
-  const monthParam = typeof req.query.month === 'string' && monthRegex.test(req.query.month)
-    ? req.query.month
-    : undefined;
+const buildAttendance = (monthParam?: string) => {
   const today = new Date();
   const fallbackMonth = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
   const month = monthParam ?? fallbackMonth;
@@ -182,7 +180,54 @@ router.get('/attendance', (req, res) => {
     };
   });
 
-  res.json({ month, rows });
+  return { month, rows };
+};
+
+router.get('/attendance', (req, res) => {
+  const data = buildAttendance(typeof req.query.month === 'string' ? req.query.month : undefined);
+  res.json(data);
+});
+
+router.get('/attendance.csv', (req, res) => {
+  const data = buildAttendance(typeof req.query.month === 'string' ? req.query.month : undefined);
+  const header = ['Name', 'Email', 'Präsenz', 'Urlaubstage', 'Krank', 'Remote', 'Sonstige', 'Resturlaub'];
+  const lines = data.rows.map((row) =>
+    [
+      row.name,
+      row.email,
+      row.presenceDays,
+      row.vacationDays,
+      row.sickDays,
+      row.remoteDays,
+      row.otherAbsences,
+      row.remainingVacation,
+    ].join(';')
+  );
+  const csv = [header.join(';'), ...lines].join('\n');
+  res.setHeader('Content-Type', 'text/csv');
+  res.setHeader('Content-Disposition', `attachment; filename=attendance-${data.month}.csv`);
+  res.send(csv);
+});
+
+router.get('/attendance.xlsx', (req, res) => {
+  const data = buildAttendance(typeof req.query.month === 'string' ? req.query.month : undefined);
+  const rows = data.rows.map((row) => ({
+    Name: row.name,
+    Email: row.email,
+    Präsenz: row.presenceDays,
+    Urlaubstage: row.vacationDays,
+    Krank: row.sickDays,
+    Remote: row.remoteDays,
+    Sonstige: row.otherAbsences,
+    Resturlaub: row.remainingVacation,
+  }));
+  const sheet = utils.json_to_sheet(rows);
+  const wb = utils.book_new();
+  utils.book_append_sheet(wb, sheet, 'Report');
+  const buffer = write(wb, { type: 'buffer', bookType: 'xlsx' });
+  res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+  res.setHeader('Content-Disposition', `attachment; filename=attendance-${data.month}.xlsx`);
+  res.send(buffer);
 });
 
 export default router;

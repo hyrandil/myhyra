@@ -304,4 +304,20 @@ export async function fetchAttendance(month?: string) {
   return res.data;
 }
 
+export async function downloadAttendanceCsv(month?: string) {
+  const res = await api.get('/reports/attendance.csv', {
+    params: month ? { month } : undefined,
+    responseType: 'blob',
+  });
+  return res.data as Blob;
+}
+
+export async function downloadAttendanceXlsx(month?: string) {
+  const res = await api.get('/reports/attendance.xlsx', {
+    params: month ? { month } : undefined,
+    responseType: 'blob',
+  });
+  return res.data as Blob;
+}
+
 export default api;

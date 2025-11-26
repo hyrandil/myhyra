@@ -2,10 +2,16 @@ import { TimeEntry } from '../types';
 
 const MS_IN_MINUTE = 60000;
 
+function parseTimestamp(ts: string) {
+  const [datePart, timePartRaw] = ts.replace('T', ' ').split(' ');
+  if (!datePart) return 0;
+  const [year, month, day] = datePart.split('-').map((v) => Number(v));
+  const [hour, minute, second] = (timePartRaw ?? '00:00:00').split(':').map((v) => Number(v));
+  return Date.UTC(year || 0, (month || 1) - 1, day || 1, hour || 0, minute || 0, Number.isFinite(second) ? second : 0);
+}
+
 export function computeDayWorkStats(entries: TimeEntry[]) {
-  const sorted = [...entries].sort(
-    (a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
-  );
+  const sorted = [...entries].sort((a, b) => parseTimestamp(a.timestamp) - parseTimestamp(b.timestamp));
   let currentIn: number | null = null;
   let workMs = 0;
   let breakMs = 0;
@@ -13,7 +19,7 @@ export function computeDayWorkStats(entries: TimeEntry[]) {
   let lastOut: number | null = null;
 
   sorted.forEach((entry) => {
-    const ts = new Date(entry.timestamp).getTime();
+    const ts = parseTimestamp(entry.timestamp);
     if (Number.isNaN(ts)) return;
 
     if (entry.type === 'CLOCK_IN' || entry.type === 'BREAK_END') {

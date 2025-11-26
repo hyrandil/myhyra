@@ -55,16 +55,35 @@ function lastEntry(userId: number): TimeEntry | undefined {
     .get(userId) as TimeEntry | undefined;
 }
 
+function formatBerlinTimestamp(date: Date) {
+  const fmt = new Intl.DateTimeFormat('sv-SE', {
+    timeZone: 'Europe/Berlin',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false,
+  });
+  const parts = fmt.formatToParts(date).reduce<Record<string, string>>((acc, part) => {
+    if (part.type !== 'literal') acc[part.type] = part.value;
+    return acc;
+  }, {});
+  return `${parts.year}-${parts.month}-${parts.day} ${parts.hour}:${parts.minute}:${parts.second}`;
+}
+
 function insertEntry(
   userId: number,
   type: TimeEntry['type'],
   source: TimeEntry['source'],
   location?: { lat?: number | null; lng?: number | null }
 ) {
+  const now = formatBerlinTimestamp(new Date());
   const stmt = db.prepare(
-    "INSERT INTO time_entries (user_id, timestamp, type, source, lat, lng) VALUES (?, datetime('now'), ?, ?, ?, ?)"
+    'INSERT INTO time_entries (user_id, timestamp, type, source, lat, lng) VALUES (?, ?, ?, ?, ?, ?)'
   );
-  return stmt.run(userId, type, source, location?.lat ?? null, location?.lng ?? null);
+  return stmt.run(userId, now, type, source, location?.lat ?? null, location?.lng ?? null);
 }
 
 const manualEntrySchema = z.object({
@@ -72,12 +91,11 @@ const manualEntrySchema = z.object({
     .string()
     .min(16)
     .transform((value) => {
-      const normalized = value.endsWith('Z') ? value : `${value}Z`;
-      const date = new Date(normalized);
-      if (Number.isNaN(date.getTime())) {
-        throw new Error('Ungültiger Zeitstempel');
-      }
-      return date.toISOString();
+      const [datePart, timePart] = value.replace('Z', '').split('T');
+      if (!datePart || !timePart) throw new Error('Ungültiger Zeitstempel');
+      const [hour, minute] = timePart.split(':');
+      const formatted = `${datePart} ${hour}:${minute}:00`;
+      return formatted;
     }),
   type: z.enum(['CLOCK_IN', 'CLOCK_OUT', 'BREAK_START', 'BREAK_END']),
   source: sourceEnum.optional(),
@@ -209,7 +227,8 @@ function buildDailySummary(userId: number, month?: string, maskAbsences = false)
   const statusForDay = (entries: TimeEntry[], abs: Absence[], pending: boolean): string => {
     if (abs.some((a) => (a as any).type === 'holiday')) return 'holiday';
     if (abs.some((a) => a.type === 'vacation')) return 'vacation';
-    if (abs.length > 0) return 'away';
+    if (abs.some((a) => a.type === 'sick')) return 'sick';
+    if (abs.some((a) => a.type === 'remote' || a.type === 'other')) return 'away';
     if (pending) return 'pending';
     if (entries.length === 0) return 'empty';
     if (hasInconsistent(entries)) return 'inconsistent';
