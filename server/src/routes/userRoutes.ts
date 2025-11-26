@@ -211,6 +211,7 @@ const computeFlexBalance = (userId: number) => {
   const earliestBooking = bookings.length ? dateKey(bookings[0]!.clock_in) : null;
   const earliestAbsence = absences.length ? absences[0]!.start_date : null;
   const today = new Date();
+  const endCursor = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate() - 1));
   const startCursor = (() => {
     const candidates = [trackingStartDate ? trackingStartDate.toISOString().slice(0, 10) : null, earliestBooking, earliestAbsence]
       .filter(Boolean) as string[];
@@ -223,40 +224,42 @@ const computeFlexBalance = (userId: number) => {
   let flexCarry = 0;
   let cursor = new Date(`${startCursor}T00:00:00Z`);
 
-  while (cursor.getTime() <= today.getTime()) {
-    const dayKey = cursor.toISOString().slice(0, 10);
-    const weekday = weekdayFromDate(dayKey);
-    const planned = planMap.get(weekday) ?? 0;
-    const baseWork = computeDayWorkMinutes(bookingsByDay.get(dayKey) ?? []);
-    const absencesForDay = absenceMap.get(dayKey) ?? [];
+  if (cursor.getTime() <= endCursor.getTime()) {
+    while (cursor.getTime() <= endCursor.getTime()) {
+      const dayKey = cursor.toISOString().slice(0, 10);
+      const weekday = weekdayFromDate(dayKey);
+      const planned = planMap.get(weekday) ?? 0;
+      const baseWork = computeDayWorkMinutes(bookingsByDay.get(dayKey) ?? []);
+      const absencesForDay = absenceMap.get(dayKey) ?? [];
 
-    let creditVacation = 0;
-    let topUpOther = 0;
+      let creditVacation = 0;
+      let topUpOther = 0;
 
-    absencesForDay.forEach((absence) => {
-      const factor = absence.duration === 'half' ? 0.5 : 1;
-      const target = Math.round(planned * factor);
-      if (absence.type === 'vacation') {
-        creditVacation += target;
-      } else {
-        const covered = baseWork + creditVacation + topUpOther;
-        const topUp = Math.max(target - covered, 0);
-        topUpOther += topUp;
+      absencesForDay.forEach((absence) => {
+        const factor = absence.duration === 'half' ? 0.5 : 1;
+        const target = Math.round(planned * factor);
+        if (absence.type === 'vacation') {
+          creditVacation += target;
+        } else {
+          const covered = baseWork + creditVacation + topUpOther;
+          const topUp = Math.max(target - covered, 0);
+          topUpOther += topUp;
+        }
+      });
+
+      const inactiveBeforeTracking = trackingStartDate && cursor.getTime() < trackingStartDate.getTime();
+      const effectivePlanned = inactiveBeforeTracking ? 0 : planned;
+      const effectiveWorked = inactiveBeforeTracking ? 0 : baseWork + creditVacation + topUpOther;
+      const delta = effectiveWorked - effectivePlanned;
+
+      if (effectivePlanned > 0 || effectiveWorked > 0 || absencesForDay.length > 0) {
+        plannedTotal += effectivePlanned;
+        workedTotal += effectiveWorked;
+        flexCarry += delta;
       }
-    });
 
-    const inactiveBeforeTracking = trackingStartDate && cursor.getTime() < trackingStartDate.getTime();
-    const effectivePlanned = inactiveBeforeTracking ? 0 : planned;
-    const effectiveWorked = inactiveBeforeTracking ? 0 : baseWork + creditVacation + topUpOther;
-    const delta = effectiveWorked - effectivePlanned;
-
-    if (effectivePlanned > 0 || effectiveWorked > 0 || absencesForDay.length > 0) {
-      plannedTotal += effectivePlanned;
-      workedTotal += effectiveWorked;
-      flexCarry += delta;
+      cursor.setUTCDate(cursor.getUTCDate() + 1);
     }
-
-    cursor.setUTCDate(cursor.getUTCDate() + 1);
   }
 
   const adjustmentRow = db

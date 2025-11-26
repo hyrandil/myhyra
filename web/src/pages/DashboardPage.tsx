@@ -28,19 +28,22 @@ export function DashboardPage() {
     };
     const handleError = () => setLocationError('Standort erforderlich zum Stempeln. Bitte Freigabe erteilen.');
 
-    const watchId = navigator.geolocation.watchPosition(handleSuccess, handleError, {
-      enableHighAccuracy: true,
-      maximumAge: 0,
-      timeout: 10000,
-    });
-
-    const interval = window.setInterval(() => {
+    const requestFix = () => {
       navigator.geolocation.getCurrentPosition(handleSuccess, handleError, {
         enableHighAccuracy: true,
         maximumAge: 0,
-        timeout: 10000,
+        timeout: 7000,
       });
-    }, 10000);
+    };
+
+    const watchId = navigator.geolocation.watchPosition(handleSuccess, handleError, {
+      enableHighAccuracy: true,
+      maximumAge: 1000,
+      timeout: 7000,
+    });
+
+    requestFix();
+    const interval = window.setInterval(requestFix, 10000);
 
     return () => {
       navigator.geolocation.clearWatch(watchId);
