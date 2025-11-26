@@ -8,6 +8,7 @@ import {
   Employee,
   HolidayEntry,
   HolidayProfile,
+  InconsistentDay,
   TimeEntry,
   UserInfo,
 } from './types';
@@ -222,6 +223,11 @@ export async function fetchDayEntriesForUser(userId: number, date: string) {
   const res = await api.get<DayDetail>(`/time/user/${userId}/day`, {
     params: { date },
   });
+  return res.data;
+}
+
+export async function fetchInconsistentDays(month?: string) {
+  const res = await api.get<InconsistentDay[]>('/time/inconsistent', { params: month ? { month } : undefined });
   return res.data;
 }
 

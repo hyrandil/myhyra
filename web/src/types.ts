@@ -66,6 +66,13 @@ export interface DayDetail {
   inconsistent?: boolean;
 }
 
+export interface InconsistentDay {
+  user_id: number;
+  user: string;
+  date: string;
+  entries: TimeEntry[];
+}
+
 export interface HolidayProfile {
   id: number;
   name: string;

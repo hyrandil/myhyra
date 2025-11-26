@@ -5,7 +5,7 @@ import { requireAuth, AuthRequest, authorize } from '../auth';
 import { Absence, TimeEntry, WorkScheduleEntry } from '../types';
 import { Holiday } from '../utils/holidays';
 import { computeDayWorkMinutes, computeDayWorkStats, computeDelta } from '../services/timeService';
-import { canManageUser } from '../utils/permissions';
+import { canManageUser, managedDepartments } from '../utils/permissions';
 
 const router = Router();
 
@@ -191,12 +191,28 @@ function buildDailySummary(userId: number, month?: string, maskAbsences = false)
     });
   });
 
+  const hasInconsistent = (entries: TimeEntry[]) => {
+    const sorted = [...entries].sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+    for (let i = 1; i < sorted.length; i += 1) {
+      const prev = sorted[i - 1]!;
+      const curr = sorted[i]!;
+      if (
+        (prev.type === 'CLOCK_IN' && curr.type === 'CLOCK_IN') ||
+        (prev.type === 'CLOCK_OUT' && curr.type === 'CLOCK_OUT')
+      ) {
+        return true;
+      }
+    }
+    return false;
+  };
+
   const statusForDay = (entries: TimeEntry[], abs: Absence[], pending: boolean): string => {
     if (abs.some((a) => (a as any).type === 'holiday')) return 'holiday';
     if (abs.some((a) => a.type === 'vacation')) return 'vacation';
     if (abs.length > 0) return 'away';
     if (pending) return 'pending';
     if (entries.length === 0) return 'empty';
+    if (hasInconsistent(entries)) return 'inconsistent';
     const sorted = [...entries].sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
     const lastType = sorted.length > 0 ? sorted[sorted.length - 1]!.type : undefined;
     if (lastType && lastType !== 'CLOCK_OUT') return 'open';
@@ -413,18 +429,20 @@ router.get('/user/:userId/day', authorize(['admin', 'hr', 'lead']), (req: AuthRe
     .prepare("SELECT * FROM absence_requests WHERE user_id = ? AND status = 'pending' AND start_date <= ? AND end_date >= ?")
     .all(userId, date, date) as any[];
   const stats = computeDayWorkStats(entries);
-  let inconsistent = false;
-  for (let i = 1; i < entries.length; i += 1) {
-    const prev = entries[i - 1]!;
-    const curr = entries[i]!;
-    if (
-      (prev.type === 'CLOCK_IN' && curr.type === 'CLOCK_IN') ||
-      (prev.type === 'CLOCK_OUT' && curr.type === 'CLOCK_OUT')
-    ) {
-      inconsistent = true;
-      break;
+  const inconsistent = ((): boolean => {
+    const sorted = [...entries].sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+    for (let i = 1; i < sorted.length; i += 1) {
+      const prev = sorted[i - 1]!;
+      const curr = sorted[i]!;
+      if (
+        (prev.type === 'CLOCK_IN' && curr.type === 'CLOCK_IN') ||
+        (prev.type === 'CLOCK_OUT' && curr.type === 'CLOCK_OUT')
+      ) {
+        return true;
+      }
     }
-  }
+    return false;
+  })();
 
   res.json({
     entries,
@@ -435,6 +453,79 @@ router.get('/user/:userId/day', authorize(['admin', 'hr', 'lead']), (req: AuthRe
     spanMinutes: stats.spanMinutes,
     inconsistent,
   });
+});
+
+router.get('/inconsistent', (req: AuthRequest, res) => {
+  const actor = req.user!;
+  const today = new Date();
+  const monthValue = (req.query.month as string) || `${today.getUTCFullYear()}-${String(today.getUTCMonth() + 1).padStart(2, '0')}`;
+  const base = new Date(`${monthValue}-01T00:00:00Z`);
+  const start = new Date(Date.UTC(base.getUTCFullYear(), base.getUTCMonth(), 1));
+  const end = new Date(Date.UTC(base.getUTCFullYear(), base.getUTCMonth() + 1, 0, 23, 59, 59));
+
+  let userIds: { id: number; first_name?: string | null; last_name?: string | null; name?: string | null }[] = [];
+  if (actor.role === 'admin' || actor.role === 'hr') {
+    userIds = db.prepare('SELECT id, first_name, last_name, name FROM users').all() as any[];
+  } else if (actor.role === 'lead') {
+    const departments = managedDepartments(actor.id);
+    if (departments.length === 0) {
+      return res.json([]);
+    }
+    const placeholders = departments.map(() => '?').join(',');
+    userIds = db
+      .prepare(
+        `SELECT DISTINCT u.id, u.first_name, u.last_name, u.name FROM users u
+         JOIN department_members dm ON dm.user_id = u.id
+         WHERE dm.department_id IN (${placeholders}) AND u.id != ?`
+      )
+      .all(...departments, actor.id) as any[];
+  } else {
+    return res.status(403).json({ message: 'Keine Berechtigung' });
+  }
+
+  if (userIds.length === 0) return res.json([]);
+  const allowedIds = userIds.map((u) => u.id);
+  const placeholders = allowedIds.map(() => '?').join(',');
+  const entryRows = db
+    .prepare(
+      `SELECT * FROM time_entries WHERE user_id IN (${placeholders})
+       AND timestamp >= ? AND timestamp <= ? ORDER BY user_id, timestamp ASC`
+    )
+    .all(...allowedIds, start.toISOString(), end.toISOString()) as TimeEntry[];
+
+  const grouped: Record<string, TimeEntry[]> = {};
+  entryRows.forEach((entry) => {
+    const key = `${entry.user_id}-${entry.timestamp.slice(0, 10)}`;
+    const list = grouped[key] ?? [];
+    list.push(entry);
+    grouped[key] = list;
+  });
+
+  const hasInconsistent = (entries: TimeEntry[]) => {
+    for (let i = 1; i < entries.length; i += 1) {
+      const prev = entries[i - 1]!;
+      const curr = entries[i]!;
+      if (
+        (prev.type === 'CLOCK_IN' && curr.type === 'CLOCK_IN') ||
+        (prev.type === 'CLOCK_OUT' && curr.type === 'CLOCK_OUT')
+      ) {
+        return true;
+      }
+    }
+    return false;
+  };
+
+  const results = Object.entries(grouped)
+    .filter(([, entries]) => hasInconsistent(entries))
+    .map(([key, entries]) => {
+      const [userIdStr, date] = key.split('-');
+      const userId = Number(userIdStr);
+      const user = userIds.find((u) => u.id === userId);
+      const name = [user?.first_name, user?.last_name].filter(Boolean).join(' ') || user?.name || `User ${userId}`;
+      return { user_id: userId, user: name, date, entries };
+    });
+
+  res.json(results);
 });
 
 router.get('/overview', (req: AuthRequest, res) => {

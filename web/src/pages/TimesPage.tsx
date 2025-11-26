@@ -517,7 +517,7 @@ export function TimesPage() {
             </form>
             {days[selectedDate ?? '']?.absences?.length ? (
               <button
-                className="btn-ghost text-sm text-rose-600"
+                className="text-sm text-rose-700 border border-rose-200 bg-rose-50 rounded-md px-3 py-2 font-semibold"
                 type="button"
                 onClick={() => {
                   if (!selectedDate || !selectedUserId) return;

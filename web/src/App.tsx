@@ -7,6 +7,7 @@ import { EmployeesPage } from './pages/EmployeesPage';
 import { ReportsPage } from './pages/ReportsPage';
 import { OverviewCalendarPage } from './pages/OverviewCalendarPage';
 import { PlanningPage } from './pages/PlanningPage';
+import { InconsistentPage } from './pages/InconsistentPage';
 import { useAuth } from './AuthProvider';
 
 function Protected({ children }: { children: React.ReactNode }) {
@@ -51,6 +52,7 @@ function Shell({ children }: { children: React.ReactNode }) {
           <NavItem to="/zeiten" label="Kalender & Zeiten" />
           <NavItem to="/uebersicht" label="Übersichtkalender" />
           <NavItem to="/abwesenheiten" label="Abwesenheiten" />
+          {auth.hasRole('lead', 'hr', 'admin') && <NavItem to="/inkonsistenzen" label="Inkonsistenzen" />}
           {auth.hasRole('hr', 'admin') && <NavItem to="/planung" label="Stundenplanung" />}
           {auth.hasRole('lead', 'hr', 'admin') && <NavItem to="/mitarbeitende" label="Team" />}
           {auth.hasRole('hr', 'admin') && <NavItem to="/berichte" label="Berichte" />}
@@ -78,7 +80,6 @@ function Shell({ children }: { children: React.ReactNode }) {
         <header className="border-b bg-white/80 backdrop-blur sticky top-0 z-10 shadow-sm">
           <div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
             <div>
-              <p className="text-[11px] uppercase tracking-[0.2em] text-slate-500">Übersicht & Auswertungen</p>
               <p className="text-xl font-bold">Cockpit</p>
             </div>
             <div className="flex items-center gap-3">
@@ -108,6 +109,7 @@ export default function App() {
                 <Route path="/zeiten" element={<TimesPage />} />
                 <Route path="/uebersicht" element={<OverviewCalendarPage />} />
                 <Route path="/abwesenheiten" element={<AbsencePage />} />
+                <Route path="/inkonsistenzen" element={<InconsistentPage />} />
                 <Route path="/planung" element={<PlanningPage />} />
                 <Route path="/mitarbeitende" element={<EmployeesPage />} />
                 <Route path="/berichte" element={<ReportsPage />} />

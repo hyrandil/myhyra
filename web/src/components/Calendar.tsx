@@ -28,6 +28,7 @@ function statusAccent(summary?: DailySummary) {
   if (summary.status === 'vacation') return 'bg-amber-500';
   if (summary.status === 'away') return 'bg-slate-500';
   if (summary.status === 'pending') return 'bg-white border border-amber-500';
+  if (summary.status === 'inconsistent') return 'bg-rose-700';
   if (summary.status === 'open') return 'bg-rose-700';
   return 'bg-slate-900';
 }
@@ -39,6 +40,7 @@ function dayColor(summary?: DailySummary) {
   if (summary.status === 'vacation') return 'bg-amber-50 text-amber-900 border-amber-200';
   if (summary.status === 'away') return 'bg-slate-50 text-slate-700 border-slate-200';
   if (summary.status === 'pending') return 'bg-amber-50 text-amber-800 border-amber-300';
+  if (summary.status === 'inconsistent') return 'bg-rose-50 text-rose-800 border-rose-300';
   if (summary.status === 'open') return 'bg-white text-rose-700 border-rose-400';
   return 'bg-white text-slate-900 border-slate-300';
 }
@@ -117,6 +119,9 @@ export function Calendar({ month, days, selectedDate, onSelect, maskAbsences, hi
             {cell.summary?.status === 'open' && (
               <p className="text-[11px] text-rose-700 mt-1">✖ Offene Buchung</p>
             )}
+            {cell.summary?.status === 'inconsistent' && (
+              <p className="text-[11px] text-rose-700 mt-1">⚠︎ Inkonsistente Buchung</p>
+            )}
             {cell.summary?.status === 'ok' && (
               <p className="text-[11px] text-slate-700 mt-1">● Buchung vollständig</p>
             )}
@@ -176,6 +181,9 @@ export function Calendar({ month, days, selectedDate, onSelect, maskAbsences, hi
               </p>
               <p className="flex items-center gap-2 justify-end">
                 <span className="h-2 w-2 rounded-full bg-rose-500"></span> Krank/Offen
+              </p>
+              <p className="flex items-center gap-2 justify-end">
+                <span className="h-2 w-2 rounded-full bg-rose-700"></span> Inkonsistent
               </p>
               <p className="flex items-center gap-2 justify-end">
                 <span className="h-2 w-2 rounded-full bg-slate-900"></span> Korrekte Buchung
