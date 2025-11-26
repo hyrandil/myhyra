@@ -3,7 +3,7 @@ import { z } from 'zod';
 import db from '../db';
 import { authenticate, AuthRequest, authorize } from '../auth';
 import { Absence, TimeEntry, WorkScheduleEntry } from '../types';
-import { computeDayWorkMinutes, computeDelta } from '../services/timeService';
+import { computeDayWorkMinutes, computeDayWorkStats, computeDelta } from '../services/timeService';
 import { canManageUser } from '../utils/permissions';
 
 const router = Router();
@@ -204,7 +204,8 @@ function buildDailySummary(userId: number, month?: string, maskAbsences = false)
     const planned = planMap.get(weekday) ?? 0;
     const entries = grouped.get(key) ?? [];
     const absencesForDay = absenceMap.get(key) ?? [];
-    const baseWork = computeDayWorkMinutes(entries);
+    const workStats = computeDayWorkStats(entries);
+    const baseWork = workStats.workedMinutes;
 
     let creditVacation = 0;
     let topUpOther = 0;
@@ -364,7 +365,29 @@ router.get('/user/:userId/day', authorize(['admin', 'hr', 'lead']), (req: AuthRe
   const pending = db
     .prepare("SELECT * FROM absence_requests WHERE user_id = ? AND status = 'pending' AND start_date <= ? AND end_date >= ?")
     .all(userId, date, date) as any[];
-  res.json({ entries, absences, pending: pending.length > 0 });
+  const stats = computeDayWorkStats(entries);
+  let inconsistent = false;
+  for (let i = 1; i < entries.length; i += 1) {
+    const prev = entries[i - 1]!;
+    const curr = entries[i]!;
+    if (
+      (prev.type === 'CLOCK_IN' && curr.type === 'CLOCK_IN') ||
+      (prev.type === 'CLOCK_OUT' && curr.type === 'CLOCK_OUT')
+    ) {
+      inconsistent = true;
+      break;
+    }
+  }
+
+  res.json({
+    entries,
+    absences,
+    pending: pending.length > 0,
+    autoBreakMinutes: stats.autoDeduction,
+    recordedBreakMinutes: stats.recordedBreakMinutes,
+    spanMinutes: stats.spanMinutes,
+    inconsistent,
+  });
 });
 
 router.get('/overview', (req: AuthRequest, res) => {

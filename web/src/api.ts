@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { AbsenceRequest, AttendanceReport, DailySummary, Department, Employee, TimeEntry, UserInfo } from './types';
+import { AbsenceRequest, AttendanceReport, DailySummary, DayDetail, Department, Employee, TimeEntry, UserInfo } from './types';
 
 const api = axios.create({
   // Default to the Express port (4000) so local dev works without extra env config
@@ -166,7 +166,7 @@ export async function fetchDailyOverview(month?: string, department?: string, us
 }
 
 export async function fetchDayEntriesForUser(userId: number, date: string) {
-  const res = await api.get<{ entries: TimeEntry[]; absences: any[]; pending: boolean }>(`/time/user/${userId}/day`, {
+  const res = await api.get<DayDetail>(`/time/user/${userId}/day`, {
     params: { date },
   });
   return res.data;

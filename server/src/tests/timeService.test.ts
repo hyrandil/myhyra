@@ -1,5 +1,5 @@
 import assert from 'assert';
-import { computeDayWorkMinutes } from '../services/timeService';
+import { computeDayWorkMinutes, computeDayWorkStats } from '../services/timeService';
 import { TimeEntry } from '../types';
 
 const sample = (overrides: Partial<TimeEntry>): TimeEntry => {
@@ -40,6 +40,9 @@ const longShift: TimeEntry[] = [
 ];
 
 assert.equal(computeDayWorkMinutes(longShift), 555, '10h Schicht zieht 45min automatisch ab');
+
+const stats = computeDayWorkStats(straightShift);
+assert.equal(stats.autoDeduction, 30, 'Automatische Pause wird transparent ausgewiesen');
 
 const splitShift: TimeEntry[] = [
   sample({ id: 1, timestamp: '2024-01-02T08:00:00Z', type: 'CLOCK_IN' }),

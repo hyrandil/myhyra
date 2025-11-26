@@ -53,6 +53,16 @@ export interface DailySummary {
   users?: { id: number; name: string; department?: string | null }[];
 }
 
+export interface DayDetail {
+  entries: TimeEntry[];
+  absences: { type: string; duration?: string }[];
+  pending: boolean;
+  autoBreakMinutes?: number;
+  recordedBreakMinutes?: number;
+  spanMinutes?: number;
+  inconsistent?: boolean;
+}
+
 export interface AbsenceRequest {
   id: number;
   user_id: number;
