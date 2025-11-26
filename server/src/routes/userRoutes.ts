@@ -165,8 +165,10 @@ const computeDayWorkMinutes = (bookings: Booking[]) => {
     return Math.round(workedMs / 60000);
   }
 
-  const requiredPause = Math.min(30, spanMinutes - 360);
-  const countedBreak = breakMinutes >= 30 ? requiredPause : breakMinutes;
+  const longShift = spanMinutes >= 540;
+  const maxPause = longShift ? 45 : 30;
+  const requiredPause = Math.min(maxPause, spanMinutes - 360);
+  const countedBreak = Math.min(breakMinutes, maxPause);
   const autoDeduction = Math.max(requiredPause - countedBreak, 0);
   const adjusted = Math.max(workedMs / 60000 - autoDeduction, 0);
   return Math.round(adjusted);

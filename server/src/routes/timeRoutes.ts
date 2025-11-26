@@ -245,7 +245,7 @@ function buildDailySummary(userId: number, month?: string, maskAbsences = false)
       days[key] = {
         worked: effectiveWorked,
         planned: effectivePlanned,
-        flex: flexCarry,
+        flex: delta,
         absences: absenceLabels,
         status,
         pending: hasPending,

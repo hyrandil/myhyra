@@ -105,7 +105,7 @@ export function TimesPage() {
       (acc, d) => {
         acc.worked += d.worked;
         acc.planned += d.planned;
-        acc.flex = d.flex; // latest value is month-to-date balance
+        acc.flex += d.flex; // sum of day deltas (fallback if flexBalance missing)
         return acc;
       },
       { worked: 0, planned: 0, flex: 0 }

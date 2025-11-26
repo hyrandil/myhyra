@@ -34,4 +34,20 @@ const withBreak: TimeEntry[] = [
 
 assert.equal(computeDayWorkMinutes(withBreak), 435, 'Echte Pause mindert die automatische Anrechnung');
 
+const longShift: TimeEntry[] = [
+  sample({ id: 1, timestamp: '2024-01-01T08:00:00Z', type: 'CLOCK_IN' }),
+  sample({ id: 2, timestamp: '2024-01-01T18:00:00Z', type: 'CLOCK_OUT' }),
+];
+
+assert.equal(computeDayWorkMinutes(longShift), 555, '10h Schicht zieht 45min automatisch ab');
+
+const splitShift: TimeEntry[] = [
+  sample({ id: 1, timestamp: '2024-01-02T08:00:00Z', type: 'CLOCK_IN' }),
+  sample({ id: 2, timestamp: '2024-01-02T12:00:00Z', type: 'CLOCK_OUT' }),
+  sample({ id: 3, timestamp: '2024-01-02T13:00:00Z', type: 'CLOCK_IN' }),
+  sample({ id: 4, timestamp: '2024-01-02T17:00:00Z', type: 'CLOCK_OUT' }),
+];
+
+assert.equal(computeDayWorkMinutes(splitShift), 480, 'Unterbrechungen >=45min erfüllen die Pausenpflicht');
+
 console.log('timeService tests passed');
