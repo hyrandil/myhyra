@@ -195,6 +195,8 @@ function buildDailySummary(userId: number, month?: string, maskAbsences = false)
   let flexCarry = 0;
   let cursor = new Date(startCursor);
   const endCursor = new Date(end);
+  const today = new Date();
+  const cutoff = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate() - 1));
 
   while (cursor.getTime() <= endCursor.getTime()) {
     const key = cursor.toISOString().slice(0, 10);
@@ -223,7 +225,9 @@ function buildDailySummary(userId: number, month?: string, maskAbsences = false)
     const effectivePlanned = inactiveBeforeTracking ? 0 : planned;
     const effectiveWorked = inactiveBeforeTracking ? 0 : baseWork + creditVacation + topUpOther;
     const delta = computeDelta(effectivePlanned, effectiveWorked);
-    flexCarry += delta;
+    if (cursor.getTime() <= cutoff.getTime()) {
+      flexCarry += delta;
+    }
     const status = inactiveBeforeTracking
       ? 'inactive'
       : statusForDay(entries, absencesForDay, hasPending);
