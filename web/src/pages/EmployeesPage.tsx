@@ -20,6 +20,7 @@ export function EmployeesPage() {
   const [search, setSearch] = useState('');
   const [selected, setSelected] = useState<Employee | null>(null);
   const [showDepartments, setShowDepartments] = useState(false);
+  const [editingDeptId, setEditingDeptId] = useState<number | null>(null);
   const [resetPasswordValue, setResetPasswordValue] = useState('');
   const { data } = useQuery({ queryKey: ['employees', search], queryFn: () => fetchEmployees(search || undefined) });
   const { data: departments } = useQuery({ queryKey: ['departments'], queryFn: fetchDepartments });
@@ -361,30 +362,19 @@ export function EmployeesPage() {
             <div className="space-y-4">
               {(departments ?? []).map((dept) => (
                 <div key={dept.id} className="border rounded-lg p-3">
-                  <div className="flex justify-between items-center">
-                    <form
-                      className="flex gap-2 items-center"
-                      onSubmit={(e) => {
-                        e.preventDefault();
-                        const form = new FormData(e.currentTarget);
-                        const name = String(form.get('name') || dept.name);
-                        const description = String(form.get('description') || '');
-                        departmentUpdateMutation.mutate({ id: dept.id, name, description });
-                      }}
-                    >
-                      <div>
-                        <input name="name" defaultValue={dept.name} className="input mb-1" />
-                        <input
-                          name="description"
-                          defaultValue={dept.description || ''}
-                          className="input text-sm"
-                          placeholder="Beschreibung"
-                        />
-                      </div>
-                      <div className="flex flex-col gap-2">
-                        <button className="btn-ghost text-xs" type="submit" disabled={departmentUpdateMutation.isPending}>
-                          Speichern
-                        </button>
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <p className="font-semibold">{dept.name}</p>
+                      <p className="text-sm text-slate-500">{dept.description || 'Keine Beschreibung'}</p>
+                    </div>
+                    <div className="flex gap-2">
+                      <button
+                        className="btn-ghost text-xs"
+                        onClick={() => setEditingDeptId(editingDeptId === dept.id ? null : dept.id)}
+                      >
+                        {editingDeptId === dept.id ? 'Schließen' : 'Bearbeiten'}
+                      </button>
+                      {editingDeptId === dept.id && (
                         <button
                           className="btn-ghost text-xs text-rose-600"
                           type="button"
@@ -396,38 +386,63 @@ export function EmployeesPage() {
                         >
                           Löschen
                         </button>
-                      </div>
-                    </form>
+                      )}
+                    </div>
+                  </div>
+                  {editingDeptId === dept.id && (
                     <form
-                      className="flex gap-2"
+                      className="flex gap-2 items-center mt-3"
                       onSubmit={(e) => {
                         e.preventDefault();
                         const form = new FormData(e.currentTarget);
-                        const userId = Number(form.get('userId'));
-                        const role = (form.get('role') as 'member' | 'lead' | 'hr') ?? 'member';
-                        if (!Number.isNaN(userId)) {
-                          memberMutation.mutate({ departmentId: dept.id, userId, role });
-                        }
+                        const name = String(form.get('name') || dept.name);
+                        const description = String(form.get('description') || '');
+                        departmentUpdateMutation.mutate({ id: dept.id, name, description });
                       }}
                     >
-                      <select name="userId" className="input">
-                        <option value="">Mitarbeiter auswählen</option>
-                        {(data ?? []).map((emp) => (
-                          <option key={emp.id} value={emp.id}>
-                            {emp.name} ({emp.personnelNumber || emp.email})
-                          </option>
-                        ))}
-                      </select>
-                      <select name="role" className="input">
-                        <option value="member">Mitarbeiter</option>
-                        <option value="lead">Teamleiter</option>
-                        <option value="hr">HR</option>
-                      </select>
-                      <button className="btn-ghost" type="submit" disabled={memberMutation.isPending}>
-                        Hinzufügen
+                      <div className="flex-1 grid grid-cols-1 md:grid-cols-2 gap-2">
+                        <input name="name" defaultValue={dept.name} className="input" />
+                        <input
+                          name="description"
+                          defaultValue={dept.description || ''}
+                          className="input text-sm"
+                          placeholder="Beschreibung"
+                        />
+                      </div>
+                      <button className="btn-primary text-xs" type="submit" disabled={departmentUpdateMutation.isPending}>
+                        Speichern
                       </button>
                     </form>
-                  </div>
+                  )}
+                  <form
+                    className="flex gap-2 mt-3"
+                    onSubmit={(e) => {
+                      e.preventDefault();
+                      const form = new FormData(e.currentTarget);
+                      const userId = Number(form.get('userId'));
+                      const role = (form.get('role') as 'member' | 'lead' | 'hr') ?? 'member';
+                      if (!Number.isNaN(userId)) {
+                        memberMutation.mutate({ departmentId: dept.id, userId, role });
+                      }
+                    }}
+                  >
+                    <select name="userId" className="input">
+                      <option value="">Mitarbeiter auswählen</option>
+                      {(data ?? []).map((emp) => (
+                        <option key={emp.id} value={emp.id}>
+                          {emp.name} ({emp.personnelNumber || emp.email})
+                        </option>
+                      ))}
+                    </select>
+                    <select name="role" className="input">
+                      <option value="member">Mitarbeiter</option>
+                      <option value="lead">Teamleiter</option>
+                      <option value="hr">HR</option>
+                    </select>
+                    <button className="btn-ghost" type="submit" disabled={memberMutation.isPending}>
+                      Hinzufügen
+                    </button>
+                  </form>
                   <div className="mt-3 divide-y">
                     {dept.members.length === 0 && <p className="text-sm text-slate-500">Noch keine Zuordnungen.</p>}
                     {dept.members.map((member) => (

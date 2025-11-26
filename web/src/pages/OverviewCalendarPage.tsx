@@ -70,7 +70,7 @@ export function OverviewCalendarPage() {
           >
             <option value="">Alle Mitarbeitenden</option>
             {(departments ?? []).map((dept) => (
-              <option key={dept.id} value={dept.name}>
+              <option key={dept.id} value={String(dept.id)}>
                 {dept.name}
               </option>
             ))}

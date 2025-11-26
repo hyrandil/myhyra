@@ -372,14 +372,37 @@ router.get('/overview', (req: AuthRequest, res) => {
   const end = new Date(Date.UTC(base.getUTCFullYear(), base.getUTCMonth() + 1, 0));
 
   const deptFilter = department?.trim();
-  const userRows = deptFilter
+  let deptId: number | null = null;
+  if (deptFilter) {
+    const numeric = Number(deptFilter);
+    if (!Number.isNaN(numeric)) {
+      deptId = numeric;
+    } else {
+      const row = db.prepare('SELECT id FROM departments WHERE name = ?').get(deptFilter) as { id: number } | undefined;
+      deptId = row?.id ?? null;
+    }
+    if (deptId === null) {
+      return res.json({ month: monthValue, days: {} });
+    }
+  }
+
+  const userRows = deptId
     ? (db
         .prepare(
-          'SELECT u.id, u.name, up.department FROM users u LEFT JOIN user_profiles up ON up.user_id = u.id WHERE up.department = ?'
+          `SELECT DISTINCT u.id, u.name, d.name as department
+           FROM department_members dm
+           JOIN users u ON u.id = dm.user_id
+           JOIN departments d ON d.id = dm.department_id
+           WHERE d.id = ?`
         )
-        .all(deptFilter) as { id: number; name: string; department?: string | null }[])
+        .all(deptId) as { id: number; name: string; department?: string | null }[])
     : (db
-        .prepare('SELECT u.id, u.name, up.department FROM users u LEFT JOIN user_profiles up ON up.user_id = u.id')
+        .prepare(
+          `SELECT u.id, u.name, d.name as department
+           FROM users u
+           LEFT JOIN department_members dm ON dm.user_id = u.id
+           LEFT JOIN departments d ON d.id = dm.department_id`
+        )
         .all() as { id: number; name: string; department?: string | null }[]);
 
   const filteredByUser = userId ? userRows.filter((row) => row.id === Number(userId)) : userRows;

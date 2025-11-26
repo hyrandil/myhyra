@@ -21,14 +21,31 @@ export function DashboardPage() {
       setLocationError('Standortbestimmung wird von diesem Browser nicht unterstützt.');
       return;
     }
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        setLocation({ lat: pos.coords.latitude, lng: pos.coords.longitude });
-        setLocationError(null);
-      },
-      () => setLocationError('Standort erforderlich zum Stempeln. Bitte Freigabe erteilen.'),
-      { enableHighAccuracy: true, timeout: 10000 }
-    );
+
+    const handleSuccess = (pos: GeolocationPosition) => {
+      setLocation({ lat: pos.coords.latitude, lng: pos.coords.longitude });
+      setLocationError(null);
+    };
+    const handleError = () => setLocationError('Standort erforderlich zum Stempeln. Bitte Freigabe erteilen.');
+
+    const watchId = navigator.geolocation.watchPosition(handleSuccess, handleError, {
+      enableHighAccuracy: true,
+      maximumAge: 0,
+      timeout: 10000,
+    });
+
+    const interval = window.setInterval(() => {
+      navigator.geolocation.getCurrentPosition(handleSuccess, handleError, {
+        enableHighAccuracy: true,
+        maximumAge: 0,
+        timeout: 10000,
+      });
+    }, 10000);
+
+    return () => {
+      navigator.geolocation.clearWatch(watchId);
+      window.clearInterval(interval);
+    };
   }, []);
 
   const mutate = useMutation({

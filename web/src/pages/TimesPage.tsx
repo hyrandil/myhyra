@@ -17,6 +17,12 @@ import { DailySummary, Employee, TimeEntry } from '../types';
 
 export function TimesPage() {
   const { user, hasRole } = useAuth();
+  const labels: Record<TimeEntry['type'], string> = {
+    CLOCK_IN: 'Kommen',
+    CLOCK_OUT: 'Gehen',
+    BREAK_START: 'Pause starten',
+    BREAK_END: 'Pause beenden',
+  };
   const queryClient = useQueryClient();
   const [month, setMonth] = useState<string>(() => {
     const now = new Date();
@@ -26,6 +32,7 @@ export function TimesPage() {
   const [manualTimestamp, setManualTimestamp] = useState('');
   const [absenceStart, setAbsenceStart] = useState('');
   const [absenceEnd, setAbsenceEnd] = useState('');
+  const [editingEntryId, setEditingEntryId] = useState<number | null>(null);
 
   useEffect(() => {
     if (!selectedDate) {
@@ -287,13 +294,14 @@ export function TimesPage() {
                     entry.lat && entry.lng
                       ? `https://www.google.com/maps?q=${entry.lat},${entry.lng}`
                       : null;
+                  const isEditing = editingEntryId === entry.id;
                   return (
                     <div key={entry.id} className="border border-slate-200 rounded-lg p-3 space-y-2">
                       <div className="flex items-center justify-between text-sm">
                         <div className="space-y-1">
                           <p className="font-semibold">
                             {new Date(entry.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}{' '}
-                            – {entry.type}
+                            – {labels[entry.type]}
                           </p>
                           <p className="text-xs text-slate-500">Quelle: {entry.source}</p>
                           {mapUrl && (
@@ -302,47 +310,58 @@ export function TimesPage() {
                             </a>
                           )}
                         </div>
-                        <button
-                          className="text-rose-600 text-xs"
-                          onClick={() => deleteEntryMutation.mutate(entry.id)}
-                          disabled={deleteEntryMutation.isPending}
-                        >
-                          Löschen
-                        </button>
-                      </div>
-                      <form
-                        className="grid md:grid-cols-3 gap-2 text-sm"
-                        onSubmit={(e) => {
-                          e.preventDefault();
-                          const data = new FormData(e.currentTarget);
-                          const ts = String(data.get('timestamp'));
-                          const withZ = ts.endsWith('Z') ? ts : `${ts}Z`;
-                          updateEntryMutation.mutate({
-                            entryId: entry.id,
-                            timestamp: withZ,
-                            type: data.get('type') as TimeEntry['type'],
-                          });
-                        }}
-                      >
-                        <div>
-                          <label className="text-xs text-slate-500">Zeitpunkt</label>
-                          <input name="timestamp" type="datetime-local" defaultValue={local} className="input w-full" required />
-                        </div>
-                        <div>
-                          <label className="text-xs text-slate-500">Typ</label>
-                          <select name="type" defaultValue={entry.type} className="input w-full">
-                            <option value="CLOCK_IN">Kommen</option>
-                            <option value="CLOCK_OUT">Gehen</option>
-                            <option value="BREAK_START">Pause starten</option>
-                            <option value="BREAK_END">Pause beenden</option>
-                          </select>
-                        </div>
-                        <div className="flex items-end">
-                          <button className="btn-primary w-full" type="submit" disabled={updateEntryMutation.isPending}>
-                            Aktualisieren
+                        <div className="flex gap-2 items-center">
+                          <button
+                            className="text-xs text-slate-700 underline"
+                            onClick={() => setEditingEntryId(isEditing ? null : entry.id)}
+                          >
+                            {isEditing ? 'Abbrechen' : 'Ändern'}
+                          </button>
+                          <button
+                            className="text-rose-600 text-xs"
+                            onClick={() => deleteEntryMutation.mutate(entry.id)}
+                            disabled={deleteEntryMutation.isPending}
+                          >
+                            Löschen
                           </button>
                         </div>
-                      </form>
+                      </div>
+                      {isEditing ? (
+                        <form
+                          className="grid md:grid-cols-3 gap-2 text-sm"
+                          onSubmit={(e) => {
+                            e.preventDefault();
+                            const data = new FormData(e.currentTarget);
+                            const ts = String(data.get('timestamp'));
+                            const withZ = ts.endsWith('Z') ? ts : `${ts}Z`;
+                            updateEntryMutation.mutate({
+                              entryId: entry.id,
+                              timestamp: withZ,
+                              type: data.get('type') as TimeEntry['type'],
+                            });
+                            setEditingEntryId(null);
+                          }}
+                        >
+                          <div>
+                            <label className="text-xs text-slate-500">Zeitpunkt</label>
+                            <input name="timestamp" type="datetime-local" defaultValue={local} className="input w-full" required />
+                          </div>
+                          <div>
+                            <label className="text-xs text-slate-500">Typ</label>
+                            <select name="type" defaultValue={entry.type} className="input w-full">
+                              <option value="CLOCK_IN">Kommen</option>
+                              <option value="CLOCK_OUT">Gehen</option>
+                              <option value="BREAK_START">Pause starten</option>
+                              <option value="BREAK_END">Pause beenden</option>
+                            </select>
+                          </div>
+                          <div className="flex items-end">
+                            <button className="btn-primary w-full" type="submit" disabled={updateEntryMutation.isPending}>
+                              Aktualisieren
+                            </button>
+                          </div>
+                        </form>
+                      ) : null}
                     </div>
                   );
                 })}
