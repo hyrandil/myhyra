@@ -3,9 +3,15 @@ import bcrypt from 'bcryptjs';
 import { z } from 'zod';
 import db from '../db';
 import { authorize, requireAuth, AuthRequest } from '../auth';
-import type { User } from '../types';
+import type { User, Role } from '../types';
+import type { Session } from 'express-session';
 
 const router = Router();
+
+type AuthSession = Session & {
+  userId?: number;
+  role?: Role;
+};
 
 const registerSchema = z.object({
   name: z.string().min(2),
@@ -55,8 +61,11 @@ router.post('/login', (req: AuthRequest, res) => {
   if (!valid) {
     return res.status(401).json({ message: 'Ungültige Zugangsdaten' });
   }
-  req.session.userId = user.id;
-  req.session.role = user.role;
+
+  const session = req.session as AuthSession;
+  session.userId = user.id;
+  session.role = user.role;
+
   res.json({ user: { id: user.id, name: user.name, email: user.email, role: user.role } });
 });
 
