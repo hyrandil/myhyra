@@ -2,7 +2,7 @@ import { TimeEntry } from '../types';
 
 const MS_IN_MINUTE = 60000;
 
-export function computeDayWorkMinutes(entries: TimeEntry[]) {
+export function computeDayWorkStats(entries: TimeEntry[]) {
   const sorted = [...entries].sort(
     (a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
   );
@@ -40,7 +40,12 @@ export function computeDayWorkMinutes(entries: TimeEntry[]) {
   const recordedBreakMinutes = breakMs / MS_IN_MINUTE;
 
   if (spanMinutes <= 360) {
-    return Math.round(workedMinutes);
+    return {
+      workedMinutes: Math.round(workedMinutes),
+      autoDeduction: 0,
+      recordedBreakMinutes: Math.round(recordedBreakMinutes),
+      spanMinutes: Math.round(spanMinutes),
+    };
   }
 
   const longShift = spanMinutes >= 540;
@@ -48,7 +53,18 @@ export function computeDayWorkMinutes(entries: TimeEntry[]) {
   const requiredPause = Math.min(maxPause, spanMinutes - 360);
   const countedBreak = Math.min(recordedBreakMinutes, maxPause);
   const deduction = Math.max(requiredPause - countedBreak, 0);
-  return Math.round(Math.max(workedMinutes - deduction, 0));
+  const effective = Math.round(Math.max(workedMinutes - deduction, 0));
+
+  return {
+    workedMinutes: effective,
+    autoDeduction: Math.round(deduction),
+    recordedBreakMinutes: Math.round(recordedBreakMinutes),
+    spanMinutes: Math.round(spanMinutes),
+  };
+}
+
+export function computeDayWorkMinutes(entries: TimeEntry[]) {
+  return computeDayWorkStats(entries).workedMinutes;
 }
 
 export function computeDelta(plannedMinutes: number, workedMinutes: number) {

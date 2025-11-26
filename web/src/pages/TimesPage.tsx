@@ -13,7 +13,7 @@ import {
   deleteTimeEntry,
 } from '../api';
 import { useAuth } from '../AuthProvider';
-import { DailySummary, Employee, TimeEntry } from '../types';
+import { DailySummary, DayDetail, Employee, TimeEntry } from '../types';
 
 export function TimesPage() {
   const { user, hasRole } = useAuth();
@@ -88,11 +88,25 @@ export function TimesPage() {
     enabled: Boolean(selectedUserId),
   });
   const days = data?.days ?? {};
-  const dayDetail = useQuery({
+  const dayDetail = useQuery<DayDetail>({
     queryKey: ['dayEntries', selectedUserId, selectedDate],
     queryFn: () => fetchDayEntriesForUser(selectedUserId!, selectedDate!),
     enabled: enableManagement && Boolean(selectedUserId && selectedDate),
   });
+
+  const timeline = useMemo(
+    () => {
+      if (!dayDetail.data) return [] as Array<{ kind: 'entry'; entry: TimeEntry } | { kind: 'auto'; minutes: number }>;
+      const items: Array<{ kind: 'entry'; entry: TimeEntry } | { kind: 'auto'; minutes: number }> = dayDetail.data.entries.map(
+        (entry) => ({ kind: 'entry', entry })
+      );
+      if (dayDetail.data.autoBreakMinutes && dayDetail.data.autoBreakMinutes > 0) {
+        items.push({ kind: 'auto', minutes: dayDetail.data.autoBreakMinutes });
+      }
+      return items;
+    },
+    [dayDetail.data]
+  );
 
   const canEditTarget = useMemo(() => {
     if (!enableManagement || !selectedUserId) return false;
@@ -292,9 +306,23 @@ export function TimesPage() {
               </div>
               {dayDetail.isFetching && <span className="text-xs text-slate-500">Aktualisiere…</span>}
             </div>
-            {dayDetail.data?.entries?.length ? (
+            {dayDetail.data?.inconsistent ? (
+              <div className="p-2 rounded bg-amber-100 text-amber-800 text-sm">Inkonsistente Buchung erkannt (mehrfache Kommen/Gehen in Folge).</div>
+            ) : null}
+            {timeline.length ? (
               <div className="space-y-2">
-                {dayDetail.data.entries.map((entry) => {
+                {timeline.map((item, idx) => {
+                  if (item.kind === 'auto') {
+                    return (
+                      <div
+                        key={`auto-${idx}`}
+                        className="border border-dashed border-slate-300 rounded-lg p-3 text-sm bg-slate-50"
+                      >
+                        Automatische Pause (−{item.minutes} Minuten) wurde zwischen den Buchungen berücksichtigt.
+                      </div>
+                    );
+                  }
+                  const entry = item.entry;
                   const local = entry.timestamp.replace('Z', '');
                   const mapUrl =
                     entry.lat && entry.lng
@@ -349,7 +377,13 @@ export function TimesPage() {
                         >
                           <div>
                             <label className="text-xs text-slate-500">Zeitpunkt</label>
-                            <input name="timestamp" type="datetime-local" defaultValue={local} className="input w-full" required />
+                            <input
+                              name="timestamp"
+                              type="datetime-local"
+                              defaultValue={local}
+                              className="input w-full"
+                              required
+                            />
                           </div>
                           <div>
                             <label className="text-xs text-slate-500">Typ</label>
