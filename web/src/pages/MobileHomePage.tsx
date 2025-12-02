@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { fetchEntries, punch } from '../api';
 import { TimeEntry } from '../types';
@@ -24,25 +24,32 @@ export function MobileHomePage() {
   const [location, setLocation] = useState<{ lat: number; lng: number } | null>(null);
   const [locationError, setLocationError] = useState<string | null>(null);
 
+  const handleSuccess = useCallback((pos: GeolocationPosition) => {
+    setLocation({ lat: pos.coords.latitude, lng: pos.coords.longitude });
+    setLocationError(null);
+  }, []);
+
+  const handleError = useCallback(() => {
+    setLocationError('Standort erforderlich zum Stempeln. Bitte Freigabe erteilen.');
+  }, []);
+
+  const requestFix = useCallback(() => {
+    if (!navigator.geolocation) {
+      setLocationError('Standortbestimmung wird von diesem Browser nicht unterstützt.');
+      return;
+    }
+    navigator.geolocation.getCurrentPosition(handleSuccess, handleError, {
+      enableHighAccuracy: true,
+      maximumAge: 0,
+      timeout: 7000,
+    });
+  }, [handleError, handleSuccess]);
+
   useEffect(() => {
     if (!navigator.geolocation) {
       setLocationError('Standortbestimmung wird von diesem Browser nicht unterstützt.');
       return;
     }
-
-    const handleSuccess = (pos: GeolocationPosition) => {
-      setLocation({ lat: pos.coords.latitude, lng: pos.coords.longitude });
-      setLocationError(null);
-    };
-    const handleError = () => setLocationError('Standort erforderlich zum Stempeln. Bitte Freigabe erteilen.');
-
-    const requestFix = () => {
-      navigator.geolocation.getCurrentPosition(handleSuccess, handleError, {
-        enableHighAccuracy: true,
-        maximumAge: 0,
-        timeout: 7000,
-      });
-    };
 
     const watchId = navigator.geolocation.watchPosition(handleSuccess, handleError, {
       enableHighAccuracy: true,
@@ -57,7 +64,7 @@ export function MobileHomePage() {
       navigator.geolocation.clearWatch(watchId);
       window.clearInterval(interval);
     };
-  }, []);
+  }, [handleError, handleSuccess, requestFix]);
 
   const mutate = useMutation({
     mutationFn: (vars: { type: TimeEntry['type']; location?: { lat: number; lng: number } }) => punch(vars.type, vars.location),
@@ -93,29 +100,38 @@ export function MobileHomePage() {
             {mainAction === 'CLOCK_IN' ? 'Kommen' : 'Gehen'}
           </button>
           {locationError && <p className="text-xs text-amber-200">{locationError}</p>}
+          {!location && (
+            <button
+              type="button"
+              className="text-xs text-sky-100 underline self-start"
+              onClick={requestFix}
+            >
+              Standort jetzt anfragen
+            </button>
+          )}
           {location && (
             <p className="text-xs text-white/70">GPS: {location.lat.toFixed(4)}, {location.lng.toFixed(4)}</p>
           )}
         </div>
       </div>
 
-      <div className="bg-white rounded-3xl shadow-sm border border-slate-200 p-4">
+      <div className="bg-slate-800 text-slate-50 rounded-3xl shadow-sm border border-slate-700 p-4">
         <div className="flex items-center justify-between mb-3">
-          <p className="text-sm font-semibold text-slate-800">Letzte Buchungen</p>
-          <span className="text-[11px] uppercase text-slate-400">Chronik</span>
+          <p className="text-sm font-semibold text-white">Letzte Buchungen</p>
+          <span className="text-[11px] uppercase text-slate-300">Chronik</span>
         </div>
-        <div className="divide-y divide-slate-100">
+        <div className="divide-y divide-slate-700/60">
           {(data ?? []).map((entry) => (
             <div key={entry.id} className="py-3 flex items-center justify-between gap-2">
               <div>
-                <p className="font-semibold text-slate-900">{labels[entry.type]}</p>
-                <p className="text-xs text-slate-500">{formatStamp(entry.timestamp)}</p>
+                <p className="font-semibold text-white">{labels[entry.type]}</p>
+                <p className="text-xs text-slate-300">{formatStamp(entry.timestamp)}</p>
               </div>
-              <div className="text-right text-[11px] text-slate-500 space-y-1">
-                <span className="inline-flex items-center gap-1 bg-slate-100 px-2 py-1 rounded-full">{entry.source}</span>
+              <div className="text-right text-[11px] text-slate-300 space-y-1">
+                <span className="inline-flex items-center gap-1 bg-slate-700 px-2 py-1 rounded-full text-slate-100">{entry.source}</span>
                 {entry.lat && entry.lng ? (
                   <a
-                    className="block text-sky-600 hover:underline"
+                    className="block text-sky-300 hover:underline"
                     target="_blank"
                     rel="noreferrer"
                     href={`https://maps.google.com/?q=${entry.lat},${entry.lng}`}
@@ -123,12 +139,12 @@ export function MobileHomePage() {
                     Standort ansehen
                   </a>
                 ) : (
-                  <span>Kein Standort</span>
+                  <span className="text-slate-400">Kein Standort</span>
                 )}
               </div>
             </div>
           ))}
-          {(data ?? []).length === 0 && <p className="text-sm text-slate-500">Noch keine Buchungen vorhanden.</p>}
+          {(data ?? []).length === 0 && <p className="text-sm text-slate-300">Noch keine Buchungen vorhanden.</p>}
         </div>
       </div>
     </div>

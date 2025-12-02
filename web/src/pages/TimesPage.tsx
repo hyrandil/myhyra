@@ -15,9 +15,11 @@ import {
 } from '../api';
 import { useAuth } from '../AuthProvider';
 import { AbsenceKind, DailySummary, DayDetail, Employee, TimeEntry } from '../types';
+import { useIsMobile } from '../hooks/useIsMobile';
 
 export function TimesPage() {
   const { user, hasRole } = useAuth();
+  const isMobile = useIsMobile();
   const labels: Record<TimeEntry['type'], string> = {
     CLOCK_IN: 'Kommen',
     CLOCK_OUT: 'Gehen',
@@ -174,13 +176,6 @@ export function TimesPage() {
     base.setUTCMonth(base.getUTCMonth() + delta);
     setMonth(`${base.getUTCFullYear()}-${String(base.getUTCMonth() + 1).padStart(2, '0')}`);
     setSelectedDate(null);
-  };
-
-  const absenceColor = (code: string) => {
-    if (code === 'vacation') return 'bg-amber-500';
-    if (code === 'sick') return 'bg-rose-500';
-    if (code === 'holiday') return 'bg-sky-500';
-    return 'bg-slate-500';
   };
 
   const absenceLegend = absenceOptions.length
@@ -341,19 +336,6 @@ export function TimesPage() {
         <div className="card p-4">
             <div className="flex items-center justify-between mb-2">
               <h3 className="text-lg font-semibold">Kalender</h3>
-              <div className="flex gap-3 text-xs text-slate-600 items-center">
-                {absenceLegend.map((kind) => (
-                  <span key={kind.code} className="flex items-center gap-1">
-                    <span className={`h-2 w-2 rounded-full ${absenceColor(kind.code)}`}></span> {kind.label}
-                  </span>
-                ))}
-                <span className="flex items-center gap-1">
-                  <span className="h-2 w-2 rounded-full bg-rose-600"></span> offen
-                </span>
-                <span className="flex items-center gap-1">
-                  <span className="h-2 w-2 rounded-full bg-slate-900"></span> korrekt
-                </span>
-              </div>
             </div>
             {isLoading ? (
             <p className="text-sm text-slate-500">Lade…</p>
@@ -367,6 +349,7 @@ export function TimesPage() {
                 setManualTimestamp(`${value}T09:00`);
               }}
               absenceKinds={absenceLegend}
+              compactStatus={isMobile}
             />
           )}
         </div>

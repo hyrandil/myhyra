@@ -12,6 +12,7 @@ type CalendarProps = {
   hideDetails?: boolean;
   absencesOnly?: boolean;
   absenceKinds?: { code: string; label: string }[];
+  compactStatus?: boolean;
 };
 
 const formatHours = (minutes: number) => {
@@ -62,6 +63,7 @@ export function Calendar({
   hideDetails,
   absencesOnly,
   absenceKinds,
+  compactStatus,
 }: CalendarProps) {
   const [internalSelected, setInternalSelected] = useState<string | null>(selectedDate ?? null);
 
@@ -118,8 +120,12 @@ export function Calendar({
               {cell.summary && !absencesOnly && (
                 <span className="text-xs flex items-center gap-1">
                   <span className={`h-2 w-2 rounded-full ${statusAccent(cell.summary)}`}></span>
-                  {cell.summary.flex >= 0 ? '+' : ''}
-                  {formatHours(cell.summary.flex)}
+                  {!compactStatus && (
+                    <>
+                      {cell.summary.flex >= 0 ? '+' : ''}
+                      {formatHours(cell.summary.flex)}
+                    </>
+                  )}
                 </span>
               )}
             </div>

@@ -45,11 +45,11 @@ function MobileNavItem({ to, label }: { to: string; label: string }) {
       end={to === '/'}
       className={({ isActive }) =>
         `flex flex-col items-center text-[11px] font-semibold px-2 ${
-          isActive ? 'text-sky-900' : 'text-slate-500'
+          isActive ? 'text-sky-100' : 'text-slate-300'
         }`
       }
     >
-      <span className={`h-1.5 w-1.5 rounded-full ${to === '/' ? 'bg-emerald-500' : 'bg-sky-500'}`} aria-hidden />
+      <span className={`h-1.5 w-1.5 rounded-full ${to === '/' ? 'bg-emerald-400' : 'bg-sky-400'}`} aria-hidden />
       {label}
     </NavLink>
   );
@@ -161,8 +161,8 @@ function MobileShell({ children }: { children: React.ReactNode }) {
         </div>
       </header>
       <main className="pb-20 pt-4 px-3 space-y-4">{children}</main>
-      <nav className="fixed bottom-0 left-0 right-0 bg-white text-slate-900 border-t border-slate-200 shadow-2xl">
-        <div className="max-w-4xl mx-auto px-6 py-3 flex items-center justify-between text-center">
+      <nav className="fixed bottom-0 left-0 right-0 bg-slate-950/95 text-slate-100 border-t border-slate-800 shadow-[0_-6px_20px_rgba(0,0,0,0.35)] z-40">
+        <div className="max-w-4xl mx-auto px-6 py-3 flex items-center justify-between text-center gap-2">
           <MobileNavItem to="/" label="Cockpit" />
           <MobileNavItem to="/zeiten" label="Zeiten" />
           <MobileNavItem to="/abwesenheiten" label="Abwesen" />
