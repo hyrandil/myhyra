@@ -9,6 +9,8 @@ import { OverviewCalendarPage } from './pages/OverviewCalendarPage';
 import { PlanningPage } from './pages/PlanningPage';
 import { InconsistentPage } from './pages/InconsistentPage';
 import { useAuth } from './AuthProvider';
+import { MobileHomePage } from './pages/MobileHomePage';
+import { useIsMobile } from './hooks/useIsMobile';
 
 function Protected({ children }: { children: React.ReactNode }) {
   const { user, ready } = useAuth();
@@ -31,6 +33,23 @@ function NavItem({ to, label }: { to: string; label: string }) {
       }
     >
       <span className="h-2 w-2 rounded-full bg-white/70" aria-hidden />
+      {label}
+    </NavLink>
+  );
+}
+
+function MobileNavItem({ to, label }: { to: string; label: string }) {
+  return (
+    <NavLink
+      to={to}
+      end={to === '/'}
+      className={({ isActive }) =>
+        `flex flex-col items-center text-[11px] font-semibold px-2 ${
+          isActive ? 'text-sky-900' : 'text-slate-500'
+        }`
+      }
+    >
+      <span className={`h-1.5 w-1.5 rounded-full ${to === '/' ? 'bg-emerald-500' : 'bg-sky-500'}`} aria-hidden />
       {label}
     </NavLink>
   );
@@ -109,28 +128,92 @@ function Shell({ children }: { children: React.ReactNode }) {
   );
 }
 
+function MobileShell({ children }: { children: React.ReactNode }) {
+  const auth = useAuth();
+  const displayName =
+    [auth.user?.firstName ?? (auth.user as any)?.first_name, auth.user?.lastName ?? (auth.user as any)?.last_name]
+      .filter(Boolean)
+      .join(' ') || auth.user?.name;
+  const roleLabel = (role?: string | null) => {
+    switch (role) {
+      case 'admin':
+        return 'Administrator';
+      case 'hr':
+        return 'Personal';
+      case 'lead':
+        return 'Teamleiter';
+      default:
+        return 'Mitarbeiter';
+    }
+  };
+  return (
+    <div className="min-h-screen bg-slate-900 text-slate-50">
+      <header className="bg-slate-950/80 backdrop-blur border-b border-white/10 px-4 py-3 flex items-center justify-between sticky top-0 z-20">
+        <div>
+          <p className="text-xs uppercase tracking-wide text-slate-300">ZeitPilot</p>
+          <p className="font-semibold leading-tight">{displayName || 'Willkommen'}</p>
+        </div>
+        <div className="text-right text-xs">
+          <p className="text-slate-300">{roleLabel(auth.user?.role)}</p>
+          <button onClick={auth.logout} className="underline text-amber-200 font-semibold">
+            Abmelden
+          </button>
+        </div>
+      </header>
+      <main className="pb-20 pt-4 px-3 space-y-4">{children}</main>
+      <nav className="fixed bottom-0 left-0 right-0 bg-white text-slate-900 border-t border-slate-200 shadow-2xl">
+        <div className="max-w-4xl mx-auto px-6 py-3 flex items-center justify-between text-center">
+          <MobileNavItem to="/" label="Cockpit" />
+          <MobileNavItem to="/zeiten" label="Zeiten" />
+          <MobileNavItem to="/abwesenheiten" label="Abwesen" />
+          <MobileNavItem to="/berichte" label="Berichte" />
+          {auth.hasRole('lead', 'hr', 'admin') && <MobileNavItem to="/inkonsistenzen" label="Checks" />}
+        </div>
+      </nav>
+    </div>
+  );
+}
+
 export default function App() {
   const { user } = useAuth();
+  const isMobile = useIsMobile();
   return (
     <Routes>
       <Route path="/login" element={<LoginPage />} />
       <Route
         path="/*"
         element={
-          <Protected>
-            <Shell>
-              <Routes>
-                <Route path="/" element={<DashboardPage />} />
-                <Route path="/zeiten" element={<TimesPage />} />
-                <Route path="/uebersicht" element={<OverviewCalendarPage />} />
-                <Route path="/abwesenheiten" element={<AbsencePage />} />
-                <Route path="/inkonsistenzen" element={<InconsistentPage />} />
-                <Route path="/planung" element={<PlanningPage />} />
-                <Route path="/mitarbeitende" element={<EmployeesPage />} />
-                <Route path="/berichte" element={<ReportsPage />} />
-              </Routes>
-            </Shell>
-          </Protected>
+          isMobile ? (
+            <Protected>
+              <MobileShell>
+                <Routes>
+                  <Route path="/" element={<MobileHomePage />} />
+                  <Route path="/zeiten" element={<TimesPage />} />
+                  <Route path="/abwesenheiten" element={<AbsencePage />} />
+                  <Route path="/berichte" element={<ReportsPage />} />
+                  <Route path="/uebersicht" element={<OverviewCalendarPage />} />
+                  <Route path="/mitarbeitende" element={<EmployeesPage />} />
+                  <Route path="/inkonsistenzen" element={<InconsistentPage />} />
+                  <Route path="/planung" element={<PlanningPage />} />
+                </Routes>
+              </MobileShell>
+            </Protected>
+          ) : (
+            <Protected>
+              <Shell>
+                <Routes>
+                  <Route path="/" element={<DashboardPage />} />
+                  <Route path="/zeiten" element={<TimesPage />} />
+                  <Route path="/uebersicht" element={<OverviewCalendarPage />} />
+                  <Route path="/abwesenheiten" element={<AbsencePage />} />
+                  <Route path="/inkonsistenzen" element={<InconsistentPage />} />
+                  <Route path="/planung" element={<PlanningPage />} />
+                  <Route path="/mitarbeitende" element={<EmployeesPage />} />
+                  <Route path="/berichte" element={<ReportsPage />} />
+                </Routes>
+              </Shell>
+            </Protected>
+          )
         }
       />
       <Route path="*" element={<Navigate to={user ? '/' : '/login'} replace />} />
