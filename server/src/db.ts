@@ -214,7 +214,22 @@ db.prepare('UPDATE absences SET end_date = date WHERE end_date IS NULL').run();
 ensureTableColumn('user_profiles', 'location', 'location TEXT');
 ensureTableColumn('user_profiles', 'department', 'department TEXT');
 ensureTableColumn('user_profiles', 'work_model_id', 'work_model_id INTEGER');
-ensureTableColumn('user_profiles', 'holiday_profile_id', 'holiday_profile_id INTEGER');
+// Ensure legacy databases receive holiday profile support even if they were created
+// before the column existed. The helper already adds the column when missing, and the
+// defensive try/catch covers environments where partial migrations left the schema in
+// an unexpected state.
+try {
+  ensureTableColumn(
+    'user_profiles',
+    'holiday_profile_id',
+    'holiday_profile_id INTEGER REFERENCES holiday_profiles(id)'
+  );
+} catch (err) {
+  const message = err instanceof Error ? err.message : '';
+  if (!message.toLowerCase().includes('duplicate column')) {
+    db.exec('ALTER TABLE user_profiles ADD COLUMN holiday_profile_id INTEGER');
+  }
+}
 ensureTableColumn('user_profiles', 'start_date', 'start_date TEXT');
 ensureTableColumn('user_profiles', 'end_date', 'end_date TEXT');
 db.exec(`
