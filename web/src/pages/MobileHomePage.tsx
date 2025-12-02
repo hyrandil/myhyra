@@ -23,6 +23,7 @@ export function MobileHomePage() {
   const { data } = useQuery({ queryKey: ['entries'], queryFn: fetchEntries });
   const [location, setLocation] = useState<{ lat: number; lng: number } | null>(null);
   const [locationError, setLocationError] = useState<string | null>(null);
+  const canViewLocation = user ? ['lead', 'hr', 'admin'].includes(user.role) : false;
 
   const handleSuccess = useCallback((pos: GeolocationPosition) => {
     setLocation({ lat: pos.coords.latitude, lng: pos.coords.longitude });
@@ -109,7 +110,7 @@ export function MobileHomePage() {
               Standort jetzt anfragen
             </button>
           )}
-          {location && (
+          {location && canViewLocation && (
             <p className="text-xs text-white/70">GPS: {location.lat.toFixed(4)}, {location.lng.toFixed(4)}</p>
           )}
         </div>
@@ -129,7 +130,7 @@ export function MobileHomePage() {
               </div>
               <div className="text-right text-[11px] text-slate-300 space-y-1">
                 <span className="inline-flex items-center gap-1 bg-slate-700 px-2 py-1 rounded-full text-slate-100">{entry.source}</span>
-                {entry.lat && entry.lng ? (
+                {canViewLocation && entry.lat && entry.lng ? (
                   <a
                     className="block text-sky-300 hover:underline"
                     target="_blank"
@@ -138,9 +139,7 @@ export function MobileHomePage() {
                   >
                     Standort ansehen
                   </a>
-                ) : (
-                  <span className="text-slate-400">Kein Standort</span>
-                )}
+                ) : null}
               </div>
             </div>
           ))}

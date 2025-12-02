@@ -350,6 +350,7 @@ export function TimesPage() {
               }}
               absenceKinds={absenceLegend}
               compactStatus={isMobile}
+              hideStatusMessages={isMobile}
             />
           )}
         </div>

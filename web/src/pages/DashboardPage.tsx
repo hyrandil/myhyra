@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { fetchEntries, punch } from '../api';
 import { TimeEntry } from '../types';
+import { useAuth } from '../AuthProvider';
 
 const labels: Record<TimeEntry['type'], string> = {
   CLOCK_IN: 'Kommen',
@@ -19,8 +20,10 @@ function formatStamp(ts: string) {
 export function DashboardPage() {
   const queryClient = useQueryClient();
   const { data } = useQuery({ queryKey: ['entries'], queryFn: fetchEntries });
+  const { user } = useAuth();
   const [location, setLocation] = useState<{ lat: number; lng: number } | null>(null);
   const [locationError, setLocationError] = useState<string | null>(null);
+  const canViewLocation = user ? ['lead', 'hr', 'admin'].includes(user.role) : false;
 
   useEffect(() => {
     if (!navigator.geolocation) {
@@ -120,13 +123,11 @@ export function DashboardPage() {
                   <span className="h-2 w-2 rounded-full bg-sky-500"></span>
                   {entry.source}
                 </div>
-                {entry.lat && entry.lng ? (
+                {canViewLocation && entry.lat && entry.lng ? (
                   <p>
                     GPS: {entry.lat.toFixed(3)}, {entry.lng.toFixed(3)}
                   </p>
-                ) : (
-                  <p>Kein Standort</p>
-                )}
+                ) : null}
               </div>
             </div>
           ))}

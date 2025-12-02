@@ -13,6 +13,7 @@ type CalendarProps = {
   absencesOnly?: boolean;
   absenceKinds?: { code: string; label: string }[];
   compactStatus?: boolean;
+  hideStatusMessages?: boolean;
 };
 
 const formatHours = (minutes: number) => {
@@ -64,6 +65,7 @@ export function Calendar({
   absencesOnly,
   absenceKinds,
   compactStatus,
+  hideStatusMessages,
 }: CalendarProps) {
   const [internalSelected, setInternalSelected] = useState<string | null>(selectedDate ?? null);
 
@@ -136,17 +138,21 @@ export function Calendar({
                   : cell.summary.absences.join(', ')}
               </p>
             ) : null}
-            {cell.summary?.status === 'pending' && (
-              <p className="text-[11px] text-amber-700 mt-1">○ Antrag vorgemerkt</p>
-            )}
-            {cell.summary?.status === 'open' && (
-              <p className="text-[11px] text-rose-700 mt-1">✖ Offene Buchung</p>
-            )}
-            {cell.summary?.status === 'inconsistent' && (
-              <p className="text-[11px] text-rose-700 mt-1">⚠︎ Inkonsistente Buchung</p>
-            )}
-            {cell.summary?.status === 'ok' && (
-              <p className="text-[11px] text-slate-700 mt-1">● Buchung vollständig</p>
+            {!hideStatusMessages && (
+              <>
+                {cell.summary?.status === 'pending' && (
+                  <p className="text-[11px] text-amber-700 mt-1">○ Antrag vorgemerkt</p>
+                )}
+                {cell.summary?.status === 'open' && (
+                  <p className="text-[11px] text-rose-700 mt-1">✖ Offene Buchung</p>
+                )}
+                {cell.summary?.status === 'inconsistent' && (
+                  <p className="text-[11px] text-rose-700 mt-1">⚠︎ Inkonsistente Buchung</p>
+                )}
+                {cell.summary?.status === 'ok' && (
+                  <p className="text-[11px] text-slate-700 mt-1">● Buchung vollständig</p>
+                )}
+              </>
             )}
           </button>
         ))}
