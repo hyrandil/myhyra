@@ -92,6 +92,9 @@ export interface Absence {
   end_date: string;
   type: string;
   duration: 'full' | 'half';
+  start_time?: string | null;
+  end_time?: string | null;
+  minutes_override?: number | null;
   note?: string | null;
   created_at: string;
   days?: string[];

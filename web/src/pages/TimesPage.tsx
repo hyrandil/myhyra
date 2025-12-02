@@ -33,8 +33,10 @@ export function TimesPage() {
   const [manualTimestamp, setManualTimestamp] = useState('');
   const [absenceStart, setAbsenceStart] = useState('');
   const [absenceEnd, setAbsenceEnd] = useState('');
+  const [absenceStartTime, setAbsenceStartTime] = useState('');
+  const [absenceEndTime, setAbsenceEndTime] = useState('');
   const [absenceType, setAbsenceType] = useState('');
-  const [absenceDuration, setAbsenceDuration] = useState<'full' | 'half'>('full');
+  const [absenceDuration, setAbsenceDuration] = useState<'full' | 'half' | 'hours'>('full');
   const [editingEntryId, setEditingEntryId] = useState<number | null>(null);
 
   useEffect(() => {
@@ -107,10 +109,13 @@ export function TimesPage() {
   useEffect(() => {
     if (!selectedKind) return;
     if (!selectedKind.allow_full && absenceDuration === 'full') {
-      setAbsenceDuration(selectedKind.allow_half ? 'half' : 'full');
+      setAbsenceDuration(selectedKind.allow_half ? 'half' : selectedKind.allow_hourly ? 'hours' : 'full');
     }
     if (!selectedKind.allow_half && absenceDuration === 'half') {
-      setAbsenceDuration('full');
+      setAbsenceDuration(selectedKind.allow_hourly ? 'hours' : 'full');
+    }
+    if (absenceDuration === 'hours' && !selectedKind.allow_hourly) {
+      setAbsenceDuration(selectedKind.allow_full ? 'full' : 'half');
     }
   }, [selectedKind, absenceDuration]);
 
@@ -201,7 +206,7 @@ export function TimesPage() {
       location,
     }: {
       timestamp: string;
-      type: 'CLOCK_IN' | 'CLOCK_OUT' | 'BREAK_START' | 'BREAK_END';
+      type: 'CLOCK_IN' | 'CLOCK_OUT';
       location?: { lat?: number; lng?: number };
     }) => createManualTimeEntry(selectedUserId!, { timestamp, type, location }),
     onSuccess: () => {
@@ -212,8 +217,21 @@ export function TimesPage() {
   });
 
   const manualAbsence = useMutation({
-    mutationFn: ({ start_date, end_date, type, duration }: { start_date: string; end_date: string; type: string; duration: 'full' | 'half' }) =>
-      createAbsenceForUser(selectedUserId!, { start_date, end_date, type, duration }),
+    mutationFn: ({
+      start_date,
+      end_date,
+      type,
+      duration,
+      start_time,
+      end_time,
+    }: { start_date: string; end_date: string; type: string; duration: 'full' | 'half' | 'hours'; start_time?: string; end_time?: string }) =>
+      createAbsenceForUser(selectedUserId!, {
+        start_date,
+        end_date,
+        type,
+        duration: duration === 'hours' ? 'full' : duration,
+        ...(start_time && end_time ? { start_time, end_time } : {}),
+      }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['daily', month, selectedUserId] });
       queryClient.invalidateQueries({ queryKey: ['overview'] });
@@ -232,7 +250,7 @@ export function TimesPage() {
   });
 
   const updateEntryMutation = useMutation({
-    mutationFn: ({ entryId, timestamp, type }: { entryId: number; timestamp: string; type: TimeEntry['type'] }) =>
+    mutationFn: ({ entryId, timestamp, type }: { entryId: number; timestamp: string; type: 'CLOCK_IN' | 'CLOCK_OUT' }) =>
       updateTimeEntry(entryId, { timestamp, type }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['dayEntries', selectedUserId, selectedDate] });
@@ -254,7 +272,7 @@ export function TimesPage() {
     const form = new FormData(e.currentTarget);
     manualTime.mutate({
       timestamp: String(form.get('timestamp') || manualTimestamp),
-      type: form.get('type') as any,
+      type: (form.get('type') as 'CLOCK_IN' | 'CLOCK_OUT') ?? 'CLOCK_IN',
       location: {
         lat: form.get('lat') ? Number(form.get('lat')) : undefined,
         lng: form.get('lng') ? Number(form.get('lng')) : undefined,
@@ -267,12 +285,17 @@ export function TimesPage() {
   const onManualAbsence = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (!selectedUserId || !absenceType) return;
-    manualAbsence.mutate({
+    const payload: any = {
       start_date: absenceStart,
       end_date: absenceEnd,
       type: absenceType,
       duration: absenceDuration,
-    });
+    };
+    if (absenceDuration === 'hours') {
+      payload.start_time = absenceStartTime;
+      payload.end_time = absenceEndTime;
+    }
+    manualAbsence.mutate(payload);
   };
 
   return (
@@ -419,7 +442,7 @@ export function TimesPage() {
                             updateEntryMutation.mutate({
                               entryId: entry.id,
                               timestamp: ts,
-                              type: data.get('type') as TimeEntry['type'],
+                              type: (data.get('type') as 'CLOCK_IN' | 'CLOCK_OUT') ?? 'CLOCK_IN',
                             });
                             setEditingEntryId(null);
                           }}
@@ -436,12 +459,14 @@ export function TimesPage() {
                           </div>
                           <div>
                             <label className="text-xs text-slate-500">Typ</label>
-                            <select name="type" defaultValue={entry.type} className="input w-full">
-                              <option value="CLOCK_IN">Kommen</option>
-                              <option value="CLOCK_OUT">Gehen</option>
-                              <option value="BREAK_START">Pause starten</option>
-                              <option value="BREAK_END">Pause beenden</option>
-                            </select>
+                          <select
+                            name="type"
+                            defaultValue={entry.type === 'CLOCK_IN' ? 'CLOCK_IN' : 'CLOCK_OUT'}
+                            className="input w-full"
+                          >
+                            <option value="CLOCK_IN">Kommen</option>
+                            <option value="CLOCK_OUT">Gehen</option>
+                          </select>
                           </div>
                           <div className="flex items-end">
                             <button className="btn-primary w-full" type="submit" disabled={updateEntryMutation.isPending}>
@@ -511,8 +536,6 @@ export function TimesPage() {
               <select name="type" className="input w-full">
                 <option value="CLOCK_IN">Kommen</option>
                 <option value="CLOCK_OUT">Gehen</option>
-                <option value="BREAK_START">Pause starten</option>
-                <option value="BREAK_END">Pause beenden</option>
               </select>
               <div className="grid grid-cols-2 gap-2">
                 <input name="lat" className="input" placeholder="Lat (optional)" />
@@ -581,7 +604,39 @@ export function TimesPage() {
                   />{' '}
                   Halber Tag
                 </label>
+                {selectedKind?.allow_hourly && (
+                  <label className="flex items-center gap-1 text-slate-700">
+                    <input
+                      type="radio"
+                      name="duration"
+                      value="hours"
+                      checked={absenceDuration === 'hours'}
+                      onChange={() => setAbsenceDuration('hours')}
+                    />{' '}
+                    Stundenweise
+                  </label>
+                )}
               </div>
+              {absenceDuration === 'hours' && (
+                <div className="grid grid-cols-2 gap-2">
+                  <input
+                    name="start_time"
+                    type="time"
+                    required
+                    className="input"
+                    value={absenceStartTime}
+                    onChange={(e) => setAbsenceStartTime(e.target.value)}
+                  />
+                  <input
+                    name="end_time"
+                    type="time"
+                    required
+                    className="input"
+                    value={absenceEndTime}
+                    onChange={(e) => setAbsenceEndTime(e.target.value)}
+                  />
+                </div>
+              )}
               <button className="btn-primary" type="submit" disabled={manualAbsence.isPending}>
                 Eintragen
               </button>

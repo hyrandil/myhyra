@@ -32,18 +32,30 @@ const kindUsage = (code: string) => {
   return used.absences_count + used.request_count;
 };
 
+const timeRegex = /^\d{2}:\d{2}$/;
+
 const absenceSchema = z
   .object({
     start_date: z.string().regex(dateRegex, 'Datum muss im Format YYYY-MM-DD vorliegen'),
     end_date: z.string().regex(dateRegex, 'Datum muss im Format YYYY-MM-DD vorliegen'),
     type: z.string().min(2),
     duration: z.enum(['full', 'half']).default('full'),
+    start_time: z.string().regex(timeRegex).optional(),
+    end_time: z.string().regex(timeRegex).optional(),
     note: z.string().max(255).optional().or(z.literal('')).transform((value) => value || undefined),
   })
   .refine((value) => value.start_date <= value.end_date, {
     message: 'Enddatum muss nach dem Start liegen',
     path: ['end_date'],
-  });
+  })
+  .refine((value) => {
+    if (!value.start_time && !value.end_time) return true;
+    return Boolean(value.start_time && value.end_time);
+  }, "Start- und Endzeit sind nötig")
+  .refine((value) => {
+    if (!value.start_time || !value.end_time) return true;
+    return value.start_date === value.end_date;
+  }, 'Stundenweise Abwesenheit muss an einem Tag liegen');
 
 const absenceRequestSchema = z
   .object({
@@ -69,9 +81,24 @@ const formatDate = (date: Date) => date.toISOString().slice(0, 10);
 
 const weekdayFromDate = (date: Date) => (date.getUTCDay() + 6) % 7; // Monday = 0
 
-function validateKind(type: string, duration: 'full' | 'half') {
+const timeDiffMinutes = (start?: string, end?: string) => {
+  if (!start || !end) return null;
+  const [sh = NaN, sm = NaN] = start.split(':').map((v) => Number(v));
+  const [eh = NaN, em = NaN] = end.split(':').map((v) => Number(v));
+  const startMin = sh * 60 + sm;
+  const endMin = eh * 60 + em;
+  if (!Number.isFinite(startMin) || !Number.isFinite(endMin)) return null;
+  if (endMin <= startMin) return null;
+  return endMin - startMin;
+};
+
+function validateKind(type: string, duration: 'full' | 'half', hasHours: boolean) {
   const kind = absenceKindByCode(type);
   if (!kind) return { ok: false, message: 'Unbekannte Abwesenheitsart' } as const;
+  if (hasHours) {
+    if (!kind.allow_hourly) return { ok: false, message: 'Stundenweise Abwesenheit ist hier nicht erlaubt' } as const;
+    return { ok: true, kind } as const;
+  }
   if (duration === 'half' && !kind.allow_half) return { ok: false, message: 'Halbtage sind für diese Art nicht erlaubt' } as const;
   if (duration === 'full' && !kind.allow_full) return { ok: false, message: 'Ganze Tage sind für diese Art nicht erlaubt' } as const;
   return { ok: true, kind } as const;
@@ -238,7 +265,7 @@ router.post('/request', (req: AuthRequest, res) => {
     return res.status(400).json({ errors: parsed.error.format() });
   }
   const { start_date, end_date, type, comment } = parsed.data;
-  const validation = validateKind(type, 'full');
+  const validation = validateKind(type, 'full', false);
   if (!validation.ok) return res.status(400).json({ message: validation.message });
   const stmt = db.prepare(
     `INSERT INTO absence_requests (user_id, start_date, end_date, type, status, comment, created_by)
@@ -343,6 +370,8 @@ router.patch('/requests/:id/status', (req: AuthRequest, res) => {
       return res.status(403).json({ message: 'Keine Berechtigung für diese Abteilung' });
     }
   }
+  const validation = validateKind(requestRow.type, 'full', false);
+  if (!validation.ok) return res.status(400).json({ message: validation.message });
   db.prepare('UPDATE absence_requests SET status = ? WHERE id = ?').run(parsed.data, id);
   if (parsed.data === 'approved') {
     db.prepare('DELETE FROM absences WHERE user_id = ? AND NOT (end_date < ? OR start_date > ?)').run(
@@ -351,7 +380,7 @@ router.patch('/requests/:id/status', (req: AuthRequest, res) => {
       requestRow.end_date
     );
     db.prepare(
-      "INSERT INTO absences (user_id, start_date, end_date, type, duration) VALUES (?, ?, ?, ?, 'full')"
+      "INSERT INTO absences (user_id, start_date, end_date, type, duration, start_time, end_time, minutes_override) VALUES (?, ?, ?, ?, 'full', NULL, NULL, NULL)"
     ).run(requestRow.user_id, requestRow.start_date, requestRow.end_date, requestRow.type);
   }
   res.json({ message: 'Aktualisiert' });
@@ -423,8 +452,9 @@ router.post('/user/:userId', (req: AuthRequest, res) => {
   if (!parsed.success) {
     return res.status(400).json({ errors: parsed.error.format() });
   }
-  const { start_date, end_date, type, duration, note } = parsed.data;
-  const validation = validateKind(type, duration);
+  const { start_date, end_date, type, duration, note, start_time, end_time } = parsed.data;
+  const minutesOverride = timeDiffMinutes(start_time, end_time);
+  const validation = validateKind(type, duration, Boolean(minutesOverride));
   if (!validation.ok) return res.status(400).json({ message: validation.message });
   const schedule = getSchedule(userId);
   db.prepare('DELETE FROM absences WHERE user_id = ? AND NOT (end_date < ? OR start_date > ?)').run(
@@ -432,10 +462,24 @@ router.post('/user/:userId', (req: AuthRequest, res) => {
     start_date,
     end_date
   );
+  if (minutesOverride === null && start_time && end_time) {
+    return res.status(400).json({ message: 'Zeitfenster ist ungültig' });
+  }
   const stmt = db.prepare(
-    'INSERT INTO absences (user_id, start_date, end_date, date, type, duration, note) VALUES (?, ?, ?, ?, ?, ?, ?)'
+    'INSERT INTO absences (user_id, start_date, end_date, date, type, duration, note, start_time, end_time, minutes_override) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
   );
-  const result = stmt.run(userId, start_date, end_date, start_date, type, duration, note ?? null);
+  const result = stmt.run(
+    userId,
+    start_date,
+    end_date,
+    start_date,
+    type,
+    duration,
+    note ?? null,
+    start_time ?? null,
+    end_time ?? null,
+    minutesOverride ?? null
+  );
   const created = db.prepare('SELECT * FROM absences WHERE id = ?').get(result.lastInsertRowid) as Absence;
   res.status(201).json(enrichAbsence({ ...created, start_date, end_date }, schedule));
 });

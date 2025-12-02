@@ -58,12 +58,30 @@ export interface DailySummary {
 
 export interface DayDetail {
   entries: TimeEntry[];
-  absences: { type: string; duration?: string; note?: string | null; label?: string }[];
+  absences: { type: string; duration?: string; note?: string | null; label?: string; start_time?: string | null; end_time?: string | null; minutes_override?: number | null }[];
   pending: boolean;
   autoBreakMinutes?: number;
   recordedBreakMinutes?: number;
   spanMinutes?: number;
   inconsistent?: boolean;
+}
+
+export interface MonthlyReportDay {
+  date: string;
+  planned: number;
+  worked: number;
+  delta: number;
+  entries: TimeEntry[];
+  absences: { type: string; duration?: string; note?: string | null; start_time?: string | null; end_time?: string | null; minutes_override?: number | null }[];
+  absenceLabels: string[];
+  autoBreakMinutes?: number;
+  recordedBreakMinutes?: number;
+  pending?: boolean;
+}
+
+export interface MonthlyReport {
+  month: string;
+  days: MonthlyReportDay[];
 }
 
 export interface InconsistentDay {

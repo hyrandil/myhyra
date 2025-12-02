@@ -1,9 +1,12 @@
 import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { downloadAttendanceCsv, downloadAttendanceXlsx, fetchAttendance } from '../api';
+import jsPDF from 'jspdf';
+import { downloadAttendanceCsv, downloadAttendanceXlsx, fetchAttendance, fetchOwnMonthlyReport } from '../api';
 import { AttendanceResponse } from '../types';
+import { useAuth } from '../AuthProvider';
 
 export function ReportsPage() {
+  const { user } = useAuth();
   const [month, setMonth] = useState(() => {
     const now = new Date();
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
@@ -28,6 +31,53 @@ export function ReportsPage() {
     URL.revokeObjectURL(url);
   };
 
+  const formatHours = (minutes: number) => {
+    const hours = Math.floor(Math.abs(minutes) / 60);
+    const mins = Math.abs(minutes) % 60;
+    const sign = minutes < 0 ? '-' : '';
+    return `${sign}${String(hours).padStart(2, '0')}:${String(mins).padStart(2, '0')}`;
+  };
+
+  const formatTime = (timestamp: string) => {
+    const [datePart, timePart] = timestamp.split(' ');
+    const [hour = '00', minute = '00'] = (timePart ?? '').split(':');
+    return `${datePart} ${hour}:${minute}`;
+  };
+
+  const exportPdf = async () => {
+    const report = await fetchOwnMonthlyReport(month);
+    const doc = new jsPDF();
+    let y = 20;
+    doc.text(`Monatsübersicht ${month}`, 14, y);
+    y += 8;
+    report.days.forEach((day) => {
+      if (y > 270) {
+        doc.addPage();
+        y = 20;
+      }
+      doc.text(`${day.date} – Soll ${formatHours(day.planned)} | Ist ${formatHours(day.worked)} | Delta ${formatHours(day.delta)}`, 14, y);
+      y += 6;
+      day.entries.forEach((entry) => {
+        if (y > 280) {
+          doc.addPage();
+          y = 20;
+        }
+        const label = entry.type === 'CLOCK_IN' ? 'Kommen' : 'Gehen';
+        doc.text(`• ${label} ${formatTime(entry.timestamp)} (${entry.source})`, 18, y);
+        y += 5;
+      });
+      if (day.absences.length) {
+        day.absences.forEach((absence) => {
+          const span = absence.start_time && absence.end_time ? `${absence.start_time}-${absence.end_time}` : absence.duration;
+          doc.text(`• Abwesenheit: ${absence.type} ${span ?? ''}`, 18, y);
+          y += 5;
+        });
+      }
+      y += 4;
+    });
+    doc.save(`monatsreport-${month}-${user?.id ?? 'ich'}.pdf`);
+  };
+
   return (
     <div className="space-y-4">
       <div className="card p-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
@@ -46,6 +96,7 @@ export function ReportsPage() {
           />
           <button className="btn-ghost" onClick={() => triggerDownload('csv')}>CSV Export</button>
           <button className="btn-primary" onClick={() => triggerDownload('xlsx')}>Excel Export</button>
+          <button className="btn-ghost" onClick={exportPdf}>PDF Export</button>
         </div>
       </div>
 

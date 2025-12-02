@@ -38,7 +38,22 @@ function NavItem({ to, label }: { to: string; label: string }) {
 
 function Shell({ children }: { children: React.ReactNode }) {
   const auth = useAuth();
-  const displayName = [auth.user?.firstName, auth.user?.lastName].filter(Boolean).join(' ') || auth.user?.name;
+  const roleLabel = (role?: string | null) => {
+    switch (role) {
+      case 'admin':
+        return 'Administrator';
+      case 'hr':
+        return 'Personal';
+      case 'lead':
+        return 'Teamleiter';
+      default:
+        return 'Mitarbeiter';
+    }
+  };
+  const displayName =
+    [auth.user?.firstName ?? (auth.user as any)?.first_name, auth.user?.lastName ?? (auth.user as any)?.last_name]
+      .filter(Boolean)
+      .join(' ') || auth.user?.name;
   return (
     <div className="min-h-screen flex bg-surface">
       <aside className="w-72 bg-gradient-to-b from-sky-900 via-sky-950 to-slate-950 text-sky-50 flex flex-col shadow-2xl relative">
@@ -58,15 +73,15 @@ function Shell({ children }: { children: React.ReactNode }) {
           {auth.hasRole('hr', 'admin') && <NavItem to="/berichte" label="Berichte" />}
         </nav>
         <div className="p-4 border-t border-white/10 bg-white/5 backdrop-blur relative">
-          <div className="flex items-center gap-3">
-            <div className="h-11 w-11 rounded-full bg-white/20 flex items-center justify-center text-lg font-bold">
-              {displayName?.[0] ?? '?'}
-            </div>
-            <div className="flex-1">
-              <p className="text-xs uppercase text-sky-200">{auth.user?.role ?? 'User'}</p>
-              <p className="font-semibold leading-tight">{displayName}</p>
-              <p className="text-xs text-sky-200 truncate">{auth.user?.email}</p>
-            </div>
+            <div className="flex items-center gap-3">
+              <div className="h-11 w-11 rounded-full bg-white/20 flex items-center justify-center text-lg font-bold">
+                {displayName?.[0] ?? '?'}
+              </div>
+              <div className="flex-1">
+              <p className="text-xs uppercase text-sky-200">{roleLabel(auth.user?.role)}</p>
+                <p className="font-semibold leading-tight">{displayName}</p>
+                <p className="text-xs text-sky-200 truncate">{auth.user?.email}</p>
+              </div>
           </div>
           <button
             onClick={auth.logout}
@@ -83,7 +98,7 @@ function Shell({ children }: { children: React.ReactNode }) {
               <p className="text-xl font-bold">Cockpit</p>
             </div>
             <div className="flex items-center gap-3">
-              <span className="badge bg-emerald-100 text-emerald-700">{auth.user?.role ?? 'User'}</span>
+              <span className="badge bg-emerald-100 text-emerald-700">{roleLabel(auth.user?.role)}</span>
               <span className="badge bg-slate-200 text-slate-800">{auth.user?.email}</span>
             </div>
           </div>

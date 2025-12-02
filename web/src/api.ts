@@ -9,6 +9,7 @@ import {
   HolidayEntry,
   HolidayProfile,
   InconsistentDay,
+  MonthlyReport,
   TimeEntry,
   UserInfo,
 } from './types';
@@ -290,7 +291,15 @@ export async function updateAbsenceStatus(id: number, status: 'approved' | 'reje
 
 export async function createAbsenceForUser(
   userId: number,
-  payload: { start_date: string; end_date: string; type: string; duration?: 'full' | 'half'; note?: string }
+  payload: {
+    start_date: string;
+    end_date: string;
+    type: string;
+    duration?: 'full' | 'half' | 'hours';
+    start_time?: string;
+    end_time?: string;
+    note?: string;
+  }
 ) {
   const res = await api.post(`/absences/user/${userId}`, payload);
   return res.data;
@@ -318,7 +327,7 @@ export async function updateSchedule(userId: number, days: { weekday: number; mi
 
 export async function createManualTimeEntry(
   userId: number,
-  payload: { timestamp: string; type: 'CLOCK_IN' | 'CLOCK_OUT' | 'BREAK_START' | 'BREAK_END'; source?: string; location?: { lat?: number; lng?: number } }
+  payload: { timestamp: string; type: 'CLOCK_IN' | 'CLOCK_OUT'; source?: string; location?: { lat?: number; lng?: number } }
 ) {
   const res = await api.post(`/time/user/${userId}/manual`, payload);
   return res.data;
@@ -326,7 +335,7 @@ export async function createManualTimeEntry(
 
 export async function updateTimeEntry(
   entryId: number,
-  payload: { timestamp: string; type: 'CLOCK_IN' | 'CLOCK_OUT' | 'BREAK_START' | 'BREAK_END' }
+  payload: { timestamp: string; type: 'CLOCK_IN' | 'CLOCK_OUT' }
 ) {
   const res = await api.patch(`/time/entry/${entryId}`, payload);
   return res.data as TimeEntry;
@@ -334,6 +343,16 @@ export async function updateTimeEntry(
 
 export async function deleteTimeEntry(entryId: number) {
   await api.delete(`/time/entry/${entryId}`);
+}
+
+export async function fetchMonthlyReport(userId: number, month?: string) {
+  const res = await api.get<MonthlyReport>(`/time/user/${userId}/monthly-report`, { params: month ? { month } : undefined });
+  return res.data;
+}
+
+export async function fetchOwnMonthlyReport(month?: string) {
+  const res = await api.get<MonthlyReport>('/time/me/monthly-report', { params: month ? { month } : undefined });
+  return res.data;
 }
 
 export async function fetchAttendance(month?: string) {

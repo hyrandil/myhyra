@@ -86,6 +86,139 @@ function insertEntry(
   return stmt.run(userId, now, type, source, location?.lat ?? null, location?.lng ?? null);
 }
 
+function buildMonthlyReport(userId: number, monthValue?: string) {
+  const today = new Date();
+  const baseMonth = monthValue || `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
+  const baseDate = new Date(`${baseMonth}-01T00:00:00Z`);
+  const start = new Date(Date.UTC(baseDate.getUTCFullYear(), baseDate.getUTCMonth(), 1));
+  const end = new Date(Date.UTC(baseDate.getUTCFullYear(), baseDate.getUTCMonth() + 1, 0));
+
+  const schedule = getSchedule(userId);
+  const planMap = new Map(schedule.map((entry) => [entry.weekday, entry.minutes]));
+  const absenceKinds = db
+    .prepare('SELECT code, label, counts_as_work FROM absence_kinds ORDER BY label ASC')
+    .all() as { code: string; label: string; counts_as_work: number }[];
+  const kindMap = new Map(absenceKinds.map((k) => [k.code, k]));
+
+  const entries = db
+    .prepare('SELECT * FROM time_entries WHERE user_id = ? AND date(timestamp) BETWEEN ? AND ? ORDER BY timestamp ASC')
+    .all(userId, start.toISOString().slice(0, 10), end.toISOString().slice(0, 10)) as TimeEntry[];
+
+  const grouped = new Map<string, TimeEntry[]>();
+  entries.forEach((entry) => {
+    const key = entry.timestamp.slice(0, 10);
+    const list = grouped.get(key) ?? [];
+    list.push(entry);
+    grouped.set(key, list);
+  });
+
+  const manualAbsences = db
+    .prepare('SELECT * FROM absences WHERE user_id = ? AND NOT (end_date < ? OR start_date > ?)')
+    .all(userId, start.toISOString().slice(0, 10), end.toISOString().slice(0, 10)) as Absence[];
+  const approvedRequests = db
+    .prepare(
+      "SELECT user_id, start_date, end_date, type, 'full' as duration, NULL as note, created_at, id FROM absence_requests WHERE user_id = ? AND status = 'approved' AND NOT (end_date < ? OR start_date > ?)"
+    )
+    .all(userId, start.toISOString().slice(0, 10), end.toISOString().slice(0, 10)) as Absence[];
+  const absenceKey = new Set(
+    manualAbsences.map((a) => `${a.start_date}|${a.end_date}|${a.type}|${a.duration ?? 'full'}|${a.minutes_override ?? ''}`)
+  );
+  const absences = [
+    ...manualAbsences,
+    ...approvedRequests.filter(
+      (a) => !absenceKey.has(`${a.start_date}|${a.end_date}|${a.type}|${a.duration ?? 'full'}|${a.minutes_override ?? ''}`)
+    ),
+  ];
+  const pendingRequests = db
+    .prepare("SELECT * FROM absence_requests WHERE user_id = ? AND status = 'pending' AND NOT (end_date < ? OR start_date > ?)")
+    .all(userId, start.toISOString().slice(0, 10), end.toISOString().slice(0, 10)) as any[];
+
+  const absenceMap = new Map<string, Absence[]>();
+  const holidays = getHolidays(userId, start.toISOString().slice(0, 10), end.toISOString().slice(0, 10));
+  const enrichedHolidays = holidays.map((holiday) => ({
+    id: -1,
+    user_id: userId,
+    start_date: holiday.date,
+    end_date: holiday.date,
+    type: 'holiday',
+    duration: holiday.duration,
+    note: holiday.name,
+    created_at: holiday.date,
+  })) as (Absence & { type: Absence['type'] | 'holiday' })[];
+  [...absences, ...enrichedHolidays].forEach((absence) => {
+    const days = (() => {
+      const workingMap = new Map(schedule.map((entry) => [entry.weekday, entry.minutes]));
+      const results: string[] = [];
+      let cursor = new Date(`${absence.start_date}T00:00:00Z`);
+      const endDate = new Date(`${absence.end_date}T00:00:00Z`);
+      while (cursor.getTime() <= endDate.getTime()) {
+        const weekday = (cursor.getUTCDay() + 6) % 7;
+        const minutes = workingMap.get(weekday) ?? 0;
+        if (minutes > 0) results.push(cursor.toISOString().slice(0, 10));
+        cursor.setUTCDate(cursor.getUTCDate() + 1);
+      }
+      return results;
+    })();
+    days.forEach((day) => {
+      const list = absenceMap.get(day) ?? [];
+      list.push(absence as Absence);
+      absenceMap.set(day, list);
+    });
+  });
+
+  const days: any[] = [];
+  const cursor = new Date(start);
+  while (cursor.getTime() <= end.getTime()) {
+    const key = cursor.toISOString().slice(0, 10);
+    const weekday = (cursor.getUTCDay() + 6) % 7;
+    const planned = planMap.get(weekday) ?? 0;
+    const dayEntries = grouped.get(key) ?? [];
+    const workStats = computeDayWorkStats(dayEntries);
+    const absencesForDay = absenceMap.get(key) ?? [];
+    let creditVacation = 0;
+    let creditHoliday = 0;
+    let topUpOther = 0;
+    absencesForDay.forEach((absence) => {
+      const factor = absence.duration === 'half' ? 0.5 : 1;
+      const target = Math.round(absence.minutes_override ?? planned * factor);
+      const kind = kindMap.get(absence.type);
+      if ((absence as any).type === 'holiday') {
+        creditHoliday += target;
+      } else if (absence.type === 'vacation') {
+        creditVacation += target;
+      } else if (kind?.counts_as_work) {
+        const covered = workStats.workedMinutes + creditVacation + creditHoliday + topUpOther;
+        const topUp = Math.max(target - covered, 0);
+        topUpOther += topUp;
+      }
+    });
+    const hasPending = pendingRequests.some((item) => item.start_date <= key && item.end_date >= key);
+    const worked = workStats.workedMinutes + creditVacation + creditHoliday + topUpOther;
+    const delta = worked - planned;
+    const absenceLabels = absencesForDay.map((a) => {
+      if ((a as any).type === 'holiday') return a.note ?? 'Feiertag';
+      const kind = kindMap.get(a.type);
+      return kind?.label ?? a.type;
+    });
+    if (hasPending) absenceLabels.push('pending');
+    days.push({
+      date: key,
+      planned,
+      worked,
+      delta,
+      entries: dayEntries,
+      absences: absencesForDay,
+      absenceLabels,
+      autoBreakMinutes: workStats.autoDeduction,
+      recordedBreakMinutes: workStats.recordedBreakMinutes,
+      pending: hasPending,
+    });
+    cursor.setUTCDate(cursor.getUTCDate() + 1);
+  }
+
+  return { month: baseMonth, days };
+}
+
 const manualEntrySchema = z.object({
   timestamp: z
     .string()
@@ -97,7 +230,7 @@ const manualEntrySchema = z.object({
       const formatted = `${datePart} ${hour}:${minute}:00`;
       return formatted;
     }),
-  type: z.enum(['CLOCK_IN', 'CLOCK_OUT', 'BREAK_START', 'BREAK_END']),
+  type: z.enum(['CLOCK_IN', 'CLOCK_OUT']),
   source: sourceEnum.optional(),
   location: locationSchema.optional(),
 });
@@ -294,7 +427,7 @@ function buildDailySummary(userId: number, month?: string, maskAbsences = false)
     let topUpOther = 0;
     absencesForDay.forEach((absence) => {
       const factor = absence.duration === 'half' ? 0.5 : 1;
-      const target = Math.round(planned * factor);
+      const target = Math.round(absence.minutes_override ?? planned * factor);
       const kind = absenceKindMap.get(absence.type);
       if ((absence as any).type === 'holiday') {
         creditHoliday += target;
@@ -503,6 +636,19 @@ router.get('/user/:userId/day', authorize(['admin', 'hr', 'lead']), (req: AuthRe
     spanMinutes: stats.spanMinutes,
     inconsistent,
   });
+});
+
+router.get('/user/:userId/monthly-report', (req: AuthRequest, res) => {
+  const userId = Number(req.params.userId);
+  const { month } = req.query as { month?: string };
+  if (Number.isNaN(userId)) return res.status(400).json({ message: 'Ungültige Nutzer-ID' });
+  if (userId !== req.user!.id && !ensureManageable(req, res, userId)) return;
+  res.json(buildMonthlyReport(userId, month));
+});
+
+router.get('/me/monthly-report', (req: AuthRequest, res) => {
+  const { month } = req.query as { month?: string };
+  res.json(buildMonthlyReport(req.user!.id, month));
 });
 
 router.get('/inconsistent', (req: AuthRequest, res) => {
@@ -751,14 +897,12 @@ const updateEntrySchema = z.object({
     .string()
     .min(16)
     .transform((value) => {
-      const normalized = value.endsWith('Z') ? value : `${value}Z`;
-      const date = new Date(normalized);
-      if (Number.isNaN(date.getTime())) {
-        throw new Error('Ungültiger Zeitstempel');
-      }
-      return date.toISOString();
+      const [datePart, timePart] = value.replace('Z', '').split('T');
+      if (!datePart || !timePart) throw new Error('Ungültiger Zeitstempel');
+      const [hour, minute] = timePart.split(':');
+      return `${datePart} ${hour}:${minute}:00`;
     }),
-  type: z.enum(['CLOCK_IN', 'CLOCK_OUT', 'BREAK_START', 'BREAK_END']),
+  type: z.enum(['CLOCK_IN', 'CLOCK_OUT']),
 });
 
 router.patch('/entry/:entryId', authorize(['admin', 'hr', 'lead']), (req: AuthRequest, res) => {

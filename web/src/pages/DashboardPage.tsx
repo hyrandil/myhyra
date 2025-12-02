@@ -10,6 +10,12 @@ const labels: Record<TimeEntry['type'], string> = {
   BREAK_END: 'Pause Ende',
 };
 
+function formatStamp(ts: string) {
+  const [datePart, timePart] = ts.split(' ');
+  const [hour = '00', minute = '00'] = (timePart ?? '').split(':');
+  return `${datePart ?? ''} ${hour}:${minute}`.trim();
+}
+
 export function DashboardPage() {
   const queryClient = useQueryClient();
   const { data } = useQuery({ queryKey: ['entries'], queryFn: fetchEntries });
@@ -58,8 +64,7 @@ export function DashboardPage() {
   });
 
   const last = data?.[0];
-  const isWorking = last && (last.type === 'CLOCK_IN' || last.type === 'BREAK_END');
-  const isOnBreak = last?.type === 'BREAK_START';
+  const isWorking = last?.type === 'CLOCK_IN';
   const mainAction: TimeEntry['type'] = !last || last.type === 'CLOCK_OUT' ? 'CLOCK_IN' : 'CLOCK_OUT';
 
   return (
@@ -68,7 +73,7 @@ export function DashboardPage() {
         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
           <div>
             <p className="text-xs uppercase text-slate-500">Zentrale Stempeluhr</p>
-            <h1 className="text-2xl font-semibold text-slate-900">Status: {isOnBreak ? 'Pause' : isWorking ? 'Anwesend' : 'Abgemeldet'}</h1>
+            <h1 className="text-2xl font-semibold text-slate-900">Status: {isWorking ? 'Anwesend' : 'Abgemeldet'}</h1>
             <p className="text-sm text-slate-600">Letzte Aktion: {last ? labels[last.type] : '—'}</p>
           </div>
           <div className="flex flex-col md:flex-row gap-3 items-stretch md:items-center">
@@ -89,22 +94,6 @@ export function DashboardPage() {
             >
               {mainAction === 'CLOCK_IN' ? 'Kommen' : 'Gehen'}
             </button>
-            <div className="flex gap-2">
-              <button
-                className="w-full md:w-36 h-14 rounded-lg border border-slate-200 text-slate-800 font-semibold disabled:opacity-40"
-                disabled={mutate.isPending || isOnBreak || !isWorking}
-                onClick={() => mutate.mutate({ type: 'BREAK_START', location: location ?? undefined })}
-              >
-                Pause starten
-              </button>
-              <button
-                className="w-full md:w-36 h-14 rounded-lg border border-slate-200 text-slate-800 font-semibold disabled:opacity-40"
-                disabled={mutate.isPending || !isOnBreak}
-                onClick={() => mutate.mutate({ type: 'BREAK_END', location: location ?? undefined })}
-              >
-                Pause beenden
-              </button>
-            </div>
           </div>
         </div>
       </div>
@@ -119,13 +108,13 @@ export function DashboardPage() {
             {locationError}
           </p>
         )}
-        <div className="divide-y">
-          {(data ?? []).map((entry) => (
-            <div key={entry.id} className="py-3 flex items-center justify-between text-sm">
-              <div>
-                <p className="font-semibold">{labels[entry.type]}</p>
-                <p className="text-slate-500">{new Date(entry.timestamp).toLocaleString()}</p>
-              </div>
+          <div className="divide-y">
+            {(data ?? []).map((entry) => (
+              <div key={entry.id} className="py-3 flex items-center justify-between text-sm">
+                <div>
+                  <p className="font-semibold">{labels[entry.type]}</p>
+                  <p className="text-slate-500">{formatStamp(entry.timestamp)}</p>
+                </div>
               <div className="text-right text-xs text-slate-500 space-y-1">
                 <div className="inline-flex items-center gap-1 bg-slate-100 px-2 py-1 rounded">
                   <span className="h-2 w-2 rounded-full bg-sky-500"></span>

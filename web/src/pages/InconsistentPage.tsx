@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { deleteTimeEntry, fetchInconsistentDays, updateTimeEntry } from '../api';
+import { createManualTimeEntry, deleteTimeEntry, fetchInconsistentDays, updateTimeEntry } from '../api';
 import { InconsistentDay, TimeEntry } from '../types';
 
 function formatDate(date: string) {
@@ -8,14 +8,23 @@ function formatDate(date: string) {
   return d.toLocaleDateString('de-DE', { year: 'numeric', month: '2-digit', day: '2-digit' });
 }
 
-function formatUtc(ts: string) {
-  const d = new Date(ts);
-  return d.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit', hour12: false });
+function formatLocal(ts: string) {
+  const [_, timePart] = ts.split(' ');
+  const [hour = '00', minute = '00'] = (timePart ?? '').split(':');
+  return `${hour}:${minute}`;
+}
+
+function toLocalInput(ts: string) {
+  const [datePart, timePart] = ts.split(' ');
+  if (!datePart || !timePart) return '';
+  const [hour, minute] = timePart.split(':');
+  return `${datePart}T${hour}:${minute}`;
 }
 
 export function InconsistentPage() {
   const [filter, setFilter] = useState('');
   const [editingId, setEditingId] = useState<number | null>(null);
+  const [addingFor, setAddingFor] = useState<string | null>(null);
   const queryClient = useQueryClient();
 
   const inconsistencies = useQuery({
@@ -24,7 +33,7 @@ export function InconsistentPage() {
   });
 
   const updateEntry = useMutation({
-    mutationFn: ({ entryId, timestamp, type }: { entryId: number; timestamp: string; type: TimeEntry['type'] }) =>
+    mutationFn: ({ entryId, timestamp, type }: { entryId: number; timestamp: string; type: 'CLOCK_IN' | 'CLOCK_OUT' }) =>
       updateTimeEntry(entryId, { timestamp, type }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['inconsistent'] });
@@ -35,6 +44,15 @@ export function InconsistentPage() {
     mutationFn: (entryId: number) => deleteTimeEntry(entryId),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['inconsistent'] });
+    },
+  });
+
+  const createEntry = useMutation({
+    mutationFn: (payload: { userId: number; timestamp: string; type: 'CLOCK_IN' | 'CLOCK_OUT' }) =>
+      createManualTimeEntry(payload.userId, { timestamp: payload.timestamp, type: payload.type }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['inconsistent'] });
+      setAddingFor(null);
     },
   });
 
@@ -79,13 +97,14 @@ export function InconsistentPage() {
                   </div>
                   <div className="space-y-2">
                     {row.entries.map((entry) => {
-                      const localDefault = entry.timestamp.replace('Z', '');
+                      const localDefault = toLocalInput(entry.timestamp);
                       const isEditing = editingId === entry.id;
+                      const defaultType: 'CLOCK_IN' | 'CLOCK_OUT' = entry.type === 'CLOCK_IN' ? 'CLOCK_IN' : 'CLOCK_OUT';
                       return (
                         <div key={entry.id} className="bg-white border border-rose-200 rounded-md p-2">
                           <div className="flex items-center justify-between text-sm">
                             <div>
-                              <p className="font-semibold">{formatUtc(entry.timestamp)} – {entry.type === 'CLOCK_IN' ? 'Kommen' : entry.type === 'CLOCK_OUT' ? 'Gehen' : entry.type === 'BREAK_START' ? 'Pause starten' : 'Pause beenden'}</p>
+                              <p className="font-semibold">{formatLocal(entry.timestamp)} – {entry.type === 'CLOCK_IN' ? 'Kommen' : 'Gehen'}</p>
                               <p className="text-xs text-slate-500">Quelle: {entry.source}</p>
                             </div>
                             <div className="flex gap-2 items-center">
@@ -105,32 +124,29 @@ export function InconsistentPage() {
                             </div>
                           </div>
                           {isEditing && (
-                            <form
-                              className="grid md:grid-cols-3 gap-2 mt-2 text-sm"
+                          <form
+                            className="grid md:grid-cols-3 gap-2 mt-2 text-sm"
                               onSubmit={(e) => {
                                 e.preventDefault();
                                 const data = new FormData(e.currentTarget);
                                 const ts = String(data.get('timestamp'));
-                                const withZ = ts.endsWith('Z') ? ts : `${ts}Z`;
                                 updateEntry.mutate({
                                   entryId: entry.id,
-                                  timestamp: withZ,
-                                  type: data.get('type') as TimeEntry['type'],
+                                  timestamp: ts,
+                                  type: (data.get('type') as 'CLOCK_IN' | 'CLOCK_OUT') ?? 'CLOCK_IN',
                                 });
                                 setEditingId(null);
                               }}
-                            >
+                          >
                               <div>
                                 <label className="text-xs text-slate-500">Zeitpunkt</label>
                                 <input name="timestamp" type="datetime-local" defaultValue={localDefault} className="input w-full" />
                               </div>
                               <div>
                                 <label className="text-xs text-slate-500">Typ</label>
-                                <select name="type" defaultValue={entry.type} className="input w-full">
+                                <select name="type" defaultValue={defaultType} className="input w-full">
                                   <option value="CLOCK_IN">Kommen</option>
                                   <option value="CLOCK_OUT">Gehen</option>
-                                  <option value="BREAK_START">Pause starten</option>
-                                  <option value="BREAK_END">Pause beenden</option>
                                 </select>
                               </div>
                               <div className="flex items-end">
@@ -143,6 +159,57 @@ export function InconsistentPage() {
                         </div>
                       );
                     })}
+                    <div className="bg-white border border-rose-200 rounded-md p-3">
+                      <div className="flex items-center justify-between text-sm">
+                        <p className="font-semibold">Neue Buchung hinzufügen</p>
+                        <button
+                          className="text-xs underline"
+                          onClick={() =>
+                            setAddingFor(addingFor === `${row.user_id}-${row.date}` ? null : `${row.user_id}-${row.date}`)
+                          }
+                        >
+                          {addingFor === `${row.user_id}-${row.date}` ? 'Schließen' : 'Öffnen'}
+                        </button>
+                      </div>
+                      {addingFor === `${row.user_id}-${row.date}` && (
+                        <form
+                          className="grid md:grid-cols-3 gap-2 mt-2 text-sm"
+                          onSubmit={(e) => {
+                            e.preventDefault();
+                            const data = new FormData(e.currentTarget);
+                            const ts = String(data.get('timestamp'));
+                            createEntry.mutate({
+                              userId: row.user_id,
+                              timestamp: ts,
+                              type: (data.get('type') as 'CLOCK_IN' | 'CLOCK_OUT') ?? 'CLOCK_IN',
+                            });
+                          }}
+                        >
+                          <div>
+                            <label className="text-xs text-slate-500">Zeitpunkt</label>
+                            <input
+                              name="timestamp"
+                              type="datetime-local"
+                              defaultValue={`${row.date}T08:00`}
+                              className="input w-full"
+                              required
+                            />
+                          </div>
+                          <div>
+                            <label className="text-xs text-slate-500">Typ</label>
+                            <select name="type" className="input w-full">
+                              <option value="CLOCK_IN">Kommen</option>
+                              <option value="CLOCK_OUT">Gehen</option>
+                            </select>
+                          </div>
+                          <div className="flex items-end">
+                            <button className="btn-primary w-full" type="submit" disabled={createEntry.isPending}>
+                              Speichern
+                            </button>
+                          </div>
+                        </form>
+                      )}
+                    </div>
                   </div>
                 </div>
               );
