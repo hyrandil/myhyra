@@ -1,42 +1,50 @@
 import { Request, Response, NextFunction } from 'express';
+import type { Session } from 'express-session';
 import db from './db';
-import { Role } from './types';
+import type { User, Role } from './types';
+
+type AuthSession = Session & {
+  userId?: number;
+  role?: Role;
+};
+
 export interface AuthRequest extends Request {
-  user?: {
-    id: number;
-    role: Role;
-  };
+  session: AuthSession;
+  user?: User;
 }
 
-function applyNoCacheHeaders(res: Response) {
-  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
-  res.setHeader('Pragma', 'no-cache');
-  res.setHeader('Expires', '0');
-}
+export const requireAuth = (req: AuthRequest, res: Response, next: NextFunction) => {
+  const session = req.session as AuthSession;
 
-export function requireAuth(req: AuthRequest, res: Response, next: NextFunction) {
-  const userId = req.session.userId;
-  if (!userId) {
-    return res.redirect('/login');
+  if (!session.userId) {
+    return res.status(401).json({ message: 'Nicht eingeloggt' });
   }
+
   const user = db
-    .prepare('SELECT id, role, active FROM users WHERE id = ?')
-    .get(userId) as { id: number; role: Role; active: number } | undefined;
-  if (!user || !user.active) {
-    req.session.destroy(() => undefined);
-    res.clearCookie('sid');
-    return res.redirect('/login');
-  }
-  req.user = { id: user.id, role: user.role };
-  applyNoCacheHeaders(res);
-  next();
-}
+    .prepare('SELECT * FROM users WHERE id = ?')
+    .get(session.userId) as User | undefined;
 
-export function authorize(roles: Role[]) {
+  if (!user) {
+    return res.status(401).json({ message: 'Benutzer nicht gefunden' });
+  }
+
+  if (!user.active) {
+    return res.status(403).json({ message: 'Dieser Zugang wurde deaktiviert' });
+  }
+
+  req.user = user;
+  next();
+};
+
+export const authorize = (roles: Role[]) => {
   return (req: AuthRequest, res: Response, next: NextFunction) => {
-    if (!req.user || !roles.includes(req.user.role)) {
+    const session = req.session as AuthSession;
+    const role = session.role ?? req.user?.role;
+
+    if (!role || !roles.includes(role)) {
       return res.status(403).json({ message: 'Keine Berechtigung' });
     }
+
     next();
   };
-}
+};
