@@ -2,7 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import bodyParser from 'body-parser';
 import session from 'express-session';
-import { PORT, SESSION_SECRET, WEB_ORIGIN } from './config';
+import { PORT, SESSION_SECRET, WEB_ORIGINS } from './config';
 import authRoutes from './routes/authRoutes';
 import bookingRoutes from './routes/bookingRoutes';
 import userRoutes from './routes/userRoutes';
@@ -17,7 +17,13 @@ const app = express();
 app.set('trust proxy', 1);
 app.use(
   cors({
-    origin: WEB_ORIGIN,
+    origin: (origin, callback) => {
+      if (!origin) return callback(null, true);
+      if (WEB_ORIGINS.includes(origin)) return callback(null, true);
+      // Allow common dev hosts on port 5173 (e.g., LAN IPs)
+      if (/^https?:\/\/[^:]+:5173$/.test(origin)) return callback(null, true);
+      return callback(new Error('Not allowed by CORS'));
+    },
     credentials: true,
   })
 );

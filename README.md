@@ -30,7 +30,8 @@ cd web
 npm install
 npm run dev
 ```
-`VITE_API_URL` zeigt auf die API (Standard: `http://localhost:4000/api`). Cookies werden automatisch (withCredentials) gesendet.
+Vite hört auf `0.0.0.0:5173`, damit du über die LAN-IP entwickeln kannst. Setze in `.env` im Server `WEB_ORIGINS` auf eine kommagetrennte Liste (z. B. `http://localhost:5173,http://10.10.1.18:5173`), damit CORS Cookies für deine Entwickler-IP zulässt.
+`VITE_API_URL` zeigt auf die API (Standard: relative `/api`, damit der Vite-Proxy greift). Cookies werden automatisch (withCredentials) gesendet.
 
 ## Wichtige Endpunkte
 - `POST /api/auth/login` – Login, legt Session-Cookie an.

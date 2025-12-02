@@ -15,8 +15,8 @@ import {
 } from './types';
 
 const api = axios.create({
-  // Default to the Express port (4000) so local dev works without extra env config
-  baseURL: import.meta.env.VITE_API_URL || 'http://localhost:4000/api',
+  // Default to relative /api so Vite proxy handles dev requests; override via VITE_API_URL for external hosts
+  baseURL: import.meta.env.VITE_API_URL || '/api',
   withCredentials: true,
 });
 

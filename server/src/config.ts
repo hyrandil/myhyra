@@ -10,4 +10,13 @@ export const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'ChangeMe!123';
 export const DATABASE_FILE =
   process.env.DATABASE_FILE || path.resolve(process.cwd(), 'data', 'time_tracking.db');
 export const SESSION_SECRET = process.env.SESSION_SECRET || 'dev-session-secret-change-me';
-export const WEB_ORIGIN = process.env.WEB_ORIGIN || 'http://localhost:5173';
+const defaultOrigin = 'http://localhost:5173';
+const originsEnv =
+  process.env.WEB_ORIGINS || process.env.WEB_ORIGIN || defaultOrigin;
+
+export const WEB_ORIGINS = originsEnv
+  .split(',')
+  .map((o) => o.trim())
+  .filter(Boolean);
+// Backwards compatible single origin (first in list)
+export const WEB_ORIGIN = WEB_ORIGINS[0] || defaultOrigin;
