@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { deleteTimeEntry, fetchInconsistentDays, updateTimeEntry } from '../api';
 import { InconsistentDay, TimeEntry } from '../types';
@@ -14,16 +14,13 @@ function formatUtc(ts: string) {
 }
 
 export function InconsistentPage() {
-  const today = useMemo(() => new Date(), []);
-  const [month, setMonth] = useState(
-    `${today.getUTCFullYear()}-${String(today.getUTCMonth() + 1).padStart(2, '0')}`
-  );
+  const [filter, setFilter] = useState('');
   const [editingId, setEditingId] = useState<number | null>(null);
   const queryClient = useQueryClient();
 
   const inconsistencies = useQuery({
-    queryKey: ['inconsistent', month],
-    queryFn: () => fetchInconsistentDays(month),
+    queryKey: ['inconsistent'],
+    queryFn: () => fetchInconsistentDays(),
   });
 
   const updateEntry = useMutation({
@@ -43,31 +40,33 @@ export function InconsistentPage() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-3 flex-wrap">
         <div>
           <p className="text-xs uppercase text-slate-500">Qualitätssicherung</p>
           <h1 className="text-2xl font-bold">Inkonsistente Buchungen</h1>
-          <p className="text-sm text-slate-600">Prüfe und korrigiere widersprüchliche Kommen/Gehen-Einträge.</p>
+          <p className="text-sm text-slate-600">Alle offenen Inkonsistenzen bis gestern, filterbar nach Name.</p>
         </div>
-        <label className="text-sm text-slate-600 flex items-center gap-2">
-          Monat
-          <input
-            type="month"
-            value={month}
-            onChange={(e) => setMonth(e.target.value)}
-            className="input"
-          />
-        </label>
+        <input
+          type="text"
+          value={filter}
+          onChange={(e) => setFilter(e.target.value)}
+          placeholder="Filter nach Name"
+          className="input max-w-xs"
+        />
       </div>
 
       <div className="card p-4 space-y-3">
         {inconsistencies.isLoading && <p className="text-sm text-slate-500">Lade Daten…</p>}
         {inconsistencies.isSuccess && inconsistencies.data.length === 0 && (
-          <p className="text-sm text-emerald-700">Keine inkonsistenten Buchungen im ausgewählten Zeitraum.</p>
+          <p className="text-sm text-emerald-700">Keine inkonsistenten Buchungen.</p>
         )}
         {inconsistencies.isSuccess && inconsistencies.data.length > 0 && (
           <div className="space-y-3">
-            {inconsistencies.data.map((row: InconsistentDay) => {
+            {inconsistencies.data
+              .filter((row: InconsistentDay) =>
+                filter.trim() ? row.user.toLowerCase().includes(filter.toLowerCase()) : true
+              )
+              .map((row: InconsistentDay) => {
               return (
                 <div key={`${row.user_id}-${row.date}`} className="border border-rose-200 rounded-lg p-3 bg-rose-50">
                   <div className="flex items-center justify-between mb-2">
