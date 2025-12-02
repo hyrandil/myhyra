@@ -47,33 +47,94 @@ export function ReportsPage() {
   const exportPdf = async () => {
     const report = await fetchOwnMonthlyReport(month);
     const doc = new jsPDF();
+    const formatDate = (value: string) => {
+      const [year, monthPart, day] = value.split('-').map((v) => parseInt(v, 10));
+      const date = new Date(Date.UTC(year, (monthPart ?? 1) - 1, day ?? 1));
+      return date.toLocaleDateString('de-DE', { timeZone: 'Europe/Berlin' });
+    };
+    const formatDay = (value: string) => {
+      const [year, monthPart, day] = value.split('-').map((v) => parseInt(v, 10));
+      const date = new Date(Date.UTC(year, (monthPart ?? 1) - 1, day ?? 1));
+      return date.toLocaleDateString('de-DE', { weekday: 'short', timeZone: 'Europe/Berlin' });
+    };
+    const cols = [
+      { label: 'Datum', width: 22 },
+      { label: 'Tag', width: 12 },
+      { label: 'Kommen', width: 22 },
+      { label: 'Gehen', width: 22 },
+      { label: 'Pause', width: 18 },
+      { label: 'Sollzeit', width: 18 },
+      { label: 'Arbeitszeit', width: 20 },
+      { label: 'GLZ', width: 18 },
+      { label: 'Status', width: 32 },
+    ];
+    const startX = 14;
     let y = 20;
-    doc.text(`Monatsübersicht ${month}`, 14, y);
-    y += 8;
+    doc.setFontSize(14);
+    doc.text('Monatsübersicht', startX, y);
+    doc.setFontSize(11);
+    doc.text(month, startX + 70, y);
+    y += 10;
+    doc.setFontSize(10);
+    const headerHeight = 8;
+    let xCursor = startX;
+    doc.setFillColor(240, 245, 255);
+    doc.rect(startX - 2, y - headerHeight + 2, cols.reduce((sum, c) => sum + c.width, 0) + 4, headerHeight, 'F');
+    cols.forEach((col) => {
+      doc.text(col.label, xCursor, y);
+      xCursor += col.width;
+    });
+    y += 4;
+    const total = { planned: 0, worked: 0, delta: 0, pause: 0 };
     report.days.forEach((day) => {
-      if (y > 270) {
+      if (y > 280) {
         doc.addPage();
         y = 20;
       }
-      doc.text(`${day.date} – Soll ${formatHours(day.planned)} | Ist ${formatHours(day.worked)} | Delta ${formatHours(day.delta)}`, 14, y);
-      y += 6;
-      day.entries.forEach((entry) => {
-        if (y > 280) {
-          doc.addPage();
-          y = 20;
-        }
-        const label = entry.type === 'CLOCK_IN' ? 'Kommen' : 'Gehen';
-        doc.text(`• ${label} ${formatTime(entry.timestamp)} (${entry.source})`, 18, y);
-        y += 5;
+      const clockIns = day.entries.filter((e) => e.type === 'CLOCK_IN');
+      const clockOuts = day.entries.filter((e) => e.type === 'CLOCK_OUT');
+      const formatClock = (value?: string) => (value ? formatTime(value) : '—');
+      const firstIn = clockIns.length ? formatClock(clockIns[0].timestamp) : '—';
+      const lastOut = clockOuts.length ? formatClock(clockOuts[clockOuts.length - 1].timestamp) : '—';
+      const pauseMinutes = (day.recordedBreakMinutes ?? 0) + (day.autoBreakMinutes ?? 0);
+      const label = day.absences.length
+        ? day.absences
+            .map((abs) => abs.type || abs.duration || 'Abwesenheit')
+            .filter(Boolean)
+            .join(', ')
+        : '';
+      total.planned += day.planned;
+      total.worked += day.worked;
+      total.delta += day.delta;
+      total.pause += pauseMinutes;
+      const row = [
+        formatDate(day.date),
+        formatDay(day.date),
+        firstIn,
+        lastOut,
+        formatHours(pauseMinutes),
+        formatHours(day.planned),
+        formatHours(day.worked),
+        formatHours(day.delta),
+        label || '—',
+      ];
+      xCursor = startX;
+      doc.setFont('helvetica', day.pending ? 'italic' : 'normal');
+      row.forEach((cell, idx) => {
+        doc.text(String(cell), xCursor, y + 6);
+        xCursor += cols[idx].width;
       });
-      if (day.absences.length) {
-        day.absences.forEach((absence) => {
-          const span = absence.start_time && absence.end_time ? `${absence.start_time}-${absence.end_time}` : absence.duration;
-          doc.text(`• Abwesenheit: ${absence.type} ${span ?? ''}`, 18, y);
-          y += 5;
-        });
+      doc.line(startX - 2, y + 8, startX + cols.reduce((sum, c) => sum + c.width, 0) + 2, y + 8);
+      y += 10;
+    });
+    doc.setFont('helvetica', 'bold');
+    xCursor = startX;
+    const totalsRow = ['Summe', '', '', '', formatHours(total.pause), formatHours(total.planned), formatHours(total.worked), formatHours(total.delta), ''];
+    totalsRow.forEach((cell, idx) => {
+      if (cell) {
+        doc.text(String(cell), xCursor, y + 6);
       }
-      y += 4;
+      xCursor += cols[idx].width;
     });
     doc.save(`monatsreport-${month}-${user?.id ?? 'ich'}.pdf`);
   };

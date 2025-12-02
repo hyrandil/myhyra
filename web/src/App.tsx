@@ -11,6 +11,7 @@ import { InconsistentPage } from './pages/InconsistentPage';
 import { useAuth } from './AuthProvider';
 import { MobileHomePage } from './pages/MobileHomePage';
 import { useIsMobile } from './hooks/useIsMobile';
+import { usePreferredTheme } from './hooks/usePreferredTheme';
 
 function Protected({ children }: { children: React.ReactNode }) {
   const { user, ready } = useAuth();
@@ -177,6 +178,7 @@ function MobileShell({ children }: { children: React.ReactNode }) {
 export default function App() {
   const { user } = useAuth();
   const isMobile = useIsMobile();
+  usePreferredTheme();
   return (
     <Routes>
       <Route path="/login" element={<LoginPage />} />
