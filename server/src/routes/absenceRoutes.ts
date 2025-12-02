@@ -328,10 +328,10 @@ router.use(authorize(['admin', 'hr', 'lead']));
 
 router.get('/requests', (req: AuthRequest, res) => {
   const baseQuery =
-    `SELECT ar.*, u.name as user_name
+    `SELECT DISTINCT ar.*, u.name as user_name
      FROM absence_requests ar
      JOIN users u ON u.id = ar.user_id`;
-  if (req.user!.role === 'admin') {
+  if (req.user!.role === 'admin' || req.user!.role === 'hr') {
     const rows = db.prepare(`${baseQuery} ORDER BY ar.start_date DESC, ar.created_at DESC`).all();
     return res.json(rows);
   }
@@ -370,8 +370,6 @@ router.patch('/requests/:id/status', (req: AuthRequest, res) => {
       return res.status(403).json({ message: 'Keine Berechtigung für diese Abteilung' });
     }
   }
-  const validation = validateKind(requestRow.type, 'full', false);
-  if (!validation.ok) return res.status(400).json({ message: validation.message });
   db.prepare('UPDATE absence_requests SET status = ? WHERE id = ?').run(parsed.data, id);
   if (parsed.data === 'approved') {
     db.prepare('DELETE FROM absences WHERE user_id = ? AND NOT (end_date < ? OR start_date > ?)').run(

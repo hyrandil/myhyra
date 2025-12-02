@@ -3,7 +3,7 @@ import { Role } from '../types';
 
 export function managedDepartments(userId: number): number[] {
   const rows = db
-    .prepare("SELECT department_id FROM department_members WHERE user_id = ? AND role IN ('lead','hr')")
+    .prepare("SELECT department_id FROM department_members WHERE user_id = ? AND lower(role) IN ('lead','hr')")
     .all(userId) as { department_id: number }[];
   return rows.map((row) => row.department_id);
 }
