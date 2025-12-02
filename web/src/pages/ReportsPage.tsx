@@ -6,7 +6,7 @@ import { AttendanceResponse } from '../types';
 import { useAuth } from '../AuthProvider';
 
 export function ReportsPage() {
-  const { user } = useAuth();
+  const { user, hasRole } = useAuth();
   const [month, setMonth] = useState(() => {
     const now = new Date();
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
@@ -74,7 +74,31 @@ export function ReportsPage() {
     doc.text('Monatsübersicht', startX, y);
     doc.setFontSize(11);
     doc.text(month, startX + 70, y);
-    y += 10;
+    y += 8;
+    doc.setFontSize(10);
+    const metaLines = [
+      report.meta?.name ? `Mitarbeiter: ${report.meta.name}` : undefined,
+      report.meta?.personnelNumber ? `Personalnummer: ${report.meta.personnelNumber}` : undefined,
+    ].filter(Boolean) as string[];
+    metaLines.forEach((line) => {
+      doc.text(line, startX, y);
+      y += 6;
+    });
+    if (report.meta?.vacation || report.meta?.flexBalance !== undefined) {
+      doc.text(
+        `Urlaub gesamt: ${report.meta?.vacation?.allowance ?? 0} | genutzt: ${
+          report.meta?.vacation?.used?.toFixed(2) ?? '0.00'
+        } | Rest: ${report.meta?.vacation?.remaining?.toFixed(2) ?? '0.00'}`,
+        startX,
+        y
+      );
+      y += 6;
+      if (report.meta?.flexBalance !== undefined) {
+        doc.text(`Gleitzeitstand: ${formatHours(report.meta.flexBalance)}`, startX, y);
+        y += 4;
+      }
+    }
+    y += 4;
     doc.setFontSize(10);
     const headerHeight = 8;
     let xCursor = startX;
@@ -136,7 +160,7 @@ export function ReportsPage() {
       }
       xCursor += cols[idx].width;
     });
-    doc.save(`monatsreport-${month}-${user?.id ?? 'ich'}.pdf`);
+    doc.save(`monatsreport-${month}-${report.meta?.personnelNumber || user?.id || 'ich'}.pdf`);
   };
 
   return (
@@ -155,9 +179,19 @@ export function ReportsPage() {
             value={month}
             onChange={(e) => setMonth(e.target.value)}
           />
-          <button className="btn-ghost" onClick={() => triggerDownload('csv')}>CSV Export</button>
-          <button className="btn-primary" onClick={() => triggerDownload('xlsx')}>Excel Export</button>
-          <button className="btn-ghost" onClick={exportPdf}>PDF Export</button>
+          {hasRole('admin') && (
+            <>
+              <button className="btn-primary" onClick={() => triggerDownload('csv')}>
+                CSV Export
+              </button>
+              <button className="btn-primary" onClick={() => triggerDownload('xlsx')}>
+                Excel Export
+              </button>
+            </>
+          )}
+          <button className="btn-primary" onClick={exportPdf}>
+            PDF Export
+          </button>
         </div>
       </div>
 

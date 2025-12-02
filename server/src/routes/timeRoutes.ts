@@ -216,7 +216,58 @@ function buildMonthlyReport(userId: number, monthValue?: string) {
     cursor.setUTCDate(cursor.getUTCDate() + 1);
   }
 
-  return { month: baseMonth, days };
+  const userRow = db
+    .prepare(
+      `SELECT u.first_name, u.last_name, u.name, u.email, up.personnel_number, us.vacation_allowance
+       FROM users u
+       LEFT JOIN user_profiles up ON up.user_id = u.id
+       LEFT JOIN user_settings us ON us.user_id = u.id
+       WHERE u.id = ?`
+    )
+    .get(userId) as
+    | {
+        first_name?: string | null;
+        last_name?: string | null;
+        name?: string | null;
+        email?: string | null;
+        personnel_number?: string | null;
+        vacation_allowance?: number | null;
+      }
+    | undefined;
+  const displayName = [userRow?.first_name, userRow?.last_name].filter(Boolean).join(' ') || userRow?.name || '';
+  let usedVacationDays = 0;
+  days.forEach((day) => {
+    const planned = day.planned || 0;
+    if (!planned) return;
+    day.absences.forEach((absence: Absence) => {
+      if (absence.type !== 'vacation') return;
+      let minutes = absence.minutes_override ?? null;
+      if (minutes === null && absence.start_time && absence.end_time) {
+        const startTs = new Date(`${day.date}T${absence.start_time}:00Z`).getTime();
+        const endTs = new Date(`${day.date}T${absence.end_time}:00Z`).getTime();
+        minutes = Math.max(Math.round((endTs - startTs) / 60000), 0);
+      }
+      if (minutes === null) {
+        minutes = absence.duration === 'half' ? Math.round(planned / 2) : planned;
+      }
+      minutes = minutes ?? 0;
+      usedVacationDays += Math.min(minutes / planned, 1);
+    });
+  });
+  const allowance = userRow?.vacation_allowance ?? 0;
+  const remaining = Math.max(allowance - usedVacationDays, 0);
+  const dailySnapshot = buildDailySummary(userId, baseMonth);
+
+  return {
+    month: baseMonth,
+    days,
+    meta: {
+      name: displayName,
+      personnelNumber: userRow?.personnel_number || '',
+      vacation: { allowance, used: usedVacationDays, remaining },
+      flexBalance: dailySnapshot.flexBalance ?? 0,
+    },
+  };
 }
 
 const manualEntrySchema = z.object({

@@ -11,7 +11,6 @@ import { InconsistentPage } from './pages/InconsistentPage';
 import { useAuth } from './AuthProvider';
 import { MobileHomePage } from './pages/MobileHomePage';
 import { useIsMobile } from './hooks/useIsMobile';
-import { usePreferredTheme } from './hooks/usePreferredTheme';
 
 function Protected({ children }: { children: React.ReactNode }) {
   const { user, ready } = useAuth();
@@ -28,12 +27,12 @@ function NavItem({ to, label }: { to: string; label: string }) {
       className={({ isActive }) =>
         `flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-semibold transition border border-transparent ${
           isActive
-            ? 'bg-white/20 text-white border-white/30 shadow-lg'
-            : 'text-sky-100 hover:bg-white/10 hover:border-white/20'
+            ? 'bg-sky-50 text-sky-800 border-sky-200 shadow'
+            : 'text-slate-600 hover:bg-slate-100 hover:border-slate-200'
         }`
       }
     >
-      <span className="h-2 w-2 rounded-full bg-white/70" aria-hidden />
+      <span className="h-2 w-2 rounded-full bg-sky-400" aria-hidden />
       {label}
     </NavLink>
   );
@@ -76,11 +75,10 @@ function Shell({ children }: { children: React.ReactNode }) {
       .join(' ') || auth.user?.name;
   return (
     <div className="min-h-screen flex bg-surface">
-      <aside className="w-72 bg-gradient-to-b from-sky-900 via-sky-950 to-slate-950 text-sky-50 flex flex-col shadow-2xl relative">
-        <div className="absolute inset-0 opacity-20 bg-[radial-gradient(circle_at_top,_rgba(255,255,255,0.2)_0,_transparent_60%)]" />
-        <div className="p-6 border-b border-white/10 relative">
-          <p className="text-[11px] uppercase tracking-[0.35em] text-sky-200">Zeiterfassung</p>
-          <p className="text-3xl font-black">ZeitPilot</p>
+      <aside className="w-72 bg-white text-slate-900 flex flex-col shadow-lg border-r border-slate-200 relative">
+        <div className="p-6 border-b border-slate-200 relative bg-gradient-to-r from-sky-50 via-white to-blue-50">
+          <p className="text-[11px] uppercase tracking-[0.35em] text-slate-500">Zeiterfassung</p>
+          <p className="text-3xl font-black text-sky-800">ZeitPilot</p>
         </div>
         <nav className="p-4 space-y-1 flex-1 relative">
           <NavItem to="/" label="Dashboard" />
@@ -92,20 +90,20 @@ function Shell({ children }: { children: React.ReactNode }) {
           {auth.hasRole('lead', 'hr', 'admin') && <NavItem to="/mitarbeitende" label="Team" />}
           {auth.hasRole('hr', 'admin') && <NavItem to="/berichte" label="Berichte" />}
         </nav>
-        <div className="p-4 border-t border-white/10 bg-white/5 backdrop-blur relative">
+        <div className="p-4 border-t border-slate-200 bg-slate-50 relative">
             <div className="flex items-center gap-3">
-              <div className="h-11 w-11 rounded-full bg-white/20 flex items-center justify-center text-lg font-bold">
+              <div className="h-11 w-11 rounded-full bg-sky-100 flex items-center justify-center text-lg font-bold text-sky-800">
                 {displayName?.[0] ?? '?'}
               </div>
               <div className="flex-1">
-              <p className="text-xs uppercase text-sky-200">{roleLabel(auth.user?.role)}</p>
-                <p className="font-semibold leading-tight">{displayName}</p>
-                <p className="text-xs text-sky-200 truncate">{auth.user?.email}</p>
+              <p className="text-xs uppercase text-slate-500">{roleLabel(auth.user?.role)}</p>
+                <p className="font-semibold leading-tight text-slate-900">{displayName}</p>
+                <p className="text-xs text-slate-600 truncate">{auth.user?.email}</p>
               </div>
           </div>
           <button
             onClick={auth.logout}
-            className="mt-3 w-full bg-white text-sky-900 rounded-lg font-semibold py-2 shadow hover:bg-slate-100"
+            className="mt-3 w-full bg-sky-600 text-white rounded-lg font-semibold py-2 shadow hover:bg-sky-700"
           >
             Sicher abmelden
           </button>
@@ -148,21 +146,21 @@ function MobileShell({ children }: { children: React.ReactNode }) {
     }
   };
   return (
-    <div className="min-h-screen bg-slate-900 text-slate-50">
-      <header className="bg-slate-950/80 backdrop-blur border-b border-white/10 px-4 py-3 flex items-center justify-between sticky top-0 z-20">
+    <div className="min-h-screen bg-surface text-slate-900">
+      <header className="bg-white/90 backdrop-blur border-b border-slate-200 px-4 py-3 flex items-center justify-between sticky top-0 z-20 shadow-sm">
         <div>
-          <p className="text-xs uppercase tracking-wide text-slate-300">ZeitPilot</p>
-          <p className="font-semibold leading-tight">{displayName || 'Willkommen'}</p>
+          <p className="text-xs uppercase tracking-wide text-slate-500">ZeitPilot</p>
+          <p className="font-semibold leading-tight text-slate-900">{displayName || 'Willkommen'}</p>
         </div>
         <div className="text-right text-xs">
-          <p className="text-slate-300">{roleLabel(auth.user?.role)}</p>
-          <button onClick={auth.logout} className="underline text-amber-200 font-semibold">
+          <p className="text-slate-600">{roleLabel(auth.user?.role)}</p>
+          <button onClick={auth.logout} className="underline text-sky-700 font-semibold">
             Abmelden
           </button>
         </div>
       </header>
       <main className="pb-20 pt-4 px-3 space-y-4">{children}</main>
-      <nav className="fixed bottom-0 left-0 right-0 bg-slate-950/95 text-slate-100 border-t border-slate-800 shadow-[0_-6px_20px_rgba(0,0,0,0.35)] z-40">
+      <nav className="fixed bottom-0 left-0 right-0 bg-white/95 text-slate-900 border-t border-slate-200 shadow-[0_-6px_20px_rgba(15,23,42,0.12)] z-40">
         <div className="max-w-4xl mx-auto px-6 py-3 flex items-center justify-between text-center gap-2">
           <MobileNavItem to="/" label="Cockpit" />
           <MobileNavItem to="/zeiten" label="Zeiten" />
@@ -178,7 +176,6 @@ function MobileShell({ children }: { children: React.ReactNode }) {
 export default function App() {
   const { user } = useAuth();
   const isMobile = useIsMobile();
-  usePreferredTheme();
   return (
     <Routes>
       <Route path="/login" element={<LoginPage />} />

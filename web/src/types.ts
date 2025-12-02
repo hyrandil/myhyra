@@ -82,6 +82,12 @@ export interface MonthlyReportDay {
 export interface MonthlyReport {
   month: string;
   days: MonthlyReportDay[];
+  meta?: {
+    name?: string;
+    personnelNumber?: string;
+    vacation?: { allowance: number; used: number; remaining: number };
+    flexBalance?: number;
+  };
 }
 
 export interface InconsistentDay {
