@@ -6,6 +6,7 @@ export default defineConfig({
   server: {
     host: '0.0.0.0',
     port: 5173,
+    allowedHosts: ['zeit-pilot.de'],
     proxy: {
       '/api': 'http://localhost:4000'
     }
