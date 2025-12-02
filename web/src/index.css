@@ -1,0 +1,72 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: light;
+  --bg: #f8fafc;
+  --text: #0f172a;
+  --muted: #475569;
+  --card-bg: #ffffff;
+  --card-border: #e2e8f0;
+  --surface: radial-gradient(circle at 10% 20%, rgba(59,130,246,0.08) 0, rgba(59,130,246,0.08) 12px, transparent 12px),
+    radial-gradient(circle at 90% 10%, rgba(14,116,144,0.07) 0, rgba(14,116,144,0.07) 14px, transparent 14px),
+    linear-gradient(180deg, #f8fafc 0%, #eef2ff 40%, #f8fafc 100%);
+}
+
+[data-theme='dark'] {
+  color-scheme: dark;
+  --bg: #0b1220;
+  --text: #e2e8f0;
+  --muted: #cbd5e1;
+  --card-bg: #111827;
+  --card-border: #1f2937;
+  --surface: linear-gradient(180deg, #0b1220 0%, #0f172a 50%, #0b1220 100%);
+}
+
+body {
+  background: var(--surface), var(--bg);
+  background-size: 220px 220px, 240px 240px, auto;
+  color: var(--text);
+  min-height: 100vh;
+  font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+}
+
+.bg-surface {
+  background: var(--surface);
+}
+
+.card {
+  background-color: var(--card-bg);
+  border: 1px solid var(--card-border);
+  border-radius: 0.75rem;
+  box-shadow: 0 6px 16px rgba(15, 23, 42, 0.08);
+}
+
+.card-ghost {
+  background-color: color-mix(in srgb, var(--card-bg) 80%, transparent);
+  border: 1px solid color-mix(in srgb, var(--card-border) 60%, transparent);
+  border-radius: 0.75rem;
+  box-shadow: 0 6px 16px rgba(15, 23, 42, 0.08);
+}
+
+[data-theme='dark'] .text-slate-500,
+[data-theme='dark'] .text-slate-600 {
+  color: var(--muted) !important;
+}
+
+.badge {
+  @apply inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-semibold uppercase tracking-wide;
+}
+
+.input {
+  @apply w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-sky-500 focus:border-sky-500;
+}
+
+.btn-primary {
+  @apply inline-flex items-center justify-center gap-2 rounded-lg bg-sky-600 px-4 py-2 text-white font-semibold shadow hover:bg-sky-700 transition;
+}
+
+.btn-ghost {
+  @apply inline-flex items-center justify-center gap-2 rounded-lg px-3 py-2 text-slate-700 hover:bg-slate-100 transition;
+}
