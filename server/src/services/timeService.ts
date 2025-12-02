@@ -54,8 +54,11 @@ export function computeDayWorkStats(entries: TimeEntry[]) {
     };
   }
 
-  const longShift = workedMinutesRaw >= 540;
-  const requiredPause = longShift ? 45 : 30;
+  const basePause = 30;
+  const missingBase = Math.max(basePause - recordedBreakMinutes, 0);
+  const workedAfterBase = workedMinutesRaw - missingBase;
+  const longShift = workedAfterBase >= 540;
+  const requiredPause = longShift ? 45 : basePause;
   const countedBreak = Math.min(recordedBreakMinutes, requiredPause);
   const deduction = Math.max(requiredPause - countedBreak, 0);
   const effective = Math.round(Math.max(workedMinutesRaw - deduction, 0));

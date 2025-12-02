@@ -493,12 +493,6 @@ router.get('/user/:userId/day', authorize(['admin', 'hr', 'lead']), (req: AuthRe
 
 router.get('/inconsistent', (req: AuthRequest, res) => {
   const actor = req.user!;
-  const today = new Date();
-  const monthValue = (req.query.month as string) || `${today.getUTCFullYear()}-${String(today.getUTCMonth() + 1).padStart(2, '0')}`;
-  const base = new Date(`${monthValue}-01T00:00:00Z`);
-  const start = new Date(Date.UTC(base.getUTCFullYear(), base.getUTCMonth(), 1));
-  const end = new Date(Date.UTC(base.getUTCFullYear(), base.getUTCMonth() + 1, 0, 23, 59, 59));
-
   let userIds: { id: number; first_name?: string | null; last_name?: string | null; name?: string | null }[] = [];
   if (actor.role === 'admin' || actor.role === 'hr') {
     userIds = db.prepare('SELECT id, first_name, last_name, name FROM users').all() as any[];
@@ -525,13 +519,13 @@ router.get('/inconsistent', (req: AuthRequest, res) => {
   const entryRows = db
     .prepare(
       `SELECT * FROM time_entries WHERE user_id IN (${placeholders})
-       AND timestamp >= ? AND timestamp <= ? ORDER BY user_id, timestamp ASC`
+       ORDER BY user_id, timestamp ASC`
     )
-    .all(...allowedIds, start.toISOString(), end.toISOString()) as TimeEntry[];
+    .all(...allowedIds) as TimeEntry[];
 
   const grouped: Record<string, TimeEntry[]> = {};
   entryRows.forEach((entry) => {
-    const key = `${entry.user_id}-${entry.timestamp.slice(0, 10)}`;
+    const key = `${entry.user_id}:${entry.timestamp.slice(0, 10)}`;
     const list = grouped[key] ?? [];
     list.push(entry);
     grouped[key] = list;
@@ -560,11 +554,11 @@ router.get('/inconsistent', (req: AuthRequest, res) => {
 
   const results = Object.entries(grouped)
     .filter(([key, entries]) => {
-      const [, date] = key.split('-');
+      const [, date] = key.split(':');
       return hasInconsistent(entries, date ?? '');
     })
     .map(([key, entries]) => {
-      const [userIdStr, date] = key.split('-');
+      const [userIdStr, date] = key.split(':');
       const userId = Number(userIdStr);
       const user = userIds.find((u) => u.id === userId);
       const name = [user?.first_name, user?.last_name].filter(Boolean).join(' ') || user?.name || `User ${userId}`;

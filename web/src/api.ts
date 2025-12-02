@@ -226,8 +226,8 @@ export async function fetchDayEntriesForUser(userId: number, date: string) {
   return res.data;
 }
 
-export async function fetchInconsistentDays(month?: string) {
-  const res = await api.get<InconsistentDay[]>('/time/inconsistent', { params: month ? { month } : undefined });
+export async function fetchInconsistentDays() {
+  const res = await api.get<InconsistentDay[]>('/time/inconsistent');
   return res.data;
 }
 
@@ -238,6 +238,26 @@ export async function createAbsenceRequest(data: { start_date: string; end_date:
 
 export async function fetchAbsenceKinds() {
   const res = await api.get('/absences/kinds');
+  return res.data;
+}
+
+export async function updateAbsenceKind(
+  id: number,
+  payload: {
+    code: string;
+    label: string;
+    counts_as_work: boolean;
+    allow_full?: boolean;
+    allow_half?: boolean;
+    allow_hourly?: boolean;
+  }
+) {
+  const res = await api.patch(`/absences/kinds/${id}`, payload);
+  return res.data;
+}
+
+export async function deleteAbsenceKind(id: number) {
+  const res = await api.delete(`/absences/kinds/${id}`);
   return res.data;
 }
 

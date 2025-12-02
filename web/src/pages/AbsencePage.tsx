@@ -2,9 +2,11 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   createAbsenceKind,
   createAbsenceRequest,
+  deleteAbsenceKind,
   fetchAbsenceInbox,
   fetchAbsenceKinds,
   fetchMyAbsenceRequests,
+  updateAbsenceKind,
   updateAbsenceStatus,
 } from '../api';
 import { useAuth } from '../AuthProvider';
@@ -32,6 +34,22 @@ export function AbsencePage() {
 
   const kindMutation = useMutation({
     mutationFn: createAbsenceKind,
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['absence', 'kinds'] }),
+  });
+
+  const updateKind = useMutation({
+    mutationFn: ({
+      id,
+      payload,
+    }: {
+      id: number;
+      payload: { code: string; label: string; counts_as_work: boolean; allow_full?: boolean; allow_half?: boolean; allow_hourly?: boolean };
+    }) => updateAbsenceKind(id, payload),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['absence', 'kinds'] }),
+  });
+
+  const removeKind = useMutation({
+    mutationFn: (id: number) => deleteAbsenceKind(id),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['absence', 'kinds'] }),
   });
 
@@ -93,18 +111,92 @@ export function AbsencePage() {
         <div className="card p-4 lg:col-span-2">
           {auth.hasRole('hr', 'admin') && (
             <div className="mb-4 grid gap-3 sm:grid-cols-2">
-              <div className="p-3 rounded-lg border border-slate-200 bg-white">
-                <h4 className="font-semibold mb-2">Abwesenheitsarten</h4>
+              <div className="p-3 rounded-lg border border-slate-200 bg-white space-y-2">
+                <div className="flex items-center justify-between">
+                  <h4 className="font-semibold">Abwesenheitsarten</h4>
+                  <p className="text-xs text-slate-500">Bestehende Einträge lassen sich nur ändern, wenn sie nicht genutzt wurden.</p>
+                </div>
                 <ul className="space-y-2 text-sm">
-                  {(kinds.data ?? []).map((kind: any) => (
-                    <li key={kind.code} className="flex items-center justify-between">
-                      <div>
-                        <p className="font-medium">{kind.label}</p>
-                        <p className="text-xs text-slate-500">{kind.code} · {kind.counts_as_work ? 'Arbeitszeit' : 'Keine Arbeitszeit'}</p>
-                      </div>
-                      <div className="text-xs text-slate-500">{kind.allow_full ? 'Ganztag ' : ''}{kind.allow_half ? 'Halb ' : ''}{kind.allow_hourly ? 'Stundenweise' : ''}</div>
-                    </li>
-                  ))}
+                  {(kinds.data ?? []).map((kind: any) => {
+                    const locked = Boolean(kind.locked);
+                    return (
+                      <li key={kind.id} className="rounded border border-slate-200 p-2 bg-slate-50">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <p className="font-medium">{kind.label}</p>
+                            <p className="text-xs text-slate-500">{kind.code} · {kind.counts_as_work ? 'Arbeitszeit' : 'Keine Arbeitszeit'}</p>
+                            {locked && <p className="text-xs text-amber-600 mt-1">Dieser Typ wird bereits verwendet und kann nicht bearbeitet oder gelöscht werden.</p>}
+                          </div>
+                          <div className="flex gap-2 items-center text-xs text-slate-500">
+                            {kind.allow_full ? 'Ganztag ' : ''}
+                            {kind.allow_half ? 'Halb ' : ''}
+                            {kind.allow_hourly ? 'Stundenweise' : ''}
+                          </div>
+                        </div>
+                        <div className="mt-2 flex gap-2 text-xs">
+                          <details className="w-full" open={!locked}>
+                            <summary className="cursor-pointer text-slate-700">Bearbeiten</summary>
+                            <form
+                              className="grid grid-cols-2 gap-2 mt-2"
+                              onSubmit={(e) => {
+                                e.preventDefault();
+                                if (locked) return;
+                                const data = new FormData(e.currentTarget);
+                                updateKind.mutate({
+                                  id: kind.id,
+                                  payload: {
+                                    code: String(data.get('code')),
+                                    label: String(data.get('label')),
+                                    counts_as_work: Boolean(data.get('counts_as_work')),
+                                    allow_full: Boolean(data.get('allow_full')),
+                                    allow_half: Boolean(data.get('allow_half')),
+                                    allow_hourly: Boolean(data.get('allow_hourly')),
+                                  },
+                                });
+                              }}
+                            >
+                              <label className="text-xs block">
+                                Code
+                                <input name="code" defaultValue={kind.code} className="input mt-1" disabled={locked} />
+                              </label>
+                              <label className="text-xs block">
+                                Name
+                                <input name="label" defaultValue={kind.label} className="input mt-1" disabled={locked} />
+                              </label>
+                              <label className="flex items-center gap-2 text-xs">
+                                <input type="checkbox" name="counts_as_work" defaultChecked={kind.counts_as_work} disabled={locked} /> Arbeitszeit
+                              </label>
+                              <label className="flex items-center gap-2 text-xs">
+                                <input type="checkbox" name="allow_full" defaultChecked={kind.allow_full} disabled={locked} /> Ganztags
+                              </label>
+                              <label className="flex items-center gap-2 text-xs">
+                                <input type="checkbox" name="allow_half" defaultChecked={kind.allow_half} disabled={locked} /> Halbtags
+                              </label>
+                              <label className="flex items-center gap-2 text-xs">
+                                <input type="checkbox" name="allow_hourly" defaultChecked={kind.allow_hourly} disabled={locked} /> Stundenweise
+                              </label>
+                              <div className="col-span-2 flex gap-2">
+                                <button className="btn-primary" type="submit" disabled={locked || updateKind.isPending}>Speichern</button>
+                                <button
+                                  className="btn-ghost border border-rose-200 text-rose-700"
+                                  type="button"
+                                  disabled={locked || removeKind.isPending}
+                                  onClick={() => {
+                                    if (locked) return;
+                                    if (window.confirm('Abwesenheitsart wirklich löschen? Dies kann nicht rückgängig gemacht werden.')) {
+                                      removeKind.mutate(kind.id);
+                                    }
+                                  }}
+                                >
+                                  Löschen
+                                </button>
+                              </div>
+                            </form>
+                          </details>
+                        </div>
+                      </li>
+                    );
+                  })}
                   {(kinds.data ?? []).length === 0 && <li className="text-slate-500 text-sm">Keine Arten konfiguriert.</li>}
                 </ul>
               </div>

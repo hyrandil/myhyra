@@ -21,6 +21,17 @@ type AbsenceKind = {
 const absenceKindByCode = (code: string): AbsenceKind | undefined =>
   db.prepare('SELECT * FROM absence_kinds WHERE code = ?').get(code) as AbsenceKind | undefined;
 
+const kindUsage = (code: string) => {
+  const used = db
+    .prepare(
+      `SELECT
+         (SELECT COUNT(*) FROM absences WHERE type = ?) as absences_count,
+         (SELECT COUNT(*) FROM absence_requests WHERE type = ?) as request_count`
+    )
+    .get(code, code) as { absences_count: number; request_count: number };
+  return used.absences_count + used.request_count;
+};
+
 const absenceSchema = z
   .object({
     start_date: z.string().regex(dateRegex, 'Datum muss im Format YYYY-MM-DD vorliegen'),
@@ -128,11 +139,20 @@ const buildVacationUsage = (absences: Absence[], schedule: WorkScheduleEntry[]) 
 router.use(requireAuth);
 
 router.get('/kinds', (req: AuthRequest, res) => {
-  const kinds = db
-    .prepare(
-      'SELECT id, code, label, counts_as_work, allow_full, allow_half, allow_hourly FROM absence_kinds ORDER BY label ASC'
-    )
-    .all();
+  const kinds = (
+    db
+      .prepare(
+        `SELECT id, code, label, counts_as_work, allow_full, allow_half, allow_hourly,
+                (SELECT COUNT(*) FROM absences a WHERE a.type = ak.code) as absences_count,
+                (SELECT COUNT(*) FROM absence_requests r WHERE r.type = ak.code) as request_count
+           FROM absence_kinds ak
+           ORDER BY label ASC`
+      )
+      .all() as any[]
+  ).map((kind: any) => ({
+    ...kind,
+    locked: (kind as any).absences_count + (kind as any).request_count > 0,
+  }));
   res.json(kinds);
 });
 
@@ -164,6 +184,52 @@ router.post('/kinds', authorize(['admin', 'hr']), (req: AuthRequest, res) => {
     }
     throw error;
   }
+});
+
+router.patch('/kinds/:id', authorize(['admin', 'hr']), (req: AuthRequest, res) => {
+  const id = Number(req.params.id);
+  if (Number.isNaN(id)) return res.status(400).json({ message: 'Ungültige ID' });
+  const existing = db.prepare('SELECT * FROM absence_kinds WHERE id = ?').get(id) as AbsenceKind | undefined;
+  if (!existing) return res.status(404).json({ message: 'Abwesenheitsart nicht gefunden' });
+  if (kindUsage(existing.code) > 0) return res.status(409).json({ message: 'Art wird bereits verwendet und kann nicht bearbeitet werden.' });
+  const parsed = z
+    .object({
+      code: z.string().min(2),
+      label: z.string().min(2),
+      counts_as_work: z.boolean(),
+      allow_full: z.boolean().default(true),
+      allow_half: z.boolean().default(true),
+      allow_hourly: z.boolean().default(false),
+    })
+    .safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ errors: parsed.error.format() });
+  const { code, label, counts_as_work, allow_full, allow_half, allow_hourly } = parsed.data;
+  try {
+    db.prepare(
+      `UPDATE absence_kinds
+         SET code = ?, label = ?, counts_as_work = ?, allow_full = ?, allow_half = ?, allow_hourly = ?
+       WHERE id = ?`
+    ).run(code, label, counts_as_work ? 1 : 0, allow_full ? 1 : 0, allow_half ? 1 : 0, allow_hourly ? 1 : 0, id);
+    const updated = db.prepare('SELECT * FROM absence_kinds WHERE id = ?').get(id);
+    return res.json(updated);
+  } catch (error: any) {
+    if (String(error?.message || '').includes('UNIQUE')) {
+      return res.status(409).json({ message: 'Code bereits vorhanden' });
+    }
+    throw error;
+  }
+});
+
+router.delete('/kinds/:id', authorize(['admin', 'hr']), (req: AuthRequest, res) => {
+  const id = Number(req.params.id);
+  if (Number.isNaN(id)) return res.status(400).json({ message: 'Ungültige ID' });
+  const existing = db.prepare('SELECT * FROM absence_kinds WHERE id = ?').get(id) as AbsenceKind | undefined;
+  if (!existing) return res.status(404).json({ message: 'Abwesenheitsart nicht gefunden' });
+  if (kindUsage(existing.code) > 0) {
+    return res.status(409).json({ message: 'Diese Abwesenheitsart ist bereits verwendet und kann nicht gelöscht werden.' });
+  }
+  db.prepare('DELETE FROM absence_kinds WHERE id = ?').run(id);
+  res.json({ message: 'Abwesenheitsart gelöscht' });
 });
 
 router.post('/request', (req: AuthRequest, res) => {
