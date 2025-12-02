@@ -11,6 +11,7 @@ type CalendarProps = {
   maskAbsences?: boolean;
   hideDetails?: boolean;
   absencesOnly?: boolean;
+  absenceKinds?: { code: string; label: string }[];
 };
 
 const formatHours = (minutes: number) => {
@@ -45,7 +46,23 @@ function dayColor(summary?: DailySummary) {
   return 'bg-white text-slate-900 border-slate-300';
 }
 
-export function Calendar({ month, days, selectedDate, onSelect, maskAbsences, hideDetails, absencesOnly }: CalendarProps) {
+function absenceColor(code: string) {
+  if (code === 'vacation') return 'bg-amber-500';
+  if (code === 'sick') return 'bg-rose-500';
+  if (code === 'holiday') return 'bg-sky-500';
+  return 'bg-slate-500';
+}
+
+export function Calendar({
+  month,
+  days,
+  selectedDate,
+  onSelect,
+  maskAbsences,
+  hideDetails,
+  absencesOnly,
+  absenceKinds,
+}: CalendarProps) {
   const [internalSelected, setInternalSelected] = useState<string | null>(selectedDate ?? null);
 
   useEffect(() => {
@@ -167,20 +184,21 @@ export function Calendar({ month, days, selectedDate, onSelect, maskAbsences, hi
               )}
             </div>
             <div className="text-xs text-slate-500 space-y-1 text-right">
-              <p className="flex items-center gap-2 justify-end">
-                <span className="h-2 w-2 rounded-full bg-sky-500"></span> Feiertag
-              </p>
-              <p className="flex items-center gap-2 justify-end">
-                <span className="h-2 w-2 rounded-full bg-amber-500"></span> Urlaub
-              </p>
+              {((absenceKinds && absenceKinds.length > 0)
+                ? absenceKinds
+                : [
+                    { code: 'holiday', label: 'Feiertag' },
+                    { code: 'vacation', label: 'Urlaub' },
+                    { code: 'sick', label: 'Krank' },
+                    { code: 'away', label: 'Nicht im Haus' },
+                  ]
+              ).map((kind) => (
+                <p key={kind.code} className="flex items-center gap-2 justify-end">
+                  <span className={`h-2 w-2 rounded-full ${absenceColor(kind.code)}`}></span> {kind.label}
+                </p>
+              ))}
               <p className="flex items-center gap-2 justify-end">
                 <span className="h-2 w-2 rounded-full border border-amber-500"></span> Antrag offen
-              </p>
-              <p className="flex items-center gap-2 justify-end">
-                <span className="h-2 w-2 rounded-full bg-slate-500"></span> Nicht im Haus
-              </p>
-              <p className="flex items-center gap-2 justify-end">
-                <span className="h-2 w-2 rounded-full bg-rose-500"></span> Krank
               </p>
               <p className="flex items-center gap-2 justify-end">
                 <span className="h-2 w-2 rounded-full bg-rose-700"></span> Inkonsistent

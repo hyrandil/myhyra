@@ -52,13 +52,6 @@ const scheduleForUser = (userId: number) => {
     .all(userId) as WorkScheduleEntry[];
 };
 
-type AbsenceDayUsage = {
-  vacation: Map<string, number>;
-  sick: Map<string, number>;
-  remote: Map<string, number>;
-  other: Map<string, number>;
-};
-
 const buildAttendance = (monthParam?: string) => {
   const today = new Date();
   const fallbackMonth = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
@@ -90,6 +83,10 @@ const buildAttendance = (monthParam?: string) => {
       duration: 'full' | 'half';
     }[];
 
+  const absenceKinds = db
+    .prepare('SELECT code, label, counts_as_work FROM absence_kinds ORDER BY label ASC')
+    .all() as { code: string; label: string; counts_as_work: number }[];
+
   const settings = db
     .prepare('SELECT user_id, vacation_allowance FROM user_settings')
     .all() as { user_id: number; vacation_allowance: number }[];
@@ -101,29 +98,14 @@ const buildAttendance = (monthParam?: string) => {
   const allowanceMap = new Map(settings.map((item) => [item.user_id, item.vacation_allowance]));
   const presenceMap = new Map<number, Set<string>>();
 
-  type AbsenceBucket = {
-    vacation: number;
-    sick: number;
-    remote: number;
-    other: number;
-  };
-  const absenceMap = new Map<number, AbsenceBucket>();
-  const absenceUsage = new Map<number, AbsenceDayUsage>();
+  const absenceUsage = new Map<number, Map<string, Map<string, number>>>();
   const absenceDays = new Map<number, Set<string>>();
 
   const scheduleCache = new Map<number, WorkScheduleEntry[]>();
 
-  const addAbsence = (userId: number, type: keyof AbsenceDayUsage, duration: 'full' | 'half', start: string, end: string) => {
-    if (!absenceMap.has(userId)) {
-      absenceMap.set(userId, { vacation: 0, sick: 0, remote: 0, other: 0 });
-    }
+  const addAbsence = (userId: number, type: string, duration: 'full' | 'half', start: string, end: string) => {
     if (!absenceUsage.has(userId)) {
-      absenceUsage.set(userId, {
-        vacation: new Map<string, number>(),
-        sick: new Map<string, number>(),
-        remote: new Map<string, number>(),
-        other: new Map<string, number>(),
-      });
+      absenceUsage.set(userId, new Map());
     }
     if (!scheduleCache.has(userId)) {
       scheduleCache.set(userId, scheduleForUser(userId));
@@ -132,13 +114,15 @@ const buildAttendance = (monthParam?: string) => {
     const days = workingDatesBetween(start, end, schedule);
     const dayValue = duration === 'half' ? 0.5 : 1;
     const perUser = absenceUsage.get(userId)!;
+    if (!perUser.has(type)) perUser.set(type, new Map());
+    const dayMap = perUser.get(type)!;
     days.forEach((day) => {
-      const current = perUser[type].get(day) ?? 0;
-      perUser[type].set(day, Math.max(current, dayValue));
+      const current = dayMap.get(day) ?? 0;
+      dayMap.set(day, Math.max(current, dayValue));
     });
   };
 
-  absences.forEach((row) => addAbsence(row.user_id, row.type as keyof AbsenceDayUsage, row.duration, row.start_date, row.end_date));
+  absences.forEach((row) => addAbsence(row.user_id, row.type, row.duration, row.start_date, row.end_date));
 
   absences.forEach((row) => {
     if (!scheduleCache.has(row.user_id)) {
@@ -148,23 +132,6 @@ const buildAttendance = (monthParam?: string) => {
     const days = workingDatesBetween(row.start_date, row.end_date, schedule);
     if (!absenceDays.has(row.user_id)) absenceDays.set(row.user_id, new Set());
     days.forEach((day) => absenceDays.get(row.user_id)!.add(day));
-  });
-
-  const sumDays = (map: Map<string, number>) => {
-    let total = 0;
-    map.forEach((value) => {
-      total += value;
-    });
-    return total;
-  };
-
-  absenceUsage.forEach((usage, userId) => {
-    const bucket = absenceMap.get(userId) ?? { vacation: 0, sick: 0, remote: 0, other: 0 };
-    bucket.vacation = sumDays(usage.vacation);
-    bucket.sick = sumDays(usage.sick);
-    bucket.remote = sumDays(usage.remote);
-    bucket.other = sumDays(usage.other);
-    absenceMap.set(userId, bucket);
   });
 
   bookings.forEach((row) => {
@@ -178,23 +145,29 @@ const buildAttendance = (monthParam?: string) => {
 
   const rows = users.map((user) => {
     const presenceDays = presenceMap.get(user.id)?.size ?? 0;
-    const absenceBucket = absenceMap.get(user.id) ?? { vacation: 0, sick: 0, remote: 0, other: 0 };
     const allowance = allowanceMap.get(user.id) ?? 0;
-    const usedVacation = absenceBucket.vacation;
+    const usage = absenceUsage.get(user.id) ?? new Map<string, Map<string, number>>();
+    const totals: Record<string, number> = {};
+    absenceKinds.forEach((kind) => {
+      const dayMap = usage.get(kind.code);
+      let total = 0;
+      dayMap?.forEach((value) => {
+        total += value;
+      });
+      totals[kind.code] = total;
+    });
+    const usedVacation = totals['vacation'] ?? 0;
     return {
       user_id: user.id,
       name: user.name,
       email: user.email,
       presenceDays,
-      vacationDays: absenceBucket.vacation,
-      sickDays: absenceBucket.sick,
-      remoteDays: absenceBucket.remote,
-      otherAbsences: absenceBucket.other,
+      absences: totals,
       remainingVacation: Math.max(allowance - usedVacation, 0),
     };
   });
 
-  return { month, rows };
+  return { month, kinds: absenceKinds, rows };
 };
 
 router.get('/attendance', (req, res) => {
@@ -204,19 +177,12 @@ router.get('/attendance', (req, res) => {
 
 router.get('/attendance.csv', (req, res) => {
   const data = buildAttendance(typeof req.query.month === 'string' ? req.query.month : undefined);
-  const header = ['Name', 'Email', 'Präsenz', 'Urlaubstage', 'Krank', 'Remote', 'Sonstige', 'Resturlaub'];
-  const lines = data.rows.map((row) =>
-    [
-      row.name,
-      row.email,
-      row.presenceDays,
-      row.vacationDays,
-      row.sickDays,
-      row.remoteDays,
-      row.otherAbsences,
-      row.remainingVacation,
-    ].join(';')
-  );
+  const dynamicHeaders = data.kinds.map((k) => k.label);
+  const header = ['Name', 'Email', 'Präsenz', ...dynamicHeaders, 'Resturlaub'];
+  const lines = data.rows.map((row) => {
+    const absenceValues = data.kinds.map((k) => row.absences[k.code] ?? 0);
+    return [row.name, row.email, row.presenceDays, ...absenceValues, row.remainingVacation].join(';');
+  });
   const csv = [header.join(';'), ...lines].join('\n');
   res.setHeader('Content-Type', 'text/csv');
   res.setHeader('Content-Disposition', `attachment; filename=attendance-${data.month}.csv`);
@@ -225,16 +191,18 @@ router.get('/attendance.csv', (req, res) => {
 
 router.get('/attendance.xlsx', (req, res) => {
   const data = buildAttendance(typeof req.query.month === 'string' ? req.query.month : undefined);
-  const rows = data.rows.map((row) => ({
-    Name: row.name,
-    Email: row.email,
-    Präsenz: row.presenceDays,
-    Urlaubstage: row.vacationDays,
-    Krank: row.sickDays,
-    Remote: row.remoteDays,
-    Sonstige: row.otherAbsences,
-    Resturlaub: row.remainingVacation,
-  }));
+  const rows = data.rows.map((row) => {
+    const base: Record<string, string | number> = {
+      Name: row.name,
+      Email: row.email,
+      Präsenz: row.presenceDays,
+      Resturlaub: row.remainingVacation,
+    };
+    data.kinds.forEach((k) => {
+      base[k.label] = row.absences[k.code] ?? 0;
+    });
+    return base;
+  });
   const sheet = utils.json_to_sheet(rows);
   const wb = utils.book_new();
   utils.book_append_sheet(wb, sheet, 'Report');

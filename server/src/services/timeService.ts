@@ -45,27 +45,15 @@ export function computeDayWorkStats(entries: TimeEntry[]) {
   const workedMinutesRaw = workMs / MS_IN_MINUTE;
   const recordedBreakMinutes = breakMs / MS_IN_MINUTE;
 
-  if (workedMinutesRaw <= 360) {
-    return {
-      workedMinutes: Math.round(workedMinutesRaw),
-      autoDeduction: 0,
-      recordedBreakMinutes: Math.round(recordedBreakMinutes),
-      spanMinutes: Math.round(spanMinutes),
-    };
-  }
-
-  const basePause = 30;
-  const missingBase = Math.max(basePause - recordedBreakMinutes, 0);
-  const workedAfterBase = workedMinutesRaw - missingBase;
-  const longShift = workedAfterBase >= 540;
-  const requiredPause = longShift ? 45 : basePause;
-  const countedBreak = Math.min(recordedBreakMinutes, requiredPause);
-  const deduction = Math.max(requiredPause - countedBreak, 0);
-  const effective = Math.round(Math.max(workedMinutesRaw - deduction, 0));
+  const baseRequirement = Math.min(Math.max(workedMinutesRaw - 360, 0), 30);
+  const longRequirement = Math.min(Math.max(workedMinutesRaw - 540, 0), 15);
+  const requiredPause = baseRequirement + longRequirement;
+  const autoDeduction = Math.max(requiredPause - recordedBreakMinutes, 0);
+  const effective = Math.max(workedMinutesRaw - autoDeduction, 0);
 
   return {
-    workedMinutes: effective,
-    autoDeduction: Math.round(deduction),
+    workedMinutes: Math.round(effective),
+    autoDeduction: Math.round(autoDeduction),
     recordedBreakMinutes: Math.round(recordedBreakMinutes),
     spanMinutes: Math.round(spanMinutes),
   };

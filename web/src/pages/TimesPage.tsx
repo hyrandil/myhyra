@@ -5,6 +5,7 @@ import {
   createAbsenceForUser,
   createManualTimeEntry,
   deleteAbsenceForUser,
+  fetchAbsenceKinds,
   fetchDaily,
   fetchDailyForUser,
   fetchDayEntriesForUser,
@@ -13,7 +14,7 @@ import {
   deleteTimeEntry,
 } from '../api';
 import { useAuth } from '../AuthProvider';
-import { DailySummary, DayDetail, Employee, TimeEntry } from '../types';
+import { AbsenceKind, DailySummary, DayDetail, Employee, TimeEntry } from '../types';
 
 export function TimesPage() {
   const { user, hasRole } = useAuth();
@@ -32,6 +33,8 @@ export function TimesPage() {
   const [manualTimestamp, setManualTimestamp] = useState('');
   const [absenceStart, setAbsenceStart] = useState('');
   const [absenceEnd, setAbsenceEnd] = useState('');
+  const [absenceType, setAbsenceType] = useState('');
+  const [absenceDuration, setAbsenceDuration] = useState<'full' | 'half'>('full');
   const [editingEntryId, setEditingEntryId] = useState<number | null>(null);
 
   useEffect(() => {
@@ -74,12 +77,42 @@ export function TimesPage() {
     enabled: enableManagement,
   });
 
+  const { data: absenceKindsData } = useQuery<AbsenceKind[]>({
+    queryKey: ['absence', 'kinds'],
+    queryFn: fetchAbsenceKinds,
+  });
+  const defaultAbsenceKinds: AbsenceKind[] = [
+    { code: 'vacation', label: 'Urlaub', counts_as_work: true, allow_full: true, allow_half: true },
+    { code: 'sick', label: 'Krank', counts_as_work: true, allow_full: true, allow_half: true },
+    { code: 'remote', label: 'Remote', counts_as_work: true, allow_full: true, allow_half: true },
+    { code: 'other', label: 'Nicht im Haus', counts_as_work: false, allow_full: true, allow_half: true },
+  ];
+  const absenceOptions = absenceKindsData && absenceKindsData.length > 0 ? absenceKindsData : defaultAbsenceKinds;
+
   useEffect(() => {
     if (enableManagement && employees && employees.length > 0 && !targetUser) {
       const firstOther = employees.find((emp) => emp.id !== user?.id) ?? employees[0];
       setTargetUser(firstOther.id);
     }
   }, [enableManagement, employees, targetUser, user?.id]);
+
+  useEffect(() => {
+    if (!absenceType && absenceOptions.length > 0) {
+      setAbsenceType(absenceOptions[0]!.code);
+    }
+  }, [absenceOptions, absenceType]);
+
+  const selectedKind = absenceOptions.find((k) => k.code === absenceType);
+
+  useEffect(() => {
+    if (!selectedKind) return;
+    if (!selectedKind.allow_full && absenceDuration === 'full') {
+      setAbsenceDuration(selectedKind.allow_half ? 'half' : 'full');
+    }
+    if (!selectedKind.allow_half && absenceDuration === 'half') {
+      setAbsenceDuration('full');
+    }
+  }, [selectedKind, absenceDuration]);
 
   const { data, isLoading } = useQuery<{ month: string; days: Record<string, DailySummary>; flexBalance?: number }>({
     queryKey: ['daily', month, selectedUserId, enableManagement ? 'manager' : 'self'],
@@ -137,6 +170,21 @@ export function TimesPage() {
     setMonth(`${base.getUTCFullYear()}-${String(base.getUTCMonth() + 1).padStart(2, '0')}`);
     setSelectedDate(null);
   };
+
+  const absenceColor = (code: string) => {
+    if (code === 'vacation') return 'bg-amber-500';
+    if (code === 'sick') return 'bg-rose-500';
+    if (code === 'holiday') return 'bg-sky-500';
+    return 'bg-slate-500';
+  };
+
+  const absenceLegend = absenceOptions.length
+    ? absenceOptions
+    : [
+        { code: 'vacation', label: 'Urlaub' },
+        { code: 'sick', label: 'Krank' },
+        { code: 'away', label: 'Nicht im Haus' },
+      ];
 
   useEffect(() => {
     if (selectedDate) {
@@ -218,15 +266,13 @@ export function TimesPage() {
 
   const onManualAbsence = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    if (!selectedUserId) return;
-    const form = new FormData(e.currentTarget);
+    if (!selectedUserId || !absenceType) return;
     manualAbsence.mutate({
-      start_date: String(form.get('start_date')),
-      end_date: String(form.get('end_date')),
-      type: String(form.get('type')),
-      duration: (form.get('duration') as 'full' | 'half') ?? 'full',
+      start_date: absenceStart,
+      end_date: absenceEnd,
+      type: absenceType,
+      duration: absenceDuration,
     });
-    e.currentTarget.reset();
   };
 
   return (
@@ -273,17 +319,16 @@ export function TimesPage() {
             <div className="flex items-center justify-between mb-2">
               <h3 className="text-lg font-semibold">Kalender</h3>
               <div className="flex gap-3 text-xs text-slate-600 items-center">
-                <span className="flex items-center gap-1">
-                  <span className="h-2 w-2 rounded-full bg-slate-900"></span> korrekt
-                </span>
+                {absenceLegend.map((kind) => (
+                  <span key={kind.code} className="flex items-center gap-1">
+                    <span className={`h-2 w-2 rounded-full ${absenceColor(kind.code)}`}></span> {kind.label}
+                  </span>
+                ))}
                 <span className="flex items-center gap-1">
                   <span className="h-2 w-2 rounded-full bg-rose-600"></span> offen
                 </span>
                 <span className="flex items-center gap-1">
-                  <span className="h-2 w-2 rounded-full bg-amber-500"></span> Urlaub
-                </span>
-                <span className="flex items-center gap-1">
-                  <span className="h-2 w-2 rounded-full bg-slate-500"></span> Nicht im Haus
+                  <span className="h-2 w-2 rounded-full bg-slate-900"></span> korrekt
                 </span>
               </div>
             </div>
@@ -298,6 +343,7 @@ export function TimesPage() {
                 setSelectedDate(value);
                 setManualTimestamp(`${value}T09:00`);
               }}
+              absenceKinds={absenceLegend}
             />
           )}
         </div>
@@ -413,7 +459,7 @@ export function TimesPage() {
             )}
             {dayDetail.data?.absences?.length ? (
               <p className="text-sm text-slate-600">
-                Abwesenheiten: {dayDetail.data.absences.map((a: any) => a.note || a.type).join(', ')}
+                Abwesenheiten: {dayDetail.data.absences.map((a: any) => a.label || a.note || a.type).join(', ')}
                 {dayDetail.data.pending ? ' (Antrag offen)' : ''}
               </p>
             ) : null}
@@ -499,19 +545,41 @@ export function TimesPage() {
                   onChange={(e) => setAbsenceEnd(e.target.value)}
                 />
               </div>
-              <select name="type" className="input w-full">
-                <option value="vacation">Urlaub</option>
-                <option value="sick">Krank</option>
-                <option value="remote">Remote</option>
-                <option value="other">Sonstige</option>
+              <select
+                name="type"
+                className="input w-full"
+                value={absenceType}
+                onChange={(e) => setAbsenceType(e.target.value)}
+              >
+                {absenceOptions.map((kind) => (
+                  <option key={kind.code} value={kind.code}>
+                    {kind.label}
+                  </option>
+                ))}
               </select>
               <div className="flex gap-3 items-center text-sm">
                 <label className="text-slate-600">Umfang</label>
                 <label className="flex items-center gap-1 text-slate-700">
-                  <input type="radio" name="duration" value="full" defaultChecked /> Ganzer Tag
+                  <input
+                    type="radio"
+                    name="duration"
+                    value="full"
+                    checked={absenceDuration === 'full'}
+                    disabled={selectedKind ? selectedKind.allow_full === false : false}
+                    onChange={() => setAbsenceDuration('full')}
+                  />{' '}
+                  Ganzer Tag
                 </label>
                 <label className="flex items-center gap-1 text-slate-700">
-                  <input type="radio" name="duration" value="half" /> Halber Tag
+                  <input
+                    type="radio"
+                    name="duration"
+                    value="half"
+                    checked={absenceDuration === 'half'}
+                    disabled={selectedKind ? selectedKind.allow_half === false : false}
+                    onChange={() => setAbsenceDuration('half')}
+                  />{' '}
+                  Halber Tag
                 </label>
               </div>
               <button className="btn-primary" type="submit" disabled={manualAbsence.isPending}>

@@ -1,19 +1,21 @@
 import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { downloadAttendanceCsv, downloadAttendanceXlsx, fetchAttendance } from '../api';
+import { AttendanceResponse } from '../types';
 
 export function ReportsPage() {
   const [month, setMonth] = useState(() => {
     const now = new Date();
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
   });
-  const { data, isLoading } = useQuery({
+  const { data, isLoading } = useQuery<AttendanceResponse>({
     queryKey: ['reports', 'attendance', month],
     queryFn: () => fetchAttendance(month),
   });
 
   const maxPresence = useMemo(() => {
-    return Math.max(...((data?.rows ?? []).map((r) => r.presenceDays) || [1]));
+    const values = (data?.rows ?? []).map((r) => r.presenceDays);
+    return values.length ? Math.max(...values) : 0;
   }, [data]);
 
   const triggerDownload = async (kind: 'csv' | 'xlsx') => {
@@ -56,10 +58,9 @@ export function ReportsPage() {
                 <tr className="text-left text-slate-500 border-b">
                   <th className="py-2">Name</th>
                   <th>Präsenz</th>
-                  <th>Urlaubstage</th>
-                  <th>Krank</th>
-                  <th>Remote</th>
-                  <th>Sonstige</th>
+                  {(data?.kinds ?? []).map((kind) => (
+                    <th key={kind.code}>{kind.label}</th>
+                  ))}
                   <th>Resturlaub</th>
                 </tr>
               </thead>
@@ -68,10 +69,9 @@ export function ReportsPage() {
                   <tr key={row.user_id} className="border-b hover:bg-slate-50">
                     <td className="py-2 font-medium">{row.name}</td>
                     <td>{row.presenceDays}</td>
-                    <td>{row.vacationDays}</td>
-                    <td>{row.sickDays}</td>
-                    <td>{row.remoteDays}</td>
-                    <td>{row.otherAbsences}</td>
+                    {(data?.kinds ?? []).map((kind) => (
+                      <td key={`${row.user_id}-${kind.code}`}>{row.absences[kind.code] ?? 0}</td>
+                    ))}
                     <td>{row.remainingVacation}</td>
                   </tr>
                 ))}
@@ -87,7 +87,7 @@ export function ReportsPage() {
           <div className="space-y-2">
             {(data?.rows ?? []).map((row) => {
               const presenceWidth = maxPresence ? Math.round((row.presenceDays / maxPresence) * 100) : 0;
-              const vacationWidth = Math.min(100, Math.round(row.vacationDays * 4));
+              const vacationWidth = Math.min(100, Math.round((row.absences['vacation'] ?? 0) * 4));
               return (
                 <div key={row.user_id} className="space-y-1">
                   <div className="flex justify-between text-xs text-slate-600">
@@ -98,9 +98,9 @@ export function ReportsPage() {
                     <div className="h-2 bg-emerald-500" style={{ width: `${presenceWidth}%` }}></div>
                   </div>
                   <div className="flex justify-between text-[11px] text-slate-500">
-                    <span>Urlaub: {row.vacationDays}</span>
-                    <span>Krank: {row.sickDays}</span>
-                    <span>Remote: {row.remoteDays}</span>
+                    {(data?.kinds ?? []).map((kind) => (
+                      <span key={`${row.user_id}-${kind.code}`}>{kind.label}: {row.absences[kind.code] ?? 0}</span>
+                    ))}
                   </div>
                   <div className="h-2 rounded-full bg-amber-100 overflow-hidden">
                     <div className="h-2 bg-amber-500" style={{ width: `${vacationWidth}%` }}></div>

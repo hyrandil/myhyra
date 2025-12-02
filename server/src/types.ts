@@ -90,7 +90,7 @@ export interface Absence {
   user_id: number;
   start_date: string;
   end_date: string;
-  type: 'vacation' | 'sick' | 'remote' | 'other' | 'holiday';
+  type: string;
   duration: 'full' | 'half';
   note?: string | null;
   created_at: string;

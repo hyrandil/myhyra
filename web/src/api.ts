@@ -1,7 +1,7 @@
 import axios from 'axios';
 import {
   AbsenceRequest,
-  AttendanceReport,
+  AttendanceResponse,
   DailySummary,
   DayDetail,
   Department,
@@ -337,7 +337,7 @@ export async function deleteTimeEntry(entryId: number) {
 }
 
 export async function fetchAttendance(month?: string) {
-  const res = await api.get<AttendanceReport>('/reports/attendance', { params: month ? { month } : undefined });
+  const res = await api.get<AttendanceResponse>('/reports/attendance', { params: month ? { month } : undefined });
   return res.data;
 }
 

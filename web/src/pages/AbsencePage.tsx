@@ -134,7 +134,7 @@ export function AbsencePage() {
                           </div>
                         </div>
                         <div className="mt-2 flex gap-2 text-xs">
-                          <details className="w-full" open={!locked}>
+                          <details className="w-full">
                             <summary className="cursor-pointer text-slate-700">Bearbeiten</summary>
                             <form
                               className="grid grid-cols-2 gap-2 mt-2"

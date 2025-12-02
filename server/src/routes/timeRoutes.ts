@@ -134,6 +134,10 @@ function buildDailySummary(userId: number, month?: string, maskAbsences = false)
   const trackingStartDate = trackingStartValue ? new Date(`${trackingStartValue}T00:00:00Z`) : undefined;
   const schedule = getSchedule(userId);
   const planMap = new Map(schedule.map((entry) => [entry.weekday, entry.minutes]));
+  const absenceKinds = db
+    .prepare('SELECT code, label, counts_as_work FROM absence_kinds ORDER BY label ASC')
+    .all() as { code: string; label: string; counts_as_work: number }[];
+  const absenceKindMap = new Map(absenceKinds.map((k) => [k.code, k]));
 
   const entryRows = db
     .prepare('SELECT * FROM time_entries WHERE user_id = ? AND date(timestamp) <= ?')
@@ -238,7 +242,7 @@ function buildDailySummary(userId: number, month?: string, maskAbsences = false)
     if (abs.some((a) => (a as any).type === 'holiday')) return 'holiday';
     if (abs.some((a) => a.type === 'vacation')) return 'vacation';
     if (abs.some((a) => a.type === 'sick')) return 'sick';
-    if (abs.some((a) => a.type === 'remote' || a.type === 'other')) return 'away';
+    if (abs.length > 0) return 'away';
     if (pending) return 'pending';
     if (entries.length === 0) return 'empty';
     if (hasInconsistent(entries)) return 'inconsistent';
@@ -291,11 +295,12 @@ function buildDailySummary(userId: number, month?: string, maskAbsences = false)
     absencesForDay.forEach((absence) => {
       const factor = absence.duration === 'half' ? 0.5 : 1;
       const target = Math.round(planned * factor);
+      const kind = absenceKindMap.get(absence.type);
       if ((absence as any).type === 'holiday') {
         creditHoliday += target;
       } else if (absence.type === 'vacation') {
         creditVacation += target;
-      } else {
+      } else if (kind?.counts_as_work) {
         const covered = baseWork + creditVacation + creditHoliday + topUpOther;
         const topUp = Math.max(target - covered, 0);
         topUpOther += topUp;
@@ -315,11 +320,13 @@ function buildDailySummary(userId: number, month?: string, maskAbsences = false)
       : statusForDay(entries, absencesForDay, hasPending);
     const absenceLabels: string[] = absencesForDay.map((a) => {
       if ((a as any).type === 'holiday') return a.note ?? 'Feiertag';
+      if (maskAbsences) return a.type === 'vacation' ? 'Urlaub' : 'Nicht im Haus';
       if (a.type === 'vacation') return 'Urlaub';
-      if (maskAbsences) return 'Nicht im Haus';
+      const kind = absenceKindMap.get(a.type);
+      if (kind) return kind.label;
       if (a.type === 'sick') return 'Krank';
       if (a.type === 'remote') return 'Remote';
-      return 'Sonstige';
+      return a.type;
     });
     if (hasPending) {
       absenceLabels.push('pending');
@@ -457,6 +464,13 @@ router.get('/user/:userId/day', authorize(['admin', 'hr', 'lead']), (req: AuthRe
   const pending = db
     .prepare("SELECT * FROM absence_requests WHERE user_id = ? AND status = 'pending' AND start_date <= ? AND end_date >= ?")
     .all(userId, date, date) as any[];
+  const kindMap = new Map(
+    (db.prepare('SELECT code, label FROM absence_kinds').all() as { code: string; label: string }[]).map((k) => [k.code, k.label])
+  );
+  const enrichedAbsences = [...absences, ...holidays].map((a) => ({
+    ...a,
+    label: (a as any).type === 'holiday' ? a.note ?? 'Feiertag' : kindMap.get(a.type) ?? a.type,
+  }));
   const stats = computeDayWorkStats(entries);
   const inconsistent = ((): boolean => {
     const sorted = [...entries].sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
@@ -482,7 +496,7 @@ router.get('/user/:userId/day', authorize(['admin', 'hr', 'lead']), (req: AuthRe
 
   res.json({
     entries,
-    absences: [...absences, ...holidays],
+    absences: enrichedAbsences,
     pending: pending.length > 0,
     autoBreakMinutes: stats.autoDeduction,
     recordedBreakMinutes: stats.recordedBreakMinutes,

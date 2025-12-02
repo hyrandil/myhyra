@@ -58,7 +58,7 @@ export interface DailySummary {
 
 export interface DayDetail {
   entries: TimeEntry[];
-  absences: { type: string; duration?: string; note?: string | null }[];
+  absences: { type: string; duration?: string; note?: string | null; label?: string }[];
   pending: boolean;
   autoBreakMinutes?: number;
   recordedBreakMinutes?: number;
@@ -71,6 +71,32 @@ export interface InconsistentDay {
   user: string;
   date: string;
   entries: TimeEntry[];
+}
+
+export interface AbsenceKind {
+  id?: number;
+  code: string;
+  label: string;
+  counts_as_work: boolean;
+  allow_full?: boolean;
+  allow_half?: boolean;
+  allow_hourly?: boolean;
+  locked?: boolean;
+}
+
+export interface AttendanceRow {
+  user_id: number;
+  name: string;
+  email: string;
+  presenceDays: number;
+  absences: Record<string, number>;
+  remainingVacation: number;
+}
+
+export interface AttendanceResponse {
+  month: string;
+  kinds: { code: string; label: string; counts_as_work: number }[];
+  rows: AttendanceRow[];
 }
 
 export interface HolidayProfile {
@@ -99,19 +125,3 @@ export interface AbsenceRequest {
   user_name?: string;
 }
 
-export interface AttendanceRow {
-  user_id: number;
-  name: string;
-  email: string;
-  presenceDays: number;
-  vacationDays: number;
-  sickDays: number;
-  remoteDays: number;
-  otherAbsences: number;
-  remainingVacation: number;
-}
-
-export interface AttendanceReport {
-  month: string;
-  rows: AttendanceRow[];
-}
