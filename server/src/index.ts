@@ -1,5 +1,5 @@
 import express from 'express';
-import cors from 'cors';
+import cors, { CorsOptionsDelegate } from 'cors';
 import bodyParser from 'body-parser';
 import session from 'express-session';
 import { PORT, SESSION_SECRET, WEB_ORIGINS } from './config';
@@ -15,18 +15,27 @@ import './db';
 
 const app = express();
 app.set('trust proxy', 1);
-app.use(
-  cors({
-    origin: (origin, callback) => {
-      if (!origin) return callback(null, true);
-      if (WEB_ORIGINS.includes(origin)) return callback(null, true);
-      // Allow common dev hosts on port 5173 (e.g., LAN IPs)
-      if (/^https?:\/\/[^:]+:5173$/.test(origin)) return callback(null, true);
-      return callback(new Error('Not allowed by CORS'));
-    },
-    credentials: true,
-  })
-);
+
+const corsDelegate: CorsOptionsDelegate = (req, callback) => {
+  const origin = req.headers.origin as string | undefined;
+  const host = req.headers.host;
+
+  // Always allow same-origin / server-to-server calls
+  if (!origin) return callback(null, { origin: true, credentials: true });
+
+  if (WEB_ORIGINS.includes(origin)) return callback(null, { origin: true, credentials: true });
+
+  // Allow common dev hosts on port 5173 (e.g., LAN IPs)
+  if (/^https?:\/\/[^:]+:5173$/.test(origin))
+    return callback(null, { origin: true, credentials: true });
+
+  // Allow reverse-proxied requests where Origin matches the incoming host header
+  if (host && origin.includes(host)) return callback(null, { origin: true, credentials: true });
+
+  return callback(new Error('Not allowed by CORS'));
+};
+
+app.use(cors(corsDelegate));
 app.use(
   session({
     name: 'sid',
