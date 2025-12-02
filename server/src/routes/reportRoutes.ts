@@ -100,12 +100,6 @@ const buildAttendance = (monthParam?: string) => {
 
   const allowanceMap = new Map(settings.map((item) => [item.user_id, item.vacation_allowance]));
   const presenceMap = new Map<number, Set<string>>();
-  bookings.forEach((row) => {
-    if (!presenceMap.has(row.user_id)) {
-      presenceMap.set(row.user_id, new Set());
-    }
-    presenceMap.get(row.user_id)!.add(row.work_day);
-  });
 
   type AbsenceBucket = {
     vacation: number;
@@ -115,6 +109,7 @@ const buildAttendance = (monthParam?: string) => {
   };
   const absenceMap = new Map<number, AbsenceBucket>();
   const absenceUsage = new Map<number, AbsenceDayUsage>();
+  const absenceDays = new Map<number, Set<string>>();
 
   const scheduleCache = new Map<number, WorkScheduleEntry[]>();
 
@@ -145,6 +140,16 @@ const buildAttendance = (monthParam?: string) => {
 
   absences.forEach((row) => addAbsence(row.user_id, row.type as keyof AbsenceDayUsage, row.duration, row.start_date, row.end_date));
 
+  absences.forEach((row) => {
+    if (!scheduleCache.has(row.user_id)) {
+      scheduleCache.set(row.user_id, scheduleForUser(row.user_id));
+    }
+    const schedule = scheduleCache.get(row.user_id)!;
+    const days = workingDatesBetween(row.start_date, row.end_date, schedule);
+    if (!absenceDays.has(row.user_id)) absenceDays.set(row.user_id, new Set());
+    days.forEach((day) => absenceDays.get(row.user_id)!.add(day));
+  });
+
   const sumDays = (map: Map<string, number>) => {
     let total = 0;
     map.forEach((value) => {
@@ -160,6 +165,15 @@ const buildAttendance = (monthParam?: string) => {
     bucket.remote = sumDays(usage.remote);
     bucket.other = sumDays(usage.other);
     absenceMap.set(userId, bucket);
+  });
+
+  bookings.forEach((row) => {
+    const blocked = absenceDays.get(row.user_id);
+    if (blocked && blocked.has(row.work_day)) return;
+    if (!presenceMap.has(row.user_id)) {
+      presenceMap.set(row.user_id, new Set());
+    }
+    presenceMap.get(row.user_id)!.add(row.work_day);
   });
 
   const rows = users.map((user) => {

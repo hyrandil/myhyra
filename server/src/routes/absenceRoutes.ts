@@ -8,11 +8,24 @@ import { canManageUser, managedDepartments } from '../utils/permissions';
 const router = Router();
 const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
 
+type AbsenceKind = {
+  id: number;
+  code: string;
+  label: string;
+  counts_as_work: number;
+  allow_full: number;
+  allow_half: number;
+  allow_hourly: number;
+};
+
+const absenceKindByCode = (code: string): AbsenceKind | undefined =>
+  db.prepare('SELECT * FROM absence_kinds WHERE code = ?').get(code) as AbsenceKind | undefined;
+
 const absenceSchema = z
   .object({
     start_date: z.string().regex(dateRegex, 'Datum muss im Format YYYY-MM-DD vorliegen'),
     end_date: z.string().regex(dateRegex, 'Datum muss im Format YYYY-MM-DD vorliegen'),
-    type: z.enum(['vacation', 'sick', 'remote', 'other']).default('vacation'),
+    type: z.string().min(2),
     duration: z.enum(['full', 'half']).default('full'),
     note: z.string().max(255).optional().or(z.literal('')).transform((value) => value || undefined),
   })
@@ -25,7 +38,7 @@ const absenceRequestSchema = z
   .object({
     start_date: z.string().regex(dateRegex),
     end_date: z.string().regex(dateRegex),
-    type: z.enum(['vacation', 'sick', 'remote', 'other']).default('vacation'),
+    type: z.string().min(2),
     comment: z.string().max(255).optional().or(z.literal('')).transform((value) => value || undefined),
   })
   .refine((value) => value.start_date <= value.end_date, {
@@ -44,6 +57,14 @@ const parseDate = (value: string) => {
 const formatDate = (date: Date) => date.toISOString().slice(0, 10);
 
 const weekdayFromDate = (date: Date) => (date.getUTCDay() + 6) % 7; // Monday = 0
+
+function validateKind(type: string, duration: 'full' | 'half') {
+  const kind = absenceKindByCode(type);
+  if (!kind) return { ok: false, message: 'Unbekannte Abwesenheitsart' } as const;
+  if (duration === 'half' && !kind.allow_half) return { ok: false, message: 'Halbtage sind für diese Art nicht erlaubt' } as const;
+  if (duration === 'full' && !kind.allow_full) return { ok: false, message: 'Ganze Tage sind für diese Art nicht erlaubt' } as const;
+  return { ok: true, kind } as const;
+}
 
 const userExists = (userId: number) => Boolean(db.prepare('SELECT id FROM users WHERE id = ?').get(userId));
 
@@ -106,12 +127,53 @@ const buildVacationUsage = (absences: Absence[], schedule: WorkScheduleEntry[]) 
 
 router.use(requireAuth);
 
+router.get('/kinds', (req: AuthRequest, res) => {
+  const kinds = db
+    .prepare(
+      'SELECT id, code, label, counts_as_work, allow_full, allow_half, allow_hourly FROM absence_kinds ORDER BY label ASC'
+    )
+    .all();
+  res.json(kinds);
+});
+
+router.post('/kinds', authorize(['admin', 'hr']), (req: AuthRequest, res) => {
+  const parsed = z
+    .object({
+      code: z.string().min(2),
+      label: z.string().min(2),
+      counts_as_work: z.boolean(),
+      allow_full: z.boolean().default(true),
+      allow_half: z.boolean().default(true),
+      allow_hourly: z.boolean().default(false),
+    })
+    .safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ errors: parsed.error.format() });
+  const { code, label, counts_as_work, allow_full, allow_half, allow_hourly } = parsed.data;
+  try {
+    const result = db
+      .prepare(
+        `INSERT INTO absence_kinds (code, label, counts_as_work, allow_full, allow_half, allow_hourly)
+         VALUES (?, ?, ?, ?, ?, ?)`
+      )
+      .run(code, label, counts_as_work ? 1 : 0, allow_full ? 1 : 0, allow_half ? 1 : 0, allow_hourly ? 1 : 0);
+    const created = db.prepare('SELECT * FROM absence_kinds WHERE id = ?').get(result.lastInsertRowid);
+    return res.status(201).json(created);
+  } catch (error: any) {
+    if (String(error?.message || '').includes('UNIQUE')) {
+      return res.status(409).json({ message: 'Code bereits vorhanden' });
+    }
+    throw error;
+  }
+});
+
 router.post('/request', (req: AuthRequest, res) => {
   const parsed = absenceRequestSchema.safeParse(req.body);
   if (!parsed.success) {
     return res.status(400).json({ errors: parsed.error.format() });
   }
   const { start_date, end_date, type, comment } = parsed.data;
+  const validation = validateKind(type, 'full');
+  if (!validation.ok) return res.status(400).json({ message: validation.message });
   const stmt = db.prepare(
     `INSERT INTO absence_requests (user_id, start_date, end_date, type, status, comment, created_by)
      VALUES (?, ?, ?, ?, 'pending', ?, ?)`
@@ -296,6 +358,8 @@ router.post('/user/:userId', (req: AuthRequest, res) => {
     return res.status(400).json({ errors: parsed.error.format() });
   }
   const { start_date, end_date, type, duration, note } = parsed.data;
+  const validation = validateKind(type, duration);
+  if (!validation.ok) return res.status(400).json({ message: validation.message });
   const schedule = getSchedule(userId);
   db.prepare('DELETE FROM absences WHERE user_id = ? AND NOT (end_date < ? OR start_date > ?)').run(
     userId,

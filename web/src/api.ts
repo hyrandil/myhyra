@@ -236,6 +236,23 @@ export async function createAbsenceRequest(data: { start_date: string; end_date:
   return res.data;
 }
 
+export async function fetchAbsenceKinds() {
+  const res = await api.get('/absences/kinds');
+  return res.data;
+}
+
+export async function createAbsenceKind(payload: {
+  code: string;
+  label: string;
+  counts_as_work: boolean;
+  allow_full?: boolean;
+  allow_half?: boolean;
+  allow_hourly?: boolean;
+}) {
+  const res = await api.post('/absences/kinds', payload);
+  return res.data;
+}
+
 export async function fetchMyAbsenceRequests() {
   const res = await api.get<AbsenceRequest[]>('/absences/requests/me');
   return res.data;

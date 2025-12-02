@@ -1,5 +1,12 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { createAbsenceRequest, fetchAbsenceInbox, fetchMyAbsenceRequests, updateAbsenceStatus } from '../api';
+import {
+  createAbsenceKind,
+  createAbsenceRequest,
+  fetchAbsenceInbox,
+  fetchAbsenceKinds,
+  fetchMyAbsenceRequests,
+  updateAbsenceStatus,
+} from '../api';
 import { useAuth } from '../AuthProvider';
 
 export function AbsencePage() {
@@ -11,6 +18,7 @@ export function AbsencePage() {
     queryFn: fetchAbsenceInbox,
     enabled: auth.hasRole('lead', 'hr', 'admin'),
   });
+  const kinds = useQuery({ queryKey: ['absence', 'kinds'], queryFn: fetchAbsenceKinds });
 
   const createMutation = useMutation({
     mutationFn: createAbsenceRequest,
@@ -20,6 +28,11 @@ export function AbsencePage() {
   const statusMutation = useMutation({
     mutationFn: ({ id, status }: { id: number; status: 'approved' | 'rejected' }) => updateAbsenceStatus(id, status),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['absence'] }),
+  });
+
+  const kindMutation = useMutation({
+    mutationFn: createAbsenceKind,
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['absence', 'kinds'] }),
   });
 
   const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
@@ -60,10 +73,11 @@ export function AbsencePage() {
             <label className="block text-sm">
               Art
               <select name="type" className="input mt-1">
-                <option value="vacation">Urlaub</option>
-                <option value="sick">Krank</option>
-                <option value="remote">Remote</option>
-                <option value="other">Sonstiges</option>
+                {(kinds.data ?? []).map((kind: any) => (
+                  <option key={kind.code} value={kind.code}>
+                    {kind.label}
+                  </option>
+                ))}
               </select>
             </label>
             <label className="block text-sm">
@@ -77,6 +91,68 @@ export function AbsencePage() {
         </div>
 
         <div className="card p-4 lg:col-span-2">
+          {auth.hasRole('hr', 'admin') && (
+            <div className="mb-4 grid gap-3 sm:grid-cols-2">
+              <div className="p-3 rounded-lg border border-slate-200 bg-white">
+                <h4 className="font-semibold mb-2">Abwesenheitsarten</h4>
+                <ul className="space-y-2 text-sm">
+                  {(kinds.data ?? []).map((kind: any) => (
+                    <li key={kind.code} className="flex items-center justify-between">
+                      <div>
+                        <p className="font-medium">{kind.label}</p>
+                        <p className="text-xs text-slate-500">{kind.code} · {kind.counts_as_work ? 'Arbeitszeit' : 'Keine Arbeitszeit'}</p>
+                      </div>
+                      <div className="text-xs text-slate-500">{kind.allow_full ? 'Ganztag ' : ''}{kind.allow_half ? 'Halb ' : ''}{kind.allow_hourly ? 'Stundenweise' : ''}</div>
+                    </li>
+                  ))}
+                  {(kinds.data ?? []).length === 0 && <li className="text-slate-500 text-sm">Keine Arten konfiguriert.</li>}
+                </ul>
+              </div>
+              <form
+                className="p-3 rounded-lg border border-slate-200 bg-white space-y-2"
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  const data = new FormData(e.currentTarget);
+                  kindMutation.mutate({
+                    code: String(data.get('code')),
+                    label: String(data.get('label')),
+                    counts_as_work: Boolean(data.get('counts_as_work')),
+                    allow_full: Boolean(data.get('allow_full')),
+                    allow_half: Boolean(data.get('allow_half')),
+                    allow_hourly: Boolean(data.get('allow_hourly')),
+                  });
+                  e.currentTarget.reset();
+                }}
+              >
+                <h4 className="font-semibold">Neue Abwesenheitsart</h4>
+                <div className="grid grid-cols-2 gap-2 text-sm">
+                  <label className="block">
+                    Code
+                    <input name="code" required className="input mt-1" />
+                  </label>
+                  <label className="block">
+                    Name
+                    <input name="label" required className="input mt-1" />
+                  </label>
+                  <label className="flex items-center gap-2 text-sm">
+                    <input type="checkbox" name="counts_as_work" defaultChecked /> Arbeitszeit
+                  </label>
+                  <label className="flex items-center gap-2 text-sm">
+                    <input type="checkbox" name="allow_full" defaultChecked /> Ganztags
+                  </label>
+                  <label className="flex items-center gap-2 text-sm">
+                    <input type="checkbox" name="allow_half" defaultChecked /> Halbtags
+                  </label>
+                  <label className="flex items-center gap-2 text-sm">
+                    <input type="checkbox" name="allow_hourly" /> Stundenweise
+                  </label>
+                </div>
+                <button className="btn-primary w-full" type="submit" disabled={kindMutation.isPending}>
+                  Speichern
+                </button>
+              </form>
+            </div>
+          )}
           <h3 className="font-semibold mb-2">Eigene Anträge</h3>
           <div className="grid md:grid-cols-2 gap-3">
             {(myRequests.data ?? []).map((req) => (

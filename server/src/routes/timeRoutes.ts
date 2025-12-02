@@ -221,6 +221,16 @@ function buildDailySummary(userId: number, month?: string, maskAbsences = false)
         return true;
       }
     }
+    if (sorted.length > 0) {
+      const last = sorted[sorted.length - 1]!;
+      const day = last.timestamp.slice(0, 10);
+      const now = new Date();
+      const yesterday = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - 1));
+      const dayDate = new Date(`${day}T00:00:00Z`);
+      if (last.type !== 'CLOCK_OUT' && dayDate.getTime() <= yesterday.getTime()) {
+        return true;
+      }
+    }
     return false;
   };
 
@@ -460,6 +470,13 @@ router.get('/user/:userId/day', authorize(['admin', 'hr', 'lead']), (req: AuthRe
         return true;
       }
     }
+    const last = sorted[sorted.length - 1];
+    if (last) {
+      const day = new Date(`${date}T00:00:00Z`);
+      const now = new Date();
+      const yesterday = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - 1));
+      if (last.type !== 'CLOCK_OUT' && day.getTime() <= yesterday.getTime()) return true;
+    }
     return false;
   })();
 
@@ -520,7 +537,7 @@ router.get('/inconsistent', (req: AuthRequest, res) => {
     grouped[key] = list;
   });
 
-  const hasInconsistent = (entries: TimeEntry[]) => {
+  const hasInconsistent = (entries: TimeEntry[], day: string) => {
     for (let i = 1; i < entries.length; i += 1) {
       const prev = entries[i - 1]!;
       const curr = entries[i]!;
@@ -531,11 +548,21 @@ router.get('/inconsistent', (req: AuthRequest, res) => {
         return true;
       }
     }
+    const now = new Date();
+    const yesterday = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - 1));
+    const dayDate = new Date(`${day}T00:00:00Z`);
+    const last = entries[entries.length - 1];
+    if (last && last.type !== 'CLOCK_OUT' && dayDate.getTime() <= yesterday.getTime()) {
+      return true;
+    }
     return false;
   };
 
   const results = Object.entries(grouped)
-    .filter(([, entries]) => hasInconsistent(entries))
+    .filter(([key, entries]) => {
+      const [, date] = key.split('-');
+      return hasInconsistent(entries, date ?? '');
+    })
     .map(([key, entries]) => {
       const [userIdStr, date] = key.split('-');
       const userId = Number(userIdStr);

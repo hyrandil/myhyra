@@ -86,11 +86,22 @@ CREATE TABLE IF NOT EXISTS absences (
   start_date TEXT NOT NULL,
   end_date TEXT NOT NULL,
   date TEXT,
-  type TEXT NOT NULL CHECK(type IN ('vacation','sick','remote','other')),
+  type TEXT NOT NULL,
   duration TEXT NOT NULL CHECK(duration IN ('full','half')),
   note TEXT,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS absence_kinds (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  code TEXT NOT NULL UNIQUE,
+  label TEXT NOT NULL,
+  counts_as_work INTEGER NOT NULL DEFAULT 1,
+  allow_full INTEGER NOT NULL DEFAULT 1,
+  allow_half INTEGER NOT NULL DEFAULT 1,
+  allow_hourly INTEGER NOT NULL DEFAULT 0,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE TABLE IF NOT EXISTS user_profiles (
@@ -206,6 +217,15 @@ ensureTableColumn('user_profiles', 'work_model_id', 'work_model_id INTEGER');
 ensureTableColumn('user_profiles', 'holiday_profile_id', 'holiday_profile_id INTEGER');
 ensureTableColumn('user_profiles', 'start_date', 'start_date TEXT');
 ensureTableColumn('user_profiles', 'end_date', 'end_date TEXT');
+db.exec(`
+  INSERT OR IGNORE INTO absence_kinds (code, label, counts_as_work, allow_full, allow_half, allow_hourly)
+  VALUES
+    ('vacation', 'Urlaub', 1, 1, 1, 0),
+    ('sick', 'Krankheit', 1, 1, 1, 1),
+    ('remote', 'Remote', 1, 1, 1, 0),
+    ('other', 'Sonstige', 0, 1, 1, 0),
+    ('flex', 'Gleitzeit', 0, 1, 1, 1)
+`);
 
 function ensureAdminUser() {
   const existing = db.prepare('SELECT id FROM users WHERE email = ?').get(ADMIN_EMAIL) as
