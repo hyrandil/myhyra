@@ -19,6 +19,7 @@ app.set('trust proxy', 1);
 const corsDelegate: CorsOptionsDelegate = (req, callback) => {
   const origin = req.headers.origin as string | undefined;
   const host = req.headers.host;
+  const forwardedHost = req.headers['x-forwarded-host'] as string | undefined;
 
   // Always allow same-origin / server-to-server calls
   if (!origin) return callback(null, { origin: true, credentials: true });
@@ -30,7 +31,17 @@ const corsDelegate: CorsOptionsDelegate = (req, callback) => {
     return callback(null, { origin: true, credentials: true });
 
   // Allow reverse-proxied requests where Origin matches the incoming host header
-  if (host && origin.includes(host)) return callback(null, { origin: true, credentials: true });
+  const originHost = (() => {
+    try {
+      return new URL(origin).host;
+    } catch (err) {
+      return undefined;
+    }
+  })();
+
+  const allowedHosts = [host, forwardedHost].filter(Boolean);
+  if (originHost && allowedHosts.some((h) => h && (h === originHost || originHost.includes(h))))
+    return callback(null, { origin: true, credentials: true });
 
   return callback(new Error('Not allowed by CORS'));
 };
