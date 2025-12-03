@@ -338,6 +338,16 @@ CREATE TABLE IF NOT EXISTS time_correction_requests (
 );
 `);
 
+db.exec(`
+CREATE TABLE IF NOT EXISTS time_correction_entries (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  request_id INTEGER NOT NULL,
+  timestamp TEXT NOT NULL,
+  type TEXT NOT NULL CHECK(type IN ('CLOCK_IN','CLOCK_OUT')),
+  FOREIGN KEY(request_id) REFERENCES time_correction_requests(id) ON DELETE CASCADE
+);
+`);
+
 if (adminId) {
   ensureProfile(adminId);
   ensureSchedule(adminId);

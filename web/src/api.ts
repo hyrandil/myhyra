@@ -355,7 +355,7 @@ export async function deleteTimeEntry(entryId: number) {
   await api.delete(`/time/entry/${entryId}`);
 }
 
-export async function createTimeCorrectionRequest(payload: { date: string; note?: string }) {
+export async function createTimeCorrectionRequest(payload: { date: string; note?: string; entries?: { timestamp: string; type: 'CLOCK_IN' | 'CLOCK_OUT' }[] }) {
   const res = await api.post('/time/corrections', payload);
   return res.data;
 }

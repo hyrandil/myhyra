@@ -978,27 +978,42 @@ router.delete('/entry/:entryId', authorize(['admin', 'hr', 'lead']), (req: AuthR
   res.status(204).send();
 });
 
+const correctionEntrySchema = z.object({
+  timestamp: z.string().min(5),
+  type: z.enum(['CLOCK_IN', 'CLOCK_OUT']),
+});
+
 const correctionSchema = z.object({
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   note: z.string().max(500).optional().or(z.literal('')).transform((v) => v || undefined),
+  entries: z.array(correctionEntrySchema).default([]),
 });
+
+const loadCorrectionEntries = (requestId: number) =>
+  (db
+    .prepare('SELECT id, timestamp, type FROM time_correction_entries WHERE request_id = ? ORDER BY timestamp ASC')
+    .all(requestId) as any[]).map((entry) => ({ ...entry }));
 
 router.post('/corrections', requireAuth, (req: AuthRequest, res) => {
   const parsed = correctionSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ errors: parsed.error.format() });
-  const { date, note } = parsed.data;
+  const { date, note, entries } = parsed.data;
   const result = db
     .prepare('INSERT INTO time_correction_requests (user_id, date, note) VALUES (?, ?, ?)')
     .run(req.user!.id, date, note ?? null);
-  const created = db.prepare('SELECT * FROM time_correction_requests WHERE id = ?').get(result.lastInsertRowid);
-  res.status(201).json(created);
+  const created = db.prepare('SELECT * FROM time_correction_requests WHERE id = ?').get(result.lastInsertRowid) as any;
+  const insertEntry = db.prepare(
+    'INSERT INTO time_correction_entries (request_id, timestamp, type) VALUES (?, ?, ?)' // timestamp already ISO/local string
+  );
+  entries.forEach((entry) => insertEntry.run(created.id, entry.timestamp, entry.type));
+  res.status(201).json({ ...created, entries: loadCorrectionEntries(created.id) });
 });
 
 router.get('/corrections/me', requireAuth, (req: AuthRequest, res) => {
   const rows = db
     .prepare('SELECT * FROM time_correction_requests WHERE user_id = ? ORDER BY date DESC, created_at DESC')
     .all(req.user!.id);
-  res.json(rows);
+  res.json(rows.map((row: any) => ({ ...row, entries: loadCorrectionEntries(row.id) })));
 });
 
 router.get('/corrections/inbox', authorize(['admin', 'hr', 'lead']), (req: AuthRequest, res) => {
@@ -1012,7 +1027,7 @@ router.get('/corrections/inbox', authorize(['admin', 'hr', 'lead']), (req: AuthR
          ORDER BY tcr.date DESC, tcr.created_at DESC`
       )
       .all();
-    return res.json(rows);
+    return res.json(rows.map((row: any) => ({ ...row, entries: loadCorrectionEntries(row.id) })));
   }
   const allowedDepartments = managedDepartments(req.user!.id);
   if (allowedDepartments.length === 0) return res.json([]);
@@ -1027,7 +1042,7 @@ router.get('/corrections/inbox', authorize(['admin', 'hr', 'lead']), (req: AuthR
        ORDER BY tcr.date DESC, tcr.created_at DESC`
     )
     .all(...allowedDepartments);
-  res.json(rows);
+  res.json(rows.map((row: any) => ({ ...row, entries: loadCorrectionEntries(row.id) })));
 });
 
 router.patch('/corrections/:id/status', authorize(['admin', 'hr', 'lead']), (req: AuthRequest, res) => {
@@ -1036,18 +1051,30 @@ router.patch('/corrections/:id/status', authorize(['admin', 'hr', 'lead']), (req
   const parsed = z.enum(['approved', 'rejected']).safeParse(req.body?.status);
   if (!parsed.success) return res.status(400).json({ message: 'Status ungültig' });
   const row = db
-    .prepare('SELECT user_id FROM time_correction_requests WHERE id = ?')
-    .get(id) as { user_id: number } | undefined;
+    .prepare('SELECT * FROM time_correction_requests WHERE id = ?')
+    .get(id) as { user_id: number; status: string } | undefined;
   if (!row) return res.status(404).json({ message: 'Antrag nicht gefunden' });
   if (req.user!.role !== 'admin' && req.user!.role !== 'hr') {
     if (!ensureManageable(req, res, row.user_id)) return;
   }
-  db.prepare('UPDATE time_correction_requests SET status = ?, handled_by = ? WHERE id = ?').run(
-    parsed.data,
-    req.user!.id,
-    id
-  );
-  res.json({ message: 'Aktualisiert' });
+
+  const entries = loadCorrectionEntries(id);
+  const transaction = db.transaction(() => {
+    db.prepare('UPDATE time_correction_requests SET status = ?, handled_by = ? WHERE id = ?').run(
+      parsed.data,
+      req.user!.id,
+      id
+    );
+    if (parsed.data === 'approved' && row.status !== 'approved') {
+      const insertEntry = db.prepare(
+        'INSERT INTO time_entries (user_id, timestamp, type, source) VALUES (?, ?, ?, ?)' // stored as provided (local/ISO)
+      );
+      entries.forEach((entry) => insertEntry.run(row.user_id, entry.timestamp, entry.type, 'CORRECTION'));
+    }
+  });
+  transaction();
+  const updated = db.prepare('SELECT * FROM time_correction_requests WHERE id = ?').get(id) as any;
+  res.json({ ...(updated || {}), entries });
 });
 
 export default router;

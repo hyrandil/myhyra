@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useState } from 'react';
 import {
   createAbsenceRequest,
   fetchAbsenceInbox,
@@ -17,6 +18,9 @@ import { AbsenceRequest, TimeCorrectionRequest } from '../types';
 export function RequestsPage() {
   const auth = useAuth();
   const queryClient = useQueryClient();
+  const [correctionRows, setCorrectionRows] = useState<{ time: string; type: 'CLOCK_IN' | 'CLOCK_OUT' }[]>([
+    { time: '', type: 'CLOCK_IN' },
+  ]);
 
   const kinds = useQuery({ queryKey: ['absence', 'kinds'], queryFn: fetchAbsenceKinds });
   const myRequests = useQuery({ queryKey: ['absence', 'mine'], queryFn: fetchMyAbsenceRequests });
@@ -93,8 +97,13 @@ export function RequestsPage() {
   const handleCorrectionSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const form = new FormData(e.currentTarget);
-    correctionCreate.mutate({ date: String(form.get('date')), note: String(form.get('note') || '') });
+    const date = String(form.get('date'));
+    const entries = correctionRows
+      .filter((row) => row.time)
+      .map((row) => ({ timestamp: `${date}T${row.time}`, type: row.type }));
+    correctionCreate.mutate({ date, note: String(form.get('note') || ''), entries });
     e.currentTarget.reset();
+    setCorrectionRows([{ time: '', type: 'CLOCK_IN' }]);
   };
 
   const cancelable = (myRequests.data ?? []).filter(
@@ -184,6 +193,56 @@ export function RequestsPage() {
               Beschreibung
               <textarea name="note" className="input mt-1" placeholder="z.B. Kommen 08:00 ergänzen" />
             </label>
+            <div className="md:col-span-2 space-y-2">
+              <div className="flex items-center justify-between">
+                <p className="text-sm font-semibold text-slate-700">Geplante Buchungen</p>
+                <button
+                  className="btn-ghost text-sky-700"
+                  type="button"
+                  onClick={() => setCorrectionRows((rows) => [...rows, { time: '', type: 'CLOCK_IN' }])}
+                >
+                  + Buchung
+                </button>
+              </div>
+              <div className="space-y-2">
+                {correctionRows.map((row, idx) => (
+                  <div key={idx} className="grid grid-cols-5 gap-2 items-end">
+                    <label className="text-xs col-span-3">
+                      Uhrzeit
+                      <input
+                        type="time"
+                        className="input mt-1"
+                        value={row.time}
+                        onChange={(e) =>
+                          setCorrectionRows((rows) =>
+                            rows.map((r, rIdx) => (rIdx === idx ? { ...r, time: e.target.value } : r))
+                          )
+                        }
+                        required
+                      />
+                    </label>
+                    <label className="text-xs col-span-2">
+                      Typ
+                      <select
+                        className="input mt-1"
+                        value={row.type}
+                        onChange={(e) =>
+                          setCorrectionRows((rows) =>
+                            rows.map((r, rIdx) =>
+                              rIdx === idx ? { ...r, type: e.target.value as 'CLOCK_IN' | 'CLOCK_OUT' } : r
+                            )
+                          )
+                        }
+                      >
+                        <option value="CLOCK_IN">Kommen</option>
+                        <option value="CLOCK_OUT">Gehen</option>
+                      </select>
+                    </label>
+                  </div>
+                ))}
+              </div>
+              <p className="text-xs text-slate-500">Die Einträge werden erst nach Genehmigung eingebucht.</p>
+            </div>
             <div className="md:col-span-2">
               <button className="btn-primary" type="submit" disabled={correctionCreate.isPending}>
                 Korrektur absenden
@@ -201,6 +260,16 @@ export function RequestsPage() {
                   <span className="badge bg-slate-200 text-slate-700">{item.status}</span>
                 </div>
                 {item.note && <p className="text-xs text-slate-600 mt-1">{item.note}</p>}
+                {item.entries?.length ? (
+                  <ul className="mt-1 text-xs text-slate-600 space-y-0.5">
+                    {item.entries.map((entry: any, idx: number) => (
+                      <li key={`${entry.id ?? idx}-${entry.timestamp}`}>
+                        {new Date(entry.timestamp).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })} ·{' '}
+                        {entry.type === 'CLOCK_IN' ? 'Kommen' : 'Gehen'}
+                      </li>
+                    ))}
+                  </ul>
+                ) : null}
               </div>
             ))}
             {(myCorrections.data ?? []).length === 0 && <p className="text-slate-500 text-sm">Keine Korrekturen vorhanden.</p>}
@@ -283,6 +352,18 @@ export function RequestsPage() {
                   <span className="badge bg-slate-200 text-slate-700">{item.status}</span>
                 </div>
                 {item.note && <p className="text-xs text-slate-600 mt-1">{item.note}</p>}
+                {item.entries?.length ? (
+                  <ul className="mt-2 text-xs text-slate-600 space-y-1">
+                    {item.entries.map((entry, idx) => (
+                      <li key={`${entry.id ?? idx}-${entry.timestamp}`} className="flex items-center justify-between">
+                        <span>
+                          {new Date(entry.timestamp).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })} ·{' '}
+                          {entry.type === 'CLOCK_IN' ? 'Kommen' : 'Gehen'}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                ) : null}
                 <div className="flex gap-2 mt-2">
                   <button
                     className="btn-primary px-3 py-1"
