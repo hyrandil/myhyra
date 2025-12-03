@@ -20,11 +20,11 @@ function formatStamp(ts: string) {
 const MS_IN_MINUTE = 60000;
 
 function parseTimestamp(ts: string) {
-  const [datePart, timePartRaw] = ts.replace('T', ' ').split(' ');
-  if (!datePart) return 0;
-  const [year, month, day] = datePart.split('-').map((v) => Number(v));
-  const [hour, minute, second] = (timePartRaw ?? '00:00:00').split(':').map((v) => Number(v));
-  return Date.UTC(year || 0, (month || 1) - 1, day || 1, hour || 0, minute || 0, Number.isFinite(second) ? second : 0);
+  // Preserve timezone information (including DST) instead of manually rebuilding UTC components.
+  // The API returns ISO-like strings (UTC for server-side stamps, local strings for manual entries),
+  // so relying on the browser parser keeps offsets intact for correct worked-time math.
+  const value = Date.parse(ts);
+  return Number.isFinite(value) ? value : 0;
 }
 
 function computeWorkedSoFar(entries: TimeEntry[], now: Date) {
