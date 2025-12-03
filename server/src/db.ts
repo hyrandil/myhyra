@@ -208,36 +208,38 @@ const upgradeAbsenceStatusConstraint = () => {
     .prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'absence_requests'")
     .get() as { sql?: string } | undefined;
   const sql = row?.sql || '';
-  // Be defensive: if the stored table definition does not include the new
-  // `canceled` status, rebuild the table with the expanded CHECK constraint.
-  if (!sql.includes('canceled')) {
-    db.exec(`
-      PRAGMA foreign_keys=off;
-      BEGIN TRANSACTION;
-      CREATE TABLE absence_requests_new (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        user_id INTEGER NOT NULL,
-        start_date TEXT NOT NULL,
-        end_date TEXT NOT NULL,
-        type TEXT NOT NULL CHECK(type IN ('vacation','sick','remote','other')),
-        status TEXT NOT NULL CHECK(status IN ('pending','approved','rejected','canceled')) DEFAULT 'pending',
-        comment TEXT,
-        cancel_requested INTEGER NOT NULL DEFAULT 0,
-        cancel_reason TEXT,
-        canceled INTEGER NOT NULL DEFAULT 0,
-        created_by INTEGER NOT NULL,
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE,
-        FOREIGN KEY(created_by) REFERENCES users(id) ON DELETE CASCADE
-      );
-      INSERT INTO absence_requests_new (id, user_id, start_date, end_date, type, status, comment, cancel_requested, cancel_reason, canceled, created_by, created_at)
-      SELECT id, user_id, start_date, end_date, type, status, comment, cancel_requested, cancel_reason, canceled, created_by, created_at FROM absence_requests;
-      DROP TABLE absence_requests;
-      ALTER TABLE absence_requests_new RENAME TO absence_requests;
-      COMMIT;
-      PRAGMA foreign_keys=on;
-    `);
-  }
+  // Some legacy databases include the word "canceled" because of the column
+  // name but still have a CHECK constraint without the canceled status. Only
+  // rebuild when the status constraint does not explicitly mention 'canceled'.
+  const hasCanceledStatus = /status[^)]*'canceled'/i.test(sql);
+  if (hasCanceledStatus) return;
+
+  db.exec(`
+    PRAGMA foreign_keys=off;
+    BEGIN TRANSACTION;
+    CREATE TABLE absence_requests_new (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL,
+      start_date TEXT NOT NULL,
+      end_date TEXT NOT NULL,
+      type TEXT NOT NULL CHECK(type IN ('vacation','sick','remote','other')),
+      status TEXT NOT NULL CHECK(status IN ('pending','approved','rejected','canceled')) DEFAULT 'pending',
+      comment TEXT,
+      cancel_requested INTEGER NOT NULL DEFAULT 0,
+      cancel_reason TEXT,
+      canceled INTEGER NOT NULL DEFAULT 0,
+      created_by INTEGER NOT NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE,
+      FOREIGN KEY(created_by) REFERENCES users(id) ON DELETE CASCADE
+    );
+    INSERT INTO absence_requests_new (id, user_id, start_date, end_date, type, status, comment, cancel_requested, cancel_reason, canceled, created_by, created_at)
+    SELECT id, user_id, start_date, end_date, type, status, comment, cancel_requested, cancel_reason, canceled, created_by, created_at FROM absence_requests;
+    DROP TABLE absence_requests;
+    ALTER TABLE absence_requests_new RENAME TO absence_requests;
+    COMMIT;
+    PRAGMA foreign_keys=on;
+  `);
 };
 
 ensureTableColumn('bookings', 'clock_in_lat', 'clock_in_lat REAL');

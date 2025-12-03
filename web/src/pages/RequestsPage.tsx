@@ -232,35 +232,37 @@ export function RequestsPage({ view = 'hub' }: { view?: RequestView }) {
       )}
 
       {view === 'storno' && (
-        <div className="card p-4 space-y-3">
-          <div className="flex items-center justify-between">
-            <h3 className="font-semibold">Stornierungsantrag</h3>
-            <p className="text-xs text-slate-500">Genehmigte Abwesenheiten zurückziehen</p>
+        <div className="space-y-4">
+          <div className="card p-4 space-y-3">
+            <div className="flex items-center justify-between">
+              <h3 className="font-semibold">Stornierungsantrag</h3>
+              <p className="text-xs text-slate-500">Genehmigte Abwesenheiten zurückziehen</p>
+            </div>
+            <form className="grid gap-3" onSubmit={handleCancelSubmit}>
+              <select name="request_id" className="input" required>
+                <option value="">Genehmigten Antrag auswählen</option>
+                {cancelable.map((req) => (
+                  <option key={req.id} value={req.id}>
+                    {req.start_date} – {req.end_date} ({req.type})
+                  </option>
+                ))}
+              </select>
+              <textarea name="reason" className="input" placeholder="Begründung (optional)" />
+              <button className="btn-primary" type="submit" disabled={cancelMutation.isPending}>
+                Storno anfragen
+              </button>
+            </form>
+            {cancelable.length === 0 && <p className="text-sm text-slate-500">Keine genehmigten Abwesenheiten verfügbar.</p>}
           </div>
-          <form className="grid gap-3" onSubmit={handleCancelSubmit}>
-            <select name="request_id" className="input" required>
-              <option value="">Genehmigten Antrag auswählen</option>
-              {cancelable.map((req) => (
-                <option key={req.id} value={req.id}>
-                  {req.start_date} – {req.end_date} ({req.type})
-                </option>
-              ))}
-            </select>
-            <textarea name="reason" className="input" placeholder="Begründung (optional)" />
-            <button className="btn-primary" type="submit" disabled={cancelMutation.isPending}>
-              Storno anfragen
-            </button>
-          </form>
-          {cancelable.length === 0 && <p className="text-sm text-slate-500">Keine genehmigten Abwesenheiten verfügbar.</p>}
 
-          <div className="border-t border-slate-200 pt-3 space-y-2">
+          <div className="card p-4 space-y-3">
             <div className="flex items-center justify-between">
               <h4 className="font-semibold">Eigene Stornierungsanträge</h4>
-              <p className="text-xs text-slate-500">Offene und abgeschlossene Stornos</p>
+              <p className="text-xs text-slate-500">Offen, genehmigt oder abgelehnt</p>
             </div>
             <div className="grid md:grid-cols-2 gap-3">
               {(myRequests.data ?? [])
-                .filter((req) => req.cancel_requested || req.status === 'canceled')
+                .filter((req) => req.cancel_requested || req.status === 'canceled' || req.status === 'rejected')
                 .map((req) => (
                   <div key={req.id} className="p-3 rounded-lg border border-slate-200 bg-slate-50 space-y-1">
                     <div className="flex items-center justify-between">
@@ -273,7 +275,7 @@ export function RequestsPage({ view = 'hub' }: { view?: RequestView }) {
                     {req.comment && <p className="text-xs text-slate-500">{req.comment}</p>}
                   </div>
                 ))}
-              {(myRequests.data ?? []).filter((req) => req.cancel_requested || req.status === 'canceled').length === 0 && (
+              {(myRequests.data ?? []).filter((req) => req.cancel_requested || req.status === 'canceled' || req.status === 'rejected').length === 0 && (
                 <p className="text-sm text-slate-500">Noch keine Stornierungsanträge vorhanden.</p>
               )}
             </div>

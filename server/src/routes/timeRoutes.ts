@@ -1101,14 +1101,6 @@ router.patch('/corrections/:id/status', authorize(['admin', 'hr', 'lead']), (req
       );
       const deleteEntry = db.prepare('DELETE FROM time_entries WHERE id = ? AND user_id = ?');
       entries.forEach((entry) => {
-        if (entry.entryId) {
-          const owner = db
-            .prepare('SELECT user_id FROM time_entries WHERE id = ?')
-            .get(entry.entryId) as { user_id: number } | undefined;
-          if (!owner || owner.user_id !== row.user_id) {
-            throw new Error('Buchung gehört nicht zum Nutzer');
-          }
-        }
         if (entry.action === 'delete' && entry.entryId) {
           deleteEntry.run(entry.entryId, row.user_id);
           return;

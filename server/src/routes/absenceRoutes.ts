@@ -327,7 +327,8 @@ router.post('/requests/:id/cancel-request', (req: AuthRequest, res) => {
   if (row.user_id !== req.user!.id) return res.status(403).json({ message: 'Keine Berechtigung' });
   if (row.canceled) return res.status(400).json({ message: 'Antrag wurde bereits storniert' });
   if (row.cancel_requested) return res.status(400).json({ message: 'Stornierung wurde bereits angefragt' });
-  db.prepare('UPDATE absence_requests SET cancel_requested = 1, cancel_reason = ? WHERE id = ?').run(
+  if (row.status === 'pending') return res.status(400).json({ message: 'Antrag ist noch offen' });
+  db.prepare("UPDATE absence_requests SET cancel_requested = 1, cancel_reason = ?, status = 'pending' WHERE id = ?").run(
     parsedReason.data ?? null,
     id
   );
@@ -438,7 +439,7 @@ router.patch('/requests/:id/status', (req: AuthRequest, res) => {
       logAction(req.user!.id, 'absence.request.cancel.approve', requestRow.user_id, { request_id: id });
       return res.json({ message: 'Stornierung bestätigt' });
     }
-    db.prepare('UPDATE absence_requests SET cancel_requested = 0 WHERE id = ?').run(id);
+    db.prepare("UPDATE absence_requests SET cancel_requested = 0, status = 'approved' WHERE id = ?").run(id);
     logAction(req.user!.id, 'absence.request.cancel.reject', requestRow.user_id, { request_id: id });
     return res.json({ message: 'Stornierung abgelehnt' });
   }
