@@ -3,6 +3,7 @@ import bcrypt from 'bcryptjs';
 import { z } from 'zod';
 import db from '../db';
 import { requireAuth, authorize, AuthRequest } from '../auth';
+import { managedDepartments } from '../utils/permissions';
 import type { User, Booking, Absence, WorkScheduleEntry } from '../types';
 
 const router = Router();
@@ -390,6 +391,57 @@ router.get('/me/flex', (req: AuthRequest, res) => {
   res.json({ balanceMinutes, plannedMinutes: plannedTotal, workedMinutes: workedTotal, adjustment, enabled });
 });
 
+const baseUserSelect = `SELECT u.id, u.name, u.first_name, u.last_name, u.email, u.role, u.created_at, u.active, IFNULL(us.vacation_allowance, 0) as vacation_allowance
+       , IFNULL(us.flex_enabled, 0) as flex_enabled, up.personnel_number, up.location, up.department, up.tracking_start_date, up.start_date, up.end_date, up.work_model_id, up.holiday_profile_id
+       FROM users u
+       LEFT JOIN user_settings us ON us.user_id = u.id
+       LEFT JOIN user_profiles up ON up.user_id = u.id`;
+
+router.get('/', (req: AuthRequest, res) => {
+  const search = typeof req.query.q === 'string' ? `%${req.query.q}%` : '%';
+  const filters = `AND (u.name LIKE ? OR u.email LIKE ? OR IFNULL(up.personnel_number,'') LIKE ?)`;
+
+  if (req.user!.role === 'admin' || req.user!.role === 'hr') {
+    const users = db
+      .prepare(
+        `${baseUserSelect}
+         WHERE u.id != ? ${filters}
+         ORDER BY u.name ASC`
+      )
+      .all(req.user!.id, search, search, search) as (Pick<User, 'id' | 'name' | 'email' | 'role' | 'created_at' | 'first_name' | 'last_name'> & {
+        active: number;
+        vacation_allowance: number;
+        personnel_number?: string | null;
+      })[];
+    return res.json(users.map((user) => toUserPayload(user)));
+  }
+
+  if (req.user!.role === 'lead') {
+    const departments = managedDepartments(req.user!.id);
+    if (departments.length === 0) return res.json([]);
+    const placeholders = departments.map(() => '?').join(',');
+    const users = db
+      .prepare(
+        `${baseUserSelect}
+         WHERE u.id != ?
+         AND u.id IN (SELECT user_id FROM department_members WHERE department_id IN (${placeholders}))
+         ${filters}
+         ORDER BY u.name ASC`
+      )
+      .all(req.user!.id, ...departments, search, search, search) as (Pick<
+        User,
+        'id' | 'name' | 'email' | 'role' | 'created_at' | 'first_name' | 'last_name'
+      > & {
+        active: number;
+        vacation_allowance: number;
+        personnel_number?: string | null;
+      })[];
+    return res.json(users.map((user) => toUserPayload(user)));
+  }
+
+  return res.status(403).json({ message: 'Keine Berechtigung' });
+});
+
 router.use(authorize(['admin', 'hr']));
 
 const userSchema = z.object({
@@ -433,26 +485,6 @@ const userSchema = z.object({
     .or(z.literal(''))
     .transform((value) => value || undefined),
   note: z.string().max(255).optional().or(z.literal('')).transform((value) => value || undefined),
-});
-
-router.get('/', (req: AuthRequest, res) => {
-  const search = typeof req.query.q === 'string' ? `%${req.query.q}%` : '%';
-  const users = db
-    .prepare(
-      `SELECT u.id, u.name, u.first_name, u.last_name, u.email, u.role, u.created_at, u.active, IFNULL(us.vacation_allowance, 0) as vacation_allowance
-       , IFNULL(us.flex_enabled, 0) as flex_enabled, up.personnel_number, up.location, up.department, up.tracking_start_date, up.start_date, up.end_date, up.work_model_id, up.holiday_profile_id
-       FROM users u
-       LEFT JOIN user_settings us ON us.user_id = u.id
-       LEFT JOIN user_profiles up ON up.user_id = u.id
-       WHERE u.id != ? AND (u.name LIKE ? OR u.email LIKE ? OR IFNULL(up.personnel_number,'') LIKE ?)
-       ORDER BY u.name ASC`
-    )
-    .all(req.user!.id, search, search, search) as (Pick<User, 'id' | 'name' | 'email' | 'role' | 'created_at' | 'first_name' | 'last_name'> & {
-      active: number;
-      vacation_allowance: number;
-      personnel_number?: string | null;
-    })[];
-  res.json(users.map((user) => toUserPayload(user)));
 });
 
 router.post('/', (req, res) => {

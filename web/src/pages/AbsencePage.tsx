@@ -10,6 +10,7 @@ import {
   updateAbsenceStatus,
 } from '../api';
 import { useAuth } from '../AuthProvider';
+import { AbsenceRequest } from '../types';
 
 export function AbsencePage() {
   const auth = useAuth();
@@ -29,7 +30,12 @@ export function AbsencePage() {
 
   const statusMutation = useMutation({
     mutationFn: ({ id, status }: { id: number; status: 'approved' | 'rejected' }) => updateAbsenceStatus(id, status),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['absence'] }),
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['absence'] });
+      queryClient.setQueryData<AbsenceRequest[] | undefined>(['absence', 'inbox'], (existing) =>
+        existing?.filter((req) => req.id !== variables.id)
+      );
+    },
   });
 
   const kindMutation = useMutation({
