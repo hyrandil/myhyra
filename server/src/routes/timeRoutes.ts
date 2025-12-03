@@ -978,5 +978,77 @@ router.delete('/entry/:entryId', authorize(['admin', 'hr', 'lead']), (req: AuthR
   res.status(204).send();
 });
 
+const correctionSchema = z.object({
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  note: z.string().max(500).optional().or(z.literal('')).transform((v) => v || undefined),
+});
+
+router.post('/corrections', requireAuth, (req: AuthRequest, res) => {
+  const parsed = correctionSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ errors: parsed.error.format() });
+  const { date, note } = parsed.data;
+  const result = db
+    .prepare('INSERT INTO time_correction_requests (user_id, date, note) VALUES (?, ?, ?)')
+    .run(req.user!.id, date, note ?? null);
+  const created = db.prepare('SELECT * FROM time_correction_requests WHERE id = ?').get(result.lastInsertRowid);
+  res.status(201).json(created);
+});
+
+router.get('/corrections/me', requireAuth, (req: AuthRequest, res) => {
+  const rows = db
+    .prepare('SELECT * FROM time_correction_requests WHERE user_id = ? ORDER BY date DESC, created_at DESC')
+    .all(req.user!.id);
+  res.json(rows);
+});
+
+router.get('/corrections/inbox', authorize(['admin', 'hr', 'lead']), (req: AuthRequest, res) => {
+  if (req.user!.role === 'admin' || req.user!.role === 'hr') {
+    const rows = db
+      .prepare(
+        `SELECT tcr.*, u.name as user_name, u.email as user_email
+         FROM time_correction_requests tcr
+         JOIN users u ON u.id = tcr.user_id
+         WHERE tcr.status = 'pending'
+         ORDER BY tcr.date DESC, tcr.created_at DESC`
+      )
+      .all();
+    return res.json(rows);
+  }
+  const allowedDepartments = managedDepartments(req.user!.id);
+  if (allowedDepartments.length === 0) return res.json([]);
+  const placeholders = allowedDepartments.map(() => '?').join(',');
+  const rows = db
+    .prepare(
+      `SELECT DISTINCT tcr.*, u.name as user_name, u.email as user_email
+       FROM time_correction_requests tcr
+       JOIN users u ON u.id = tcr.user_id
+       JOIN department_members dm ON dm.user_id = u.id
+       WHERE dm.department_id IN (${placeholders}) AND dm.role IN ('lead','member','hr') AND tcr.status = 'pending'
+       ORDER BY tcr.date DESC, tcr.created_at DESC`
+    )
+    .all(...allowedDepartments);
+  res.json(rows);
+});
+
+router.patch('/corrections/:id/status', authorize(['admin', 'hr', 'lead']), (req: AuthRequest, res) => {
+  const id = Number(req.params.id);
+  if (Number.isNaN(id)) return res.status(400).json({ message: 'Ungültige ID' });
+  const parsed = z.enum(['approved', 'rejected']).safeParse(req.body?.status);
+  if (!parsed.success) return res.status(400).json({ message: 'Status ungültig' });
+  const row = db
+    .prepare('SELECT user_id FROM time_correction_requests WHERE id = ?')
+    .get(id) as { user_id: number } | undefined;
+  if (!row) return res.status(404).json({ message: 'Antrag nicht gefunden' });
+  if (req.user!.role !== 'admin' && req.user!.role !== 'hr') {
+    if (!ensureManageable(req, res, row.user_id)) return;
+  }
+  db.prepare('UPDATE time_correction_requests SET status = ?, handled_by = ? WHERE id = ?').run(
+    parsed.data,
+    req.user!.id,
+    id
+  );
+  res.json({ message: 'Aktualisiert' });
+});
+
 export default router;
 

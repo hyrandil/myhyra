@@ -3,6 +3,7 @@ import { DashboardPage } from './pages/DashboardPage';
 import { LoginPage } from './pages/LoginPage';
 import { TimesPage } from './pages/TimesPage';
 import { AbsencePage } from './pages/AbsencePage';
+import { RequestsPage } from './pages/RequestsPage';
 import { EmployeesPage } from './pages/EmployeesPage';
 import { ReportsPage } from './pages/ReportsPage';
 import { OverviewCalendarPage } from './pages/OverviewCalendarPage';
@@ -84,13 +85,14 @@ function Shell({ children }: { children: React.ReactNode }) {
           <NavItem to="/" label="Dashboard" />
           <NavItem to="/zeiten" label="Kalender & Zeiten" />
           <NavItem to="/uebersicht" label="Übersichtkalender" />
+          <NavItem to="/antraege" label="Anträge" />
           <NavItem to="/abwesenheiten" label="Abwesenheiten" />
           {auth.hasRole('lead', 'hr', 'admin') && <NavItem to="/inkonsistenzen" label="Inkonsistenzen" />}
           {auth.hasRole('hr', 'admin') && <NavItem to="/planung" label="Stundenplanung" />}
           {auth.hasRole('lead', 'hr', 'admin') && <NavItem to="/mitarbeitende" label="Team" />}
           {auth.hasRole('hr', 'admin') && <NavItem to="/berichte" label="Berichte" />}
         </nav>
-        <div className="p-4 border-t border-slate-200 bg-slate-50 relative">
+        <div className="p-4 border-t border-slate-200 bg-slate-50 sticky bottom-0">
             <div className="flex items-center gap-3">
               <div className="h-11 w-11 rounded-full bg-sky-100 flex items-center justify-center text-lg font-bold text-sky-800">
                 {displayName?.[0] ?? '?'}
@@ -164,6 +166,7 @@ function MobileShell({ children }: { children: React.ReactNode }) {
         <div className="max-w-4xl mx-auto px-6 py-3 flex items-center justify-between text-center gap-2">
           <MobileNavItem to="/" label="Cockpit" />
           <MobileNavItem to="/zeiten" label="Zeiten" />
+          <MobileNavItem to="/antraege" label="Anträge" />
           <MobileNavItem to="/abwesenheiten" label="Abwesen" />
           <MobileNavItem to="/berichte" label="Berichte" />
           {auth.hasRole('lead', 'hr', 'admin') && <MobileNavItem to="/inkonsistenzen" label="Checks" />}
@@ -188,6 +191,7 @@ export default function App() {
                 <Routes>
                   <Route path="/" element={<MobileHomePage />} />
                   <Route path="/zeiten" element={<TimesPage />} />
+                  <Route path="/antraege" element={<RequestsPage />} />
                   <Route path="/abwesenheiten" element={<AbsencePage />} />
                   <Route path="/berichte" element={<ReportsPage />} />
                   <Route path="/uebersicht" element={<OverviewCalendarPage />} />
@@ -204,6 +208,7 @@ export default function App() {
                   <Route path="/" element={<DashboardPage />} />
                   <Route path="/zeiten" element={<TimesPage />} />
                   <Route path="/uebersicht" element={<OverviewCalendarPage />} />
+                  <Route path="/antraege" element={<RequestsPage />} />
                   <Route path="/abwesenheiten" element={<AbsencePage />} />
                   <Route path="/inkonsistenzen" element={<InconsistentPage />} />
                   <Route path="/planung" element={<PlanningPage />} />

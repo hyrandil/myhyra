@@ -242,6 +242,11 @@ export async function fetchAbsenceKinds() {
   return res.data;
 }
 
+export async function fetchMyAbsences() {
+  const res = await api.get('/absences/me');
+  return res.data;
+}
+
 export async function updateAbsenceKind(
   id: number,
   payload: {
@@ -286,6 +291,11 @@ export async function fetchAbsenceInbox() {
 
 export async function updateAbsenceStatus(id: number, status: 'approved' | 'rejected') {
   const res = await api.patch(`/absences/requests/${id}/status`, { status });
+  return res.data;
+}
+
+export async function requestAbsenceCancellation(id: number, reason?: string) {
+  const res = await api.post(`/absences/requests/${id}/cancel-request`, { reason });
   return res.data;
 }
 
@@ -343,6 +353,26 @@ export async function updateTimeEntry(
 
 export async function deleteTimeEntry(entryId: number) {
   await api.delete(`/time/entry/${entryId}`);
+}
+
+export async function createTimeCorrectionRequest(payload: { date: string; note?: string }) {
+  const res = await api.post('/time/corrections', payload);
+  return res.data;
+}
+
+export async function fetchMyCorrections() {
+  const res = await api.get('/time/corrections/me');
+  return res.data;
+}
+
+export async function fetchCorrectionInbox() {
+  const res = await api.get('/time/corrections/inbox');
+  return res.data;
+}
+
+export async function updateCorrectionStatus(id: number, status: 'approved' | 'rejected') {
+  const res = await api.patch(`/time/corrections/${id}/status`, { status });
+  return res.data;
 }
 
 export async function fetchMonthlyReport(userId: number, month?: string) {

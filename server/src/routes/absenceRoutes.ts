@@ -282,6 +282,31 @@ router.get('/requests/me', (req: AuthRequest, res) => {
   res.json(rows);
 });
 
+router.post('/requests/:id/cancel-request', (req: AuthRequest, res) => {
+  const id = Number(req.params.id);
+  if (Number.isNaN(id)) return res.status(400).json({ message: 'Ungültige ID' });
+  const parsedReason = z
+    .string()
+    .max(255)
+    .optional()
+    .or(z.literal(''))
+    .transform((value) => value || undefined)
+    .safeParse(req.body?.reason ?? req.body?.comment ?? '');
+  if (!parsedReason.success) return res.status(400).json({ message: 'Ungültige Begründung' });
+  const row = db
+    .prepare('SELECT * FROM absence_requests WHERE id = ?')
+    .get(id) as { id: number; user_id: number; status: string; cancel_requested?: number; canceled?: number } | undefined;
+  if (!row) return res.status(404).json({ message: 'Antrag nicht gefunden' });
+  if (row.user_id !== req.user!.id) return res.status(403).json({ message: 'Keine Berechtigung' });
+  if (row.canceled) return res.status(400).json({ message: 'Antrag wurde bereits storniert' });
+  if (row.cancel_requested) return res.status(400).json({ message: 'Stornierung wurde bereits angefragt' });
+  db.prepare('UPDATE absence_requests SET cancel_requested = 1, cancel_reason = ? WHERE id = ?').run(
+    parsedReason.data ?? null,
+    id
+  );
+  res.json({ message: 'Stornierung eingereicht' });
+});
+
 router.delete('/requests/:id', (req: AuthRequest, res) => {
   const id = Number(req.params.id);
   if (Number.isNaN(id)) {
@@ -333,7 +358,9 @@ router.get('/requests', (req: AuthRequest, res) => {
      JOIN users u ON u.id = ar.user_id`;
   if (req.user!.role === 'admin' || req.user!.role === 'hr') {
     const rows = db
-      .prepare(`${baseQuery} WHERE ar.status = 'pending' ORDER BY ar.start_date DESC, ar.created_at DESC`)
+      .prepare(
+        `${baseQuery} WHERE (ar.status = 'pending' OR ar.cancel_requested = 1) ORDER BY ar.start_date DESC, ar.created_at DESC`
+      )
       .all();
     return res.json(rows);
   }
@@ -344,7 +371,7 @@ router.get('/requests', (req: AuthRequest, res) => {
     .prepare(
       `${baseQuery}
        JOIN department_members dm ON dm.user_id = ar.user_id
-       WHERE dm.department_id IN (${placeholders}) AND ar.status = 'pending'
+       WHERE dm.department_id IN (${placeholders}) AND (ar.status = 'pending' OR ar.cancel_requested = 1)
        ORDER BY ar.start_date DESC, ar.created_at DESC`
     )
     .all(...allowedDepartments);
@@ -362,7 +389,7 @@ router.patch('/requests/:id/status', (req: AuthRequest, res) => {
   }
   const requestRow = db
     .prepare('SELECT * FROM absence_requests WHERE id = ?')
-    .get(id) as { user_id: number; start_date: string; end_date: string; type: string } | undefined;
+    .get(id) as { user_id: number; start_date: string; end_date: string; type: string; cancel_requested?: number } | undefined;
   if (!requestRow) {
     return res.status(404).json({ message: 'Antrag nicht gefunden' });
   }
@@ -372,7 +399,21 @@ router.patch('/requests/:id/status', (req: AuthRequest, res) => {
       return res.status(403).json({ message: 'Keine Berechtigung für diese Abteilung' });
     }
   }
-  db.prepare('UPDATE absence_requests SET status = ? WHERE id = ?').run(parsed.data, id);
+  if (requestRow.cancel_requested) {
+    if (parsed.data === 'approved') {
+      db.prepare('DELETE FROM absences WHERE user_id = ? AND NOT (end_date < ? OR start_date > ?)').run(
+        requestRow.user_id,
+        requestRow.start_date,
+        requestRow.end_date
+      );
+      db.prepare('UPDATE absence_requests SET cancel_requested = 0, canceled = 1 WHERE id = ?').run(id);
+      return res.json({ message: 'Stornierung bestätigt' });
+    }
+    db.prepare('UPDATE absence_requests SET cancel_requested = 0 WHERE id = ?').run(id);
+    return res.json({ message: 'Stornierung abgelehnt' });
+  }
+
+  db.prepare('UPDATE absence_requests SET status = ?, canceled = 0 WHERE id = ?').run(parsed.data, id);
   if (parsed.data === 'approved') {
     db.prepare('DELETE FROM absences WHERE user_id = ? AND NOT (end_date < ? OR start_date > ?)').run(
       requestRow.user_id,

@@ -171,6 +171,9 @@ CREATE TABLE IF NOT EXISTS absence_requests (
   type TEXT NOT NULL CHECK(type IN ('vacation','sick','remote','other')),
   status TEXT NOT NULL CHECK(status IN ('pending','approved','rejected')) DEFAULT 'pending',
   comment TEXT,
+  cancel_requested INTEGER NOT NULL DEFAULT 0,
+  cancel_reason TEXT,
+  canceled INTEGER NOT NULL DEFAULT 0,
   created_by INTEGER NOT NULL,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE,
@@ -233,6 +236,10 @@ try {
     db.exec('ALTER TABLE user_profiles ADD COLUMN holiday_profile_id INTEGER');
   }
 }
+ensureTableColumn('absence_requests', 'cancel_requested', 'cancel_requested INTEGER NOT NULL DEFAULT 0');
+ensureTableColumn('absence_requests', 'cancel_reason', 'cancel_reason TEXT');
+ensureTableColumn('absence_requests', 'canceled', 'canceled INTEGER NOT NULL DEFAULT 0');
+ensureTableColumn('absence_requests', 'comment', 'comment TEXT');
 ensureTableColumn('user_profiles', 'start_date', 'start_date TEXT');
 ensureTableColumn('user_profiles', 'end_date', 'end_date TEXT');
 db.exec(`
@@ -316,6 +323,20 @@ userIds.forEach((row) => {
   ensureProfile(row.id);
   ensureSchedule(row.id);
 });
+
+db.exec(`
+CREATE TABLE IF NOT EXISTS time_correction_requests (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER NOT NULL,
+  date TEXT NOT NULL,
+  note TEXT,
+  status TEXT NOT NULL CHECK(status IN ('pending','approved','rejected')) DEFAULT 'pending',
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  handled_by INTEGER,
+  FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE,
+  FOREIGN KEY(handled_by) REFERENCES users(id) ON DELETE SET NULL
+);
+`);
 
 if (adminId) {
   ensureProfile(adminId);

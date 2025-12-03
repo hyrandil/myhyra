@@ -147,5 +147,19 @@ export interface AbsenceRequest {
   status: 'pending' | 'approved' | 'rejected';
   comment?: string | null;
   user_name?: string;
+  cancel_requested?: boolean | number;
+  cancel_reason?: string | null;
+  canceled?: boolean | number;
+}
+
+export interface TimeCorrectionRequest {
+  id: number;
+  user_id: number;
+  date: string;
+  note?: string | null;
+  status: 'pending' | 'approved' | 'rejected';
+  created_at?: string;
+  user_name?: string;
+  user_email?: string;
 }
 
