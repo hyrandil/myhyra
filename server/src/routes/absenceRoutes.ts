@@ -28,7 +28,7 @@ type AbsenceRequestRow = {
   start_date: string;
   end_date: string;
   type: string;
-  status: 'pending' | 'approved' | 'rejected';
+  status: 'pending' | 'approved' | 'rejected' | 'canceled';
   comment?: string | null;
   user_name?: string;
   cancel_requested?: number;

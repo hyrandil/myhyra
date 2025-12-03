@@ -180,7 +180,7 @@ CREATE TABLE IF NOT EXISTS absence_requests (
   start_date TEXT NOT NULL,
   end_date TEXT NOT NULL,
   type TEXT NOT NULL CHECK(type IN ('vacation','sick','remote','other')),
-  status TEXT NOT NULL CHECK(status IN ('pending','approved','rejected')) DEFAULT 'pending',
+  status TEXT NOT NULL CHECK(status IN ('pending','approved','rejected','canceled')) DEFAULT 'pending',
   comment TEXT,
   cancel_requested INTEGER NOT NULL DEFAULT 0,
   cancel_reason TEXT,
@@ -203,10 +203,46 @@ const ensureTableColumn = (table: string, name: string, definition: string) => {
   return true;
 };
 
+const upgradeAbsenceStatusConstraint = () => {
+  const row = db
+    .prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'absence_requests'")
+    .get() as { sql?: string } | undefined;
+  const sql = row?.sql || '';
+  if (sql.includes("status IN ('pending','approved','rejected')") && !sql.includes('canceled')) {
+    db.exec(`
+      PRAGMA foreign_keys=off;
+      BEGIN TRANSACTION;
+      CREATE TABLE absence_requests_new (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER NOT NULL,
+        start_date TEXT NOT NULL,
+        end_date TEXT NOT NULL,
+        type TEXT NOT NULL CHECK(type IN ('vacation','sick','remote','other')),
+        status TEXT NOT NULL CHECK(status IN ('pending','approved','rejected','canceled')) DEFAULT 'pending',
+        comment TEXT,
+        cancel_requested INTEGER NOT NULL DEFAULT 0,
+        cancel_reason TEXT,
+        canceled INTEGER NOT NULL DEFAULT 0,
+        created_by INTEGER NOT NULL,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE,
+        FOREIGN KEY(created_by) REFERENCES users(id) ON DELETE CASCADE
+      );
+      INSERT INTO absence_requests_new (id, user_id, start_date, end_date, type, status, comment, cancel_requested, cancel_reason, canceled, created_by, created_at)
+      SELECT id, user_id, start_date, end_date, type, status, comment, cancel_requested, cancel_reason, canceled, created_by, created_at FROM absence_requests;
+      DROP TABLE absence_requests;
+      ALTER TABLE absence_requests_new RENAME TO absence_requests;
+      COMMIT;
+      PRAGMA foreign_keys=on;
+    `);
+  }
+};
+
 ensureTableColumn('bookings', 'clock_in_lat', 'clock_in_lat REAL');
 ensureTableColumn('bookings', 'clock_in_lng', 'clock_in_lng REAL');
 ensureTableColumn('bookings', 'clock_out_lat', 'clock_out_lat REAL');
 ensureTableColumn('bookings', 'clock_out_lng', 'clock_out_lng REAL');
+upgradeAbsenceStatusConstraint();
 ensureTableColumn('users', 'first_name', 'first_name TEXT');
 ensureTableColumn('users', 'last_name', 'last_name TEXT');
 ensureTableColumn('user_profiles', 'tracking_start_date', 'tracking_start_date TEXT');
