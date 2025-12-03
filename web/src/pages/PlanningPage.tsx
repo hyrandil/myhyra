@@ -199,9 +199,26 @@ export function PlanningPage() {
               <input name="profileName" placeholder="Profilname" className="input" required />
               <select name="state" className="input" required defaultValue="">
                 <option value="">Bundesland</option>
-                {['BW','BY','BE','BB','HB','HH','HE','MV','NI','NW','RP','SL','SN','ST','SH','TH'].map((code) => (
+                {[
+                  ['BW', 'Baden-Württemberg'],
+                  ['BY', 'Bayern'],
+                  ['BE', 'Berlin'],
+                  ['BB', 'Brandenburg'],
+                  ['HB', 'Bremen'],
+                  ['HH', 'Hamburg'],
+                  ['HE', 'Hessen'],
+                  ['MV', 'Mecklenburg-Vorpommern'],
+                  ['NI', 'Niedersachsen'],
+                  ['NW', 'Nordrhein-Westfalen'],
+                  ['RP', 'Rheinland-Pfalz'],
+                  ['SL', 'Saarland'],
+                  ['SN', 'Sachsen'],
+                  ['ST', 'Sachsen-Anhalt'],
+                  ['SH', 'Schleswig-Holstein'],
+                  ['TH', 'Thüringen'],
+                ].map(([code, name]) => (
                   <option key={code} value={code}>
-                    {code}
+                    {name}
                   </option>
                 ))}
               </select>

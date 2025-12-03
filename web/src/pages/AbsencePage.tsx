@@ -5,6 +5,15 @@ import { useAuth } from '../AuthProvider';
 export function AbsencePage() {
   const auth = useAuth();
   const queryClient = useQueryClient();
+
+  if (!auth.hasRole('admin')) {
+    return (
+      <div className="card p-6">
+        <h2 className="text-xl font-semibold mb-2">Kein Zugriff</h2>
+        <p className="text-sm text-slate-600">Die Abwesenheitsarten können nur durch Administratoren verwaltet werden.</p>
+      </div>
+    );
+  }
   const kinds = useQuery({ queryKey: ['absence', 'kinds'], queryFn: fetchAbsenceKinds });
 
   const kindMutation = useMutation({
@@ -34,16 +43,8 @@ export function AbsencePage() {
         <div>
           <p className="text-xs uppercase text-slate-500">Abwesenheitsverwaltung</p>
           <h2 className="text-2xl font-semibold">Abwesenheiten & Arten</h2>
-          <p className="text-sm text-slate-500">Anträge findest du jetzt im eigenen Reiter „Anträge“.</p>
         </div>
         <div className="badge bg-slate-200 text-slate-700">{auth.user?.role}</div>
-      </div>
-
-      <div className="card p-4">
-        <p className="text-sm text-slate-600">
-          Abwesenheitsanträge und Genehmigungen verwaltest du im Reiter <strong>Anträge</strong>. Hier legst du nur die verfügbaren
-          Abwesenheitsarten und deren Regeln fest.
-        </p>
       </div>
 
       {auth.hasRole('hr', 'admin') && (
