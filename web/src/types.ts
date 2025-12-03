@@ -161,6 +161,12 @@ export interface TimeCorrectionRequest {
   created_at?: string;
   user_name?: string;
   user_email?: string;
-  entries?: { id?: number; timestamp: string; type: 'CLOCK_IN' | 'CLOCK_OUT' }[];
+  entries?: {
+    id?: number;
+    timestamp: string;
+    type: 'CLOCK_IN' | 'CLOCK_OUT';
+    action?: 'add' | 'delete' | 'replace';
+    entryId?: number | null;
+  }[];
 }
 

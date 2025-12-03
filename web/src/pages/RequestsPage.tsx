@@ -3,27 +3,25 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   createAbsenceRequest,
-  fetchAbsenceInbox,
   fetchAbsenceKinds,
   fetchMyAbsenceRequests,
   requestAbsenceCancellation,
-  updateAbsenceStatus,
   createTimeCorrectionRequest,
-  fetchCorrectionInbox,
   fetchMyCorrections,
-  updateCorrectionStatus,
+  fetchDayEntriesForUser,
 } from '../api';
 import { useAuth } from '../AuthProvider';
-import { AbsenceRequest, TimeCorrectionRequest } from '../types';
+import { AbsenceRequest, TimeCorrectionRequest, DayDetail } from '../types';
 
 export type RequestView = 'hub' | 'absence' | 'correction' | 'storno';
 
 export function RequestsPage({ view = 'hub' }: { view?: RequestView }) {
   const auth = useAuth();
   const queryClient = useQueryClient();
-  const [correctionRows, setCorrectionRows] = useState<{ time: string; type: 'CLOCK_IN' | 'CLOCK_OUT' }[]>([
-    { time: '', type: 'CLOCK_IN' },
-  ]);
+  const [correctionRows, setCorrectionRows] = useState<
+    { time: string; type: 'CLOCK_IN' | 'CLOCK_OUT'; action?: 'add' | 'delete' | 'replace'; entryId?: number | null }[]
+  >([{ time: '', type: 'CLOCK_IN', action: 'add' }]);
+  const [correctionDate, setCorrectionDate] = useState('');
 
   const refreshCalendars = () => {
     queryClient.invalidateQueries({
@@ -36,17 +34,11 @@ export function RequestsPage({ view = 'hub' }: { view?: RequestView }) {
 
   const kinds = useQuery({ queryKey: ['absence', 'kinds'], queryFn: fetchAbsenceKinds });
   const myRequests = useQuery({ queryKey: ['absence', 'mine'], queryFn: fetchMyAbsenceRequests });
-  const inbox = useQuery({
-    queryKey: ['absence', 'inbox'],
-    queryFn: fetchAbsenceInbox,
-    enabled: auth.hasRole('lead', 'hr', 'admin'),
-  });
-
   const myCorrections = useQuery({ queryKey: ['corrections', 'mine'], queryFn: fetchMyCorrections });
-  const correctionInbox = useQuery({
-    queryKey: ['corrections', 'inbox'],
-    queryFn: fetchCorrectionInbox,
-    enabled: auth.hasRole('lead', 'hr', 'admin'),
+  const dayEntries = useQuery<DayDetail | undefined>({
+    queryKey: ['corrections', 'day', correctionDate, auth.user?.id],
+    enabled: Boolean(correctionDate && auth.user?.id),
+    queryFn: () => fetchDayEntriesForUser(auth.user!.id, correctionDate!),
   });
 
   const createMutation = useMutation({
@@ -59,33 +51,11 @@ export function RequestsPage({ view = 'hub' }: { view?: RequestView }) {
     onSuccess: () => refreshCalendars(),
   });
 
-  const statusMutation = useMutation({
-    mutationFn: ({ id, status }: { id: number; status: 'approved' | 'rejected' }) => updateAbsenceStatus(id, status),
-    onSuccess: (_data, variables) => {
-      refreshCalendars();
-      queryClient.setQueryData<AbsenceRequest[] | undefined>(['absence', 'inbox'], (existing) =>
-        existing?.filter((req) => req.id !== variables.id)
-      );
-    },
-  });
-
   const correctionCreate = useMutation({
     mutationFn: createTimeCorrectionRequest,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['corrections'] });
       refreshCalendars();
-    },
-  });
-
-  const correctionStatus = useMutation({
-    mutationFn: ({ id, status }: { id: number; status: 'approved' | 'rejected' }) =>
-      updateCorrectionStatus(id, status),
-    onSuccess: (_data, variables) => {
-      queryClient.invalidateQueries({ queryKey: ['corrections'] });
-      refreshCalendars();
-      queryClient.setQueryData<TimeCorrectionRequest[] | undefined>(['corrections', 'inbox'], (existing) =>
-        existing?.filter((item) => item.id !== variables.id)
-      );
     },
   });
 
@@ -115,11 +85,17 @@ export function RequestsPage({ view = 'hub' }: { view?: RequestView }) {
     const form = new FormData(e.currentTarget);
     const date = String(form.get('date'));
     const entries = correctionRows
-      .filter((row) => row.time)
-      .map((row) => ({ timestamp: `${date}T${row.time}`, type: row.type }));
+      .filter((row) => row.time || row.action === 'delete')
+      .map((row) => ({
+        timestamp: `${date}T${row.time || '00:00'}`,
+        type: row.type,
+        action: row.action ?? 'add',
+        entry_id: row.entryId ?? undefined,
+      }));
     correctionCreate.mutate({ date, note: String(form.get('note') || ''), entries });
     e.currentTarget.reset();
-    setCorrectionRows([{ time: '', type: 'CLOCK_IN' }]);
+    setCorrectionRows([{ time: '', type: 'CLOCK_IN', action: 'add' }]);
+    setCorrectionDate('');
   };
 
   const cancelable = (myRequests.data ?? []).filter(
@@ -152,6 +128,13 @@ export function RequestsPage({ view = 'hub' }: { view?: RequestView }) {
             <h3 className="text-lg font-semibold">Stornierungsantrag</h3>
             <p className="text-sm text-slate-600">Genehmigte Abwesenheiten zurückziehen.</p>
           </Link>
+          {auth.hasRole('lead', 'hr', 'admin') && (
+            <Link to="/antraege/genehmigungen" className="card p-4 hover:border-sky-200 hover:shadow">
+              <p className="text-xs uppercase text-slate-500">Genehmigung</p>
+              <h3 className="text-lg font-semibold">Genehmigungsliste</h3>
+              <p className="text-sm text-slate-600">Alle offenen Anträge gesammelt prüfen.</p>
+            </Link>
+          )}
         </div>
       </div>
     );
@@ -209,61 +192,27 @@ export function RequestsPage({ view = 'hub' }: { view?: RequestView }) {
             </form>
           </div>
 
-          <div className="grid gap-4 lg:grid-cols-2">
-            <div className="card p-4">
-              <h3 className="font-semibold mb-2">Eigene Abwesenheitsanträge</h3>
-              <div className="grid md:grid-cols-2 gap-3">
-                {(myRequests.data ?? []).map((req) => (
-                  <div key={req.id} className="p-3 rounded-lg border border-slate-200 bg-slate-50 space-y-1">
-                    <div className="flex items-center justify-between">
-                      <p className="font-semibold">{req.start_date} – {req.end_date}</p>
-                      <span className="badge bg-slate-200 text-slate-700">{req.status}</span>
-                    </div>
-                    <p className="text-sm text-slate-600">{req.type}</p>
-                    {req.cancel_requested && <p className="text-xs text-amber-600">Stornierung angefragt</p>}
-                    {req.canceled && <p className="text-xs text-emerald-700">Storniert</p>}
-                    {req.comment && <p className="text-xs text-slate-500">{req.comment}</p>}
+          <div className="card p-4">
+            <h3 className="font-semibold mb-2">Eigene Abwesenheitsanträge</h3>
+            <div className="grid md:grid-cols-2 gap-3">
+              {(myRequests.data ?? []).map((req) => (
+                <div key={req.id} className="p-3 rounded-lg border border-slate-200 bg-slate-50 space-y-1">
+                  <div className="flex items-center justify-between">
+                    <p className="font-semibold">{req.start_date} – {req.end_date}</p>
+                    <span className="badge bg-slate-200 text-slate-700">{req.status}</span>
                   </div>
-                ))}
-                {(myRequests.data ?? []).length === 0 && <p className="text-sm text-slate-500">Keine Anträge vorhanden.</p>}
-              </div>
+                  <p className="text-sm text-slate-600">{req.type}</p>
+                  {req.cancel_requested && <p className="text-xs text-amber-600">Stornierung angefragt</p>}
+                  {req.canceled && <p className="text-xs text-emerald-700">Storniert</p>}
+                  {req.comment && <p className="text-xs text-slate-500">{req.comment}</p>}
+                </div>
+              ))}
+              {(myRequests.data ?? []).length === 0 && <p className="text-sm text-slate-500">Keine Anträge vorhanden.</p>}
             </div>
-
             {auth.hasRole('lead', 'hr', 'admin') && (
-              <div className="card p-4 space-y-2">
-                <div className="flex items-center justify-between">
-                  <h3 className="font-semibold">Genehmigungsliste</h3>
-                  <p className="text-xs text-slate-500">Teamleiter/HR</p>
-                </div>
-                <div className="space-y-2">
-                  {(inbox.data ?? []).map((req) => (
-                    <div key={req.id} className="p-3 rounded-lg border border-slate-200 bg-white space-y-1">
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <p className="font-semibold">{req.user_name ?? req.user_id}</p>
-                          <p className="text-slate-500 text-sm">{req.start_date} – {req.end_date} ({req.type})</p>
-                        </div>
-                        <div className="flex gap-2">
-                          <button
-                            className="btn-primary px-3 py-1"
-                            onClick={() => statusMutation.mutate({ id: req.id, status: 'approved' })}
-                          >
-                            Genehmigen
-                          </button>
-                          <button
-                            className="btn-ghost border border-rose-200 text-rose-700"
-                            onClick={() => statusMutation.mutate({ id: req.id, status: 'rejected' })}
-                          >
-                            Ablehnen
-                          </button>
-                        </div>
-                      </div>
-                      {req.cancel_requested && <p className="text-xs text-amber-600">Stornierung angefragt</p>}
-                    </div>
-                  ))}
-                  {(inbox.data ?? []).length === 0 && <p className="text-sm text-slate-500">Keine offenen Genehmigungen.</p>}
-                </div>
-              </div>
+              <p className="text-xs text-slate-500 mt-3">
+                Genehmigungen findest du jetzt gebündelt in der <Link className="text-sky-700 underline" to="/antraege/genehmigungen">Genehmigungsliste</Link>.
+              </p>
             )}
           </div>
         </>
@@ -302,18 +251,109 @@ export function RequestsPage({ view = 'hub' }: { view?: RequestView }) {
             </div>
             <form className="grid gap-3" onSubmit={handleCorrectionSubmit}>
               <label className="text-xs text-slate-500 uppercase">Datum
-                <input type="date" name="date" required className="input" />
+                <input
+                  type="date"
+                  name="date"
+                  required
+                  className="input"
+                  value={correctionDate}
+                  onChange={(e) => setCorrectionDate(e.target.value)}
+                />
               </label>
               <textarea name="note" className="input" placeholder="Kommentar (optional)" />
+              {correctionDate && (
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <p className="text-sm font-semibold">Buchungen am {correctionDate}</p>
+                    {dayEntries.isLoading && <span className="text-xs text-slate-500">Lade …</span>}
+                  </div>
+                  <div className="space-y-2">
+                    {(dayEntries.data?.entries ?? [])
+                      .filter((entry) => entry.type === 'CLOCK_IN' || entry.type === 'CLOCK_OUT')
+                      .map((entry) => {
+                        const time = new Date(entry.timestamp).toLocaleTimeString('de-DE', {
+                          hour: '2-digit',
+                          minute: '2-digit',
+                          hour12: false,
+                        });
+                        const entryType = entry.type as 'CLOCK_IN' | 'CLOCK_OUT';
+                        return (
+                          <div
+                            key={entry.id}
+                            className="flex flex-wrap items-center justify-between gap-2 rounded border border-slate-200 px-3 py-2"
+                          >
+                            <div>
+                              <p className="font-medium">{entryType === 'CLOCK_IN' ? 'Kommen' : 'Gehen'} · {time}</p>
+                              <p className="text-xs text-slate-500">Quelle: {entry.source ?? 'n/a'}</p>
+                            </div>
+                            <div className="flex gap-2">
+                              <button
+                                type="button"
+                                className="btn-ghost border border-slate-200"
+                                onClick={() =>
+                                  setCorrectionRows((prev) => [
+                                    ...prev,
+                                    { time, type: entryType, action: 'replace', entryId: entry.id },
+                                  ])
+                                }
+                                disabled={!correctionDate}
+                              >
+                                Zeit anpassen
+                              </button>
+                              <button
+                                type="button"
+                                className="btn-ghost border border-rose-200 text-rose-700"
+                                onClick={() =>
+                                  setCorrectionRows((prev) => [
+                                    ...prev,
+                                    { time, type: entryType, action: 'delete', entryId: entry.id },
+                                  ])
+                                }
+                                disabled={!correctionDate}
+                              >
+                                Löschen
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    {(dayEntries.data?.entries ?? []).length === 0 && (
+                      <p className="text-xs text-slate-500">Keine Buchungen an diesem Tag gefunden.</p>
+                    )}
+                  </div>
+                </div>
+              )}
               <div className="space-y-2">
                 {correctionRows.map((row, idx) => (
-                  <div key={idx} className="grid grid-cols-3 gap-2 items-center">
+                  <div key={idx} className="grid grid-cols-4 gap-2 items-center">
+                    <select
+                      value={row.action ?? 'add'}
+                      onChange={(e) =>
+                        setCorrectionRows((prev) =>
+                          prev.map((r, i) =>
+                            i === idx
+                              ? { ...r, action: e.target.value as 'add' | 'delete' | 'replace' }
+                              : r
+                          )
+                        )
+                      }
+                      className="input"
+                    >
+                      <option value="add">Neu</option>
+                      <option value="replace" disabled={!row.entryId}>
+                        Ersetzen
+                      </option>
+                      <option value="delete" disabled={!row.entryId}>
+                        Löschen
+                      </option>
+                    </select>
                     <select
                       value={row.type}
                       onChange={(e) =>
                         setCorrectionRows((prev) => prev.map((r, i) => (i === idx ? { ...r, type: e.target.value as any } : r)))
                       }
                       className="input"
+                      disabled={row.action === 'delete'}
                     >
                       <option value="CLOCK_IN">Kommen</option>
                       <option value="CLOCK_OUT">Gehen</option>
@@ -325,7 +365,8 @@ export function RequestsPage({ view = 'hub' }: { view?: RequestView }) {
                         setCorrectionRows((prev) => prev.map((r, i) => (i === idx ? { ...r, time: e.target.value } : r)))
                       }
                       className="input"
-                      required
+                      required={row.action !== 'delete'}
+                      disabled={row.action === 'delete'}
                     />
                     <div className="flex gap-2">
                       <button
@@ -382,55 +423,6 @@ export function RequestsPage({ view = 'hub' }: { view?: RequestView }) {
               {(myCorrections.data ?? []).length === 0 && <p className="text-slate-500 text-sm">Keine Korrekturen vorhanden.</p>}
             </div>
           </div>
-
-          {auth.hasRole('lead', 'hr', 'admin') && (
-            <div className="card p-4 space-y-3">
-              <div className="flex items-center justify-between">
-                <h3 className="font-semibold">Korrektur-Genehmigungen</h3>
-                <p className="text-xs text-slate-500">Teamleiter/HR</p>
-              </div>
-              <div className="space-y-2">
-                {(correctionInbox.data ?? []).map((req: TimeCorrectionRequest & { user_name?: string }) => (
-                  <div key={req.id} className="p-3 rounded-lg border border-slate-200 bg-white space-y-1">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="font-semibold">{req.user_name ?? req.user_id}</p>
-                        <p className="text-slate-500 text-sm">{req.date}</p>
-                        {req.note && <p className="text-xs text-slate-600">{req.note}</p>}
-                        {req.entries?.length ? (
-                          <ul className="mt-1 text-xs text-slate-600 space-y-0.5">
-                            {req.entries.map((entry: any, idx: number) => (
-                              <li key={`${entry.id ?? idx}-${entry.timestamp}`}>
-                                {new Date(entry.timestamp).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })} ·{' '}
-                                {entry.type === 'CLOCK_IN' ? 'Kommen' : 'Gehen'}
-                              </li>
-                            ))}
-                          </ul>
-                        ) : null}
-                      </div>
-                      <div className="flex gap-2">
-                        <button
-                          className="btn-primary px-3 py-1"
-                          onClick={() => correctionStatus.mutate({ id: req.id, status: 'approved' })}
-                        >
-                          Genehmigen
-                        </button>
-                        <button
-                          className="btn-ghost border border-rose-200 text-rose-700"
-                          onClick={() => correctionStatus.mutate({ id: req.id, status: 'rejected' })}
-                        >
-                          Ablehnen
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-                {(correctionInbox.data ?? []).length === 0 && (
-                  <p className="text-sm text-slate-500">Keine offenen Korrekturen.</p>
-                )}
-              </div>
-            </div>
-          )}
         </>
       )}
     </div>

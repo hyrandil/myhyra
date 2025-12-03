@@ -344,9 +344,22 @@ CREATE TABLE IF NOT EXISTS time_correction_entries (
   request_id INTEGER NOT NULL,
   timestamp TEXT NOT NULL,
   type TEXT NOT NULL CHECK(type IN ('CLOCK_IN','CLOCK_OUT')),
+  action TEXT NOT NULL CHECK(action IN ('add','delete','replace')) DEFAULT 'add',
+  entry_id INTEGER,
   FOREIGN KEY(request_id) REFERENCES time_correction_requests(id) ON DELETE CASCADE
 );
 `);
+
+// Backfill newer columns on older databases
+const correctionColumns = db.prepare("PRAGMA table_info('time_correction_entries')").all() as { name: string }[];
+const hasAction = correctionColumns.some((col) => col.name === 'action');
+const hasEntryId = correctionColumns.some((col) => col.name === 'entry_id');
+if (!hasAction) {
+  db.exec("ALTER TABLE time_correction_entries ADD COLUMN action TEXT NOT NULL DEFAULT 'add'");
+}
+if (!hasEntryId) {
+  db.exec('ALTER TABLE time_correction_entries ADD COLUMN entry_id INTEGER');
+}
 
 if (adminId) {
   ensureProfile(adminId);

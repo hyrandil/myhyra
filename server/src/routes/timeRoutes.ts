@@ -621,14 +621,22 @@ router.get('/user/:userId/daily', authorize(['admin', 'hr', 'lead']), (req: Auth
   res.json(buildDailySummary(userId, month));
 });
 
-router.get('/user/:userId/day', authorize(['admin', 'hr', 'lead']), (req: AuthRequest, res) => {
+router.get('/user/:userId/day', requireAuth, (req: AuthRequest, res) => {
   const userId = Number(req.params.userId);
   const { date } = req.query as { date?: string };
   if (!date) return res.status(400).json({ message: 'Datum erforderlich' });
   if (Number.isNaN(userId)) return res.status(400).json({ message: 'Ungültige Nutzer-ID' });
   const exists = db.prepare('SELECT id FROM users WHERE id = ?').get(userId) as { id: number } | undefined;
   if (!exists) return res.status(404).json({ message: 'Nutzer nicht gefunden' });
-  if (!ensureManageable(req, res, userId)) return;
+  if (req.user!.role !== 'admin' && req.user!.role !== 'hr' && req.user!.role !== 'lead' && req.user!.id !== userId) {
+    return res.status(403).json({ message: 'Keine Berechtigung' });
+  }
+  if (req.user!.role !== 'admin' && req.user!.role !== 'hr' && req.user!.role !== 'lead') {
+    const allowed = req.user!.id === userId;
+    if (!allowed) return res.status(403).json({ message: 'Keine Berechtigung' });
+  } else if (!ensureManageable(req, res, userId)) {
+    return;
+  }
   const entries = db
     .prepare('SELECT * FROM time_entries WHERE user_id = ? AND date(timestamp) = ? ORDER BY timestamp ASC')
     .all(userId, date) as TimeEntry[];
@@ -978,10 +986,21 @@ router.delete('/entry/:entryId', authorize(['admin', 'hr', 'lead']), (req: AuthR
   res.status(204).send();
 });
 
-const correctionEntrySchema = z.object({
-  timestamp: z.string().min(5),
-  type: z.enum(['CLOCK_IN', 'CLOCK_OUT']),
-});
+const correctionEntrySchema = z
+  .object({
+    timestamp: z.string().min(5),
+    type: z.enum(['CLOCK_IN', 'CLOCK_OUT']),
+    action: z.enum(['add', 'delete', 'replace']).default('add'),
+    entry_id: z.number().int().optional(),
+  })
+  .refine((value) => {
+    if (value.action === 'add') return true;
+    return Number.isInteger(value.entry_id);
+  }, 'Bestehende Buchung fehlt')
+  .refine((value) => {
+    if (value.action === 'delete') return true;
+    return Boolean(value.timestamp);
+  }, 'Zeitpunkt erforderlich');
 
 const correctionSchema = z.object({
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
@@ -991,7 +1010,9 @@ const correctionSchema = z.object({
 
 const loadCorrectionEntries = (requestId: number) =>
   (db
-    .prepare('SELECT id, timestamp, type FROM time_correction_entries WHERE request_id = ? ORDER BY timestamp ASC')
+    .prepare(
+      'SELECT id, timestamp, type, action, entry_id as entryId FROM time_correction_entries WHERE request_id = ? ORDER BY timestamp ASC'
+    )
     .all(requestId) as any[]).map((entry) => ({ ...entry }));
 
 router.post('/corrections', requireAuth, (req: AuthRequest, res) => {
@@ -1003,9 +1024,9 @@ router.post('/corrections', requireAuth, (req: AuthRequest, res) => {
     .run(req.user!.id, date, note ?? null);
   const created = db.prepare('SELECT * FROM time_correction_requests WHERE id = ?').get(result.lastInsertRowid) as any;
   const insertEntry = db.prepare(
-    'INSERT INTO time_correction_entries (request_id, timestamp, type) VALUES (?, ?, ?)' // timestamp already ISO/local string
+    'INSERT INTO time_correction_entries (request_id, timestamp, type, action, entry_id) VALUES (?, ?, ?, ?, ?)' // timestamp already ISO/local string
   );
-  entries.forEach((entry) => insertEntry.run(created.id, entry.timestamp, entry.type));
+  entries.forEach((entry) => insertEntry.run(created.id, entry.timestamp, entry.type, entry.action ?? 'add', entry.entry_id ?? null));
   res.status(201).json({ ...created, entries: loadCorrectionEntries(created.id) });
 });
 
@@ -1069,7 +1090,25 @@ router.patch('/corrections/:id/status', authorize(['admin', 'hr', 'lead']), (req
       const insertEntry = db.prepare(
         'INSERT INTO time_entries (user_id, timestamp, type, source) VALUES (?, ?, ?, ?)' // stored as provided (local/ISO)
       );
-      entries.forEach((entry) => insertEntry.run(row.user_id, entry.timestamp, entry.type, 'CORRECTION'));
+      const deleteEntry = db.prepare('DELETE FROM time_entries WHERE id = ? AND user_id = ?');
+      entries.forEach((entry) => {
+        if (entry.entryId) {
+          const owner = db
+            .prepare('SELECT user_id FROM time_entries WHERE id = ?')
+            .get(entry.entryId) as { user_id: number } | undefined;
+          if (!owner || owner.user_id !== row.user_id) {
+            throw new Error('Buchung gehört nicht zum Nutzer');
+          }
+        }
+        if (entry.action === 'delete' && entry.entryId) {
+          deleteEntry.run(entry.entryId, row.user_id);
+          return;
+        }
+        if (entry.action === 'replace' && entry.entryId) {
+          deleteEntry.run(entry.entryId, row.user_id);
+        }
+        insertEntry.run(row.user_id, entry.timestamp, entry.type, 'CORRECTION');
+      });
     }
   });
   transaction();

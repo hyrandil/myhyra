@@ -17,6 +17,7 @@ import { InconsistentPage } from './pages/InconsistentPage';
 import { useAuth } from './AuthProvider';
 import { MobileHomePage } from './pages/MobileHomePage';
 import { useIsMobile } from './hooks/useIsMobile';
+import { ApprovalListPage } from './pages/ApprovalListPage';
 
 function Protected({ children }: { children: React.ReactNode }) {
   const { user, ready } = useAuth();
@@ -201,6 +202,7 @@ export default function App() {
                   <Route path="/antraege/abwesenheit" element={<AbsenceRequestsPage />} />
                   <Route path="/antraege/korrektur" element={<CorrectionRequestsPage />} />
                   <Route path="/antraege/storno" element={<CancellationRequestsPage />} />
+                  <Route path="/antraege/genehmigungen" element={<ApprovalListPage />} />
                   {auth.hasRole('admin') && <Route path="/abwesenheiten" element={<AbsencePage />} />}
                   <Route path="/berichte" element={<ReportsPage />} />
                   <Route path="/uebersicht" element={<OverviewCalendarPage />} />
@@ -221,6 +223,7 @@ export default function App() {
                   <Route path="/antraege/abwesenheit" element={<AbsenceRequestsPage />} />
                   <Route path="/antraege/korrektur" element={<CorrectionRequestsPage />} />
                   <Route path="/antraege/storno" element={<CancellationRequestsPage />} />
+                  <Route path="/antraege/genehmigungen" element={<ApprovalListPage />} />
                   {auth.hasRole('admin') && <Route path="/abwesenheiten" element={<AbsencePage />} />}
                   <Route path="/inkonsistenzen" element={<InconsistentPage />} />
                   <Route path="/planung" element={<PlanningPage />} />
