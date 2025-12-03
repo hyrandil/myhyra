@@ -1174,7 +1174,7 @@ router.patch('/corrections/:id/status', authorize(['admin', 'hr', 'lead']), (req
     );
     if (parsed.data === 'approved' && row.status !== 'approved') {
       const insertEntry = db.prepare(
-        'INSERT INTO time_entries (user_id, timestamp, type, source) VALUES (?, ?, ?, ?)' // stored as provided (local/ISO)
+        'INSERT INTO time_entries (user_id, timestamp, type, source, lat, lng) VALUES (?, ?, ?, ?, NULL, NULL)'
       );
       const deleteEntry = db.prepare('DELETE FROM time_entries WHERE id = ? AND user_id = ?');
       entries.forEach((entry) => {

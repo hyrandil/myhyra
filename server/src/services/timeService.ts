@@ -46,7 +46,8 @@ export function computeDayWorkStats(entries: TimeEntry[]) {
   const recordedBreakMinutes = breakMs / MS_IN_MINUTE;
 
   const baseRequirement = Math.min(Math.max(workedMinutesRaw - 360, 0), 30);
-  const longRequirement = Math.min(Math.max(workedMinutesRaw - 540, 0), 15);
+  const effectiveAfterBase = workedMinutesRaw - baseRequirement;
+  const longRequirement = Math.min(Math.max(effectiveAfterBase - 540, 0), 15);
   const requiredPause = baseRequirement + longRequirement;
   const autoDeduction = Math.max(requiredPause - recordedBreakMinutes, 0);
   const effective = Math.max(workedMinutesRaw - autoDeduction, 0);
