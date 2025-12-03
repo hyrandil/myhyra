@@ -208,7 +208,9 @@ const upgradeAbsenceStatusConstraint = () => {
     .prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'absence_requests'")
     .get() as { sql?: string } | undefined;
   const sql = row?.sql || '';
-  if (sql.includes("status IN ('pending','approved','rejected')") && !sql.includes('canceled')) {
+  // Be defensive: if the stored table definition does not include the new
+  // `canceled` status, rebuild the table with the expanded CHECK constraint.
+  if (!sql.includes('canceled')) {
     db.exec(`
       PRAGMA foreign_keys=off;
       BEGIN TRANSACTION;

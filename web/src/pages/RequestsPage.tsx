@@ -252,6 +252,32 @@ export function RequestsPage({ view = 'hub' }: { view?: RequestView }) {
             </button>
           </form>
           {cancelable.length === 0 && <p className="text-sm text-slate-500">Keine genehmigten Abwesenheiten verfügbar.</p>}
+
+          <div className="border-t border-slate-200 pt-3 space-y-2">
+            <div className="flex items-center justify-between">
+              <h4 className="font-semibold">Eigene Stornierungsanträge</h4>
+              <p className="text-xs text-slate-500">Offene und abgeschlossene Stornos</p>
+            </div>
+            <div className="grid md:grid-cols-2 gap-3">
+              {(myRequests.data ?? [])
+                .filter((req) => req.cancel_requested || req.status === 'canceled')
+                .map((req) => (
+                  <div key={req.id} className="p-3 rounded-lg border border-slate-200 bg-slate-50 space-y-1">
+                    <div className="flex items-center justify-between">
+                      <p className="font-semibold">{req.start_date} – {req.end_date}</p>
+                      <span className={statusMeta(req.status).className}>{statusMeta(req.status).label}</span>
+                    </div>
+                    <p className="text-sm text-slate-600">{req.type}</p>
+                    {req.cancel_requested && <p className="text-xs text-amber-600">Stornierung angefragt</p>}
+                    {req.canceled && <p className="text-xs text-emerald-700">Storniert</p>}
+                    {req.comment && <p className="text-xs text-slate-500">{req.comment}</p>}
+                  </div>
+                ))}
+              {(myRequests.data ?? []).filter((req) => req.cancel_requested || req.status === 'canceled').length === 0 && (
+                <p className="text-sm text-slate-500">Noch keine Stornierungsanträge vorhanden.</p>
+              )}
+            </div>
+          </div>
         </div>
       )}
 
