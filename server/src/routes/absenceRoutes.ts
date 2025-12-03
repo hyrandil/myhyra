@@ -332,7 +332,9 @@ router.get('/requests', (req: AuthRequest, res) => {
      FROM absence_requests ar
      JOIN users u ON u.id = ar.user_id`;
   if (req.user!.role === 'admin' || req.user!.role === 'hr') {
-    const rows = db.prepare(`${baseQuery} ORDER BY ar.start_date DESC, ar.created_at DESC`).all();
+    const rows = db
+      .prepare(`${baseQuery} WHERE ar.status = 'pending' ORDER BY ar.start_date DESC, ar.created_at DESC`)
+      .all();
     return res.json(rows);
   }
   const allowedDepartments = managedDepartments(req.user!.id);
@@ -342,7 +344,7 @@ router.get('/requests', (req: AuthRequest, res) => {
     .prepare(
       `${baseQuery}
        JOIN department_members dm ON dm.user_id = ar.user_id
-       WHERE dm.department_id IN (${placeholders})
+       WHERE dm.department_id IN (${placeholders}) AND ar.status = 'pending'
        ORDER BY ar.start_date DESC, ar.created_at DESC`
     )
     .all(...allowedDepartments);
