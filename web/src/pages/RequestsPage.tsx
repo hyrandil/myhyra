@@ -9,6 +9,7 @@ import {
   createTimeCorrectionRequest,
   fetchMyCorrections,
   fetchDayEntriesForUser,
+  requestCorrectionCancellation,
 } from '../api';
 import { useAuth } from '../AuthProvider';
 import { AbsenceRequest, TimeCorrectionRequest, DayDetail } from '../types';
@@ -53,6 +54,14 @@ export function RequestsPage({ view = 'hub' }: { view?: RequestView }) {
 
   const correctionCreate = useMutation({
     mutationFn: createTimeCorrectionRequest,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['corrections'] });
+      refreshCalendars();
+    },
+  });
+
+  const correctionCancel = useMutation({
+    mutationFn: ({ id, reason }: { id: number; reason?: string }) => requestCorrectionCancellation(id, reason),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['corrections'] });
       refreshCalendars();
@@ -447,6 +456,11 @@ export function RequestsPage({ view = 'hub' }: { view?: RequestView }) {
                     <span className={statusMeta(item.status).className}>{statusMeta(item.status).label}</span>
                   </div>
                   {item.note && <p className="text-xs text-slate-600 mt-1">{item.note}</p>}
+                  {item.cancel_requested ? (
+                    <p className="text-xs text-amber-600">Stornierung angefragt</p>
+                  ) : item.status === 'canceled' ? (
+                    <p className="text-xs text-emerald-700">Korrektur storniert</p>
+                  ) : null}
                   {item.entries?.length ? (
                     <ul className="mt-1 text-xs text-slate-600 space-y-0.5">
                       {item.entries.map((entry: any, idx: number) => (
@@ -457,6 +471,17 @@ export function RequestsPage({ view = 'hub' }: { view?: RequestView }) {
                       ))}
                     </ul>
                   ) : null}
+                  {item.status === 'approved' && !item.cancel_requested && (
+                    <div className="mt-2 flex justify-end">
+                      <button
+                        className="btn-ghost border border-amber-200 text-amber-700"
+                        onClick={() => correctionCancel.mutate({ id: item.id })}
+                        disabled={correctionCancel.isPending}
+                      >
+                        Stornieren
+                      </button>
+                    </div>
+                  )}
                 </div>
               ))}
               {(myCorrections.data ?? []).length === 0 && <p className="text-slate-500 text-sm">Keine Korrekturen vorhanden.</p>}

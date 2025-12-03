@@ -1016,12 +1016,50 @@ const correctionSchema = z.object({
   entries: z.array(correctionEntrySchema).default([]),
 });
 
+const correctionCancellationSchema = z.object({
+  reason: z.string().max(500).optional().or(z.literal('')).transform((v) => v || undefined),
+});
+
 const loadCorrectionEntries = (requestId: number) =>
   (db
     .prepare(
-      'SELECT id, timestamp, type, action, entry_id as entryId FROM time_correction_entries WHERE request_id = ? ORDER BY timestamp ASC'
+      `SELECT id, timestamp, type, action, entry_id as entryId, created_entry_id as createdEntryId,
+              original_timestamp as originalTimestamp, original_type as originalType, original_source as originalSource
+         FROM time_correction_entries
+         WHERE request_id = ?
+         ORDER BY timestamp ASC`
     )
     .all(requestId) as any[]).map((entry) => ({ ...entry }));
+
+const persistOriginalEntry = db.prepare(
+  'UPDATE time_correction_entries SET original_timestamp = ?, original_type = ?, original_source = ? WHERE id = ?'
+);
+
+const persistCreatedEntry = db.prepare('UPDATE time_correction_entries SET created_entry_id = ? WHERE id = ?');
+
+const revertCorrectionEntries = (userId: number, entries: any[]) => {
+  const insertOriginal = db.prepare(
+    'INSERT INTO time_entries (user_id, timestamp, type, source, lat, lng) VALUES (?, ?, ?, ?, ?, ?)'
+  );
+  const deleteEntry = db.prepare('DELETE FROM time_entries WHERE id = ? AND user_id = ?');
+
+  entries.forEach((entry) => {
+    if (entry.action !== 'delete' && entry.createdEntryId) {
+      deleteEntry.run(entry.createdEntryId, userId);
+    }
+
+    if ((entry.action === 'replace' || entry.action === 'delete') && entry.originalTimestamp && entry.originalType) {
+      insertOriginal.run(
+        userId,
+        entry.originalTimestamp,
+        entry.originalType,
+        entry.originalSource ?? 'WEB',
+        null,
+        null
+      );
+    }
+  });
+};
 
 router.post('/corrections', requireAuth, (req: AuthRequest, res) => {
   const parsed = correctionSchema.safeParse(req.body);
@@ -1053,7 +1091,7 @@ router.get('/corrections/inbox', authorize(['admin', 'hr', 'lead']), (req: AuthR
         `SELECT tcr.*, u.name as user_name, u.email as user_email
          FROM time_correction_requests tcr
          JOIN users u ON u.id = tcr.user_id
-         WHERE tcr.status = 'pending'
+         WHERE (tcr.status = 'pending' OR tcr.cancel_requested = 1)
          ORDER BY tcr.date DESC, tcr.created_at DESC`
       )
       .all();
@@ -1068,11 +1106,33 @@ router.get('/corrections/inbox', authorize(['admin', 'hr', 'lead']), (req: AuthR
        FROM time_correction_requests tcr
        JOIN users u ON u.id = tcr.user_id
        JOIN department_members dm ON dm.user_id = u.id
-       WHERE dm.department_id IN (${placeholders}) AND dm.role IN ('lead','member','hr') AND tcr.status = 'pending'
+       WHERE dm.department_id IN (${placeholders}) AND dm.role IN ('lead','member','hr') AND (tcr.status = 'pending' OR tcr.cancel_requested = 1)
        ORDER BY tcr.date DESC, tcr.created_at DESC`
     )
     .all(...allowedDepartments);
   res.json(rows.map((row: any) => ({ ...row, entries: loadCorrectionEntries(row.id) })));
+});
+
+router.post('/corrections/:id/cancel', requireAuth, (req: AuthRequest, res) => {
+  const id = Number(req.params.id);
+  if (Number.isNaN(id)) return res.status(400).json({ message: 'Ungültige ID' });
+  const parsed = correctionCancellationSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ errors: parsed.error.format() });
+
+  const row = db
+    .prepare('SELECT * FROM time_correction_requests WHERE id = ?')
+    .get(id) as { user_id: number; status: string; cancel_requested?: number; canceled?: number } | undefined;
+  if (!row) return res.status(404).json({ message: 'Antrag nicht gefunden' });
+  if (row.user_id !== req.user!.id) return res.status(403).json({ message: 'Nur eigene Anträge stornierbar' });
+  if (row.status !== 'approved' || row.cancel_requested) {
+    return res.status(400).json({ message: 'Stornierung nicht möglich' });
+  }
+
+  db.prepare(
+    "UPDATE time_correction_requests SET cancel_requested = 1, cancel_reason = ?, status = 'pending', canceled = 0 WHERE id = ?"
+  ).run(parsed.data.reason ?? null, id);
+  logAction(req.user!.id, 'correction.request.cancel', row.user_id, { request_id: id });
+  res.json({ message: 'Stornierung angefragt' });
 });
 
 router.patch('/corrections/:id/status', authorize(['admin', 'hr', 'lead']), (req: AuthRequest, res) => {
@@ -1082,7 +1142,7 @@ router.patch('/corrections/:id/status', authorize(['admin', 'hr', 'lead']), (req
   if (!parsed.success) return res.status(400).json({ message: 'Status ungültig' });
   const row = db
     .prepare('SELECT * FROM time_correction_requests WHERE id = ?')
-    .get(id) as { user_id: number; status: string } | undefined;
+    .get(id) as { user_id: number; status: string; cancel_requested?: number } | undefined;
   if (!row) return res.status(404).json({ message: 'Antrag nicht gefunden' });
   if (req.user!.role !== 'admin' && req.user!.role !== 'hr') {
     if (!ensureManageable(req, res, row.user_id)) return;
@@ -1090,7 +1150,24 @@ router.patch('/corrections/:id/status', authorize(['admin', 'hr', 'lead']), (req
 
   const entries = loadCorrectionEntries(id);
   const transaction = db.transaction(() => {
-    db.prepare('UPDATE time_correction_requests SET status = ?, handled_by = ? WHERE id = ?').run(
+    if (row.cancel_requested) {
+      if (parsed.data === 'approved') {
+        revertCorrectionEntries(row.user_id, entries);
+        db.prepare(
+          "UPDATE time_correction_requests SET status = 'canceled', canceled = 1, cancel_requested = 0, handled_by = ? WHERE id = ?"
+        ).run(req.user!.id, id);
+        logAction(req.user!.id, 'correction.request.cancel.approve', row.user_id, { request_id: id });
+      } else {
+        db.prepare("UPDATE time_correction_requests SET cancel_requested = 0, status = 'approved', handled_by = ? WHERE id = ?").run(
+          req.user!.id,
+          id
+        );
+        logAction(req.user!.id, 'correction.request.cancel.reject', row.user_id, { request_id: id });
+      }
+      return;
+    }
+
+    db.prepare('UPDATE time_correction_requests SET status = ?, handled_by = ?, canceled = 0 WHERE id = ?').run(
       parsed.data,
       req.user!.id,
       id
@@ -1101,14 +1178,22 @@ router.patch('/corrections/:id/status', authorize(['admin', 'hr', 'lead']), (req
       );
       const deleteEntry = db.prepare('DELETE FROM time_entries WHERE id = ? AND user_id = ?');
       entries.forEach((entry) => {
-        if (entry.action === 'delete' && entry.entryId) {
-          deleteEntry.run(entry.entryId, row.user_id);
-          return;
+        const entryId = entry.entryId ?? entry.entry_id;
+        if (entry.action === 'delete' || entry.action === 'replace') {
+          if (entryId) {
+            const original = db
+              .prepare('SELECT id, timestamp, type, source FROM time_entries WHERE id = ? AND user_id = ?')
+              .get(entryId, row.user_id) as any;
+            if (original) {
+              persistOriginalEntry.run(original.timestamp, original.type, original.source ?? 'WEB', entry.id);
+            }
+            deleteEntry.run(entryId, row.user_id);
+          }
         }
-        if (entry.action === 'replace' && entry.entryId) {
-          deleteEntry.run(entry.entryId, row.user_id);
+        if (entry.action !== 'delete') {
+          const result = insertEntry.run(row.user_id, entry.timestamp, entry.type, 'CORRECTION');
+          persistCreatedEntry.run(Number(result.lastInsertRowid), entry.id);
         }
-        insertEntry.run(row.user_id, entry.timestamp, entry.type, 'CORRECTION');
       });
       logAction(req.user!.id, 'correction.request.approve', row.user_id, { request_id: id, entries: entries.length });
     } else {

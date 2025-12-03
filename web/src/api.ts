@@ -390,6 +390,11 @@ export async function updateCorrectionStatus(id: number, status: 'approved' | 'r
   return res.data;
 }
 
+export async function requestCorrectionCancellation(id: number, reason?: string) {
+  const res = await api.post(`/time/corrections/${id}/cancel`, { reason });
+  return res.data;
+}
+
 export async function fetchMonthlyReport(userId: number, month?: string) {
   const res = await api.get<MonthlyReport>(`/time/user/${userId}/monthly-report`, { params: month ? { month } : undefined });
   return res.data;

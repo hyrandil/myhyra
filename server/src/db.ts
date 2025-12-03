@@ -150,7 +150,7 @@ CREATE TABLE IF NOT EXISTS time_entries (
   user_id INTEGER NOT NULL,
   timestamp TEXT NOT NULL,
   type TEXT NOT NULL CHECK(type IN ('CLOCK_IN','CLOCK_OUT','BREAK_START','BREAK_END')),
-  source TEXT NOT NULL CHECK(source IN ('WEB','APP','TERMINAL')) DEFAULT 'WEB',
+  source TEXT NOT NULL CHECK(source IN ('WEB','APP','TERMINAL','CORRECTION')) DEFAULT 'WEB',
   lat REAL,
   lng REAL,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -203,6 +203,36 @@ const ensureTableColumn = (table: string, name: string, definition: string) => {
   return true;
 };
 
+const upgradeTimeEntrySourceConstraint = () => {
+  const row = db
+    .prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'time_entries'")
+    .get() as { sql?: string } | undefined;
+  const sql = row?.sql || '';
+  if (/source[^)]*'CORRECTION'/i.test(sql)) return;
+
+  db.exec(`
+    PRAGMA foreign_keys=off;
+    BEGIN TRANSACTION;
+    CREATE TABLE time_entries_new (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL,
+      timestamp TEXT NOT NULL,
+      type TEXT NOT NULL CHECK(type IN ('CLOCK_IN','CLOCK_OUT','BREAK_START','BREAK_END')),
+      source TEXT NOT NULL CHECK(source IN ('WEB','APP','TERMINAL','CORRECTION')) DEFAULT 'WEB',
+      lat REAL,
+      lng REAL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+    );
+    INSERT INTO time_entries_new (id, user_id, timestamp, type, source, lat, lng, created_at)
+    SELECT id, user_id, timestamp, type, source, lat, lng, created_at FROM time_entries;
+    DROP TABLE time_entries;
+    ALTER TABLE time_entries_new RENAME TO time_entries;
+    COMMIT;
+    PRAGMA foreign_keys=on;
+  `);
+};
+
 const upgradeAbsenceStatusConstraint = () => {
   const row = db
     .prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'absence_requests'")
@@ -242,11 +272,46 @@ const upgradeAbsenceStatusConstraint = () => {
   `);
 };
 
+const upgradeCorrectionStatusConstraint = () => {
+  const row = db
+    .prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'time_correction_requests'")
+    .get() as { sql?: string } | undefined;
+  const sql = row?.sql || '';
+  if (/status[^)]*'canceled'/i.test(sql)) return;
+
+  db.exec(`
+    PRAGMA foreign_keys=off;
+    BEGIN TRANSACTION;
+    CREATE TABLE time_correction_requests_new (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL,
+      date TEXT NOT NULL,
+      note TEXT,
+      status TEXT NOT NULL CHECK(status IN ('pending','approved','rejected','canceled')) DEFAULT 'pending',
+      cancel_requested INTEGER NOT NULL DEFAULT 0,
+      cancel_reason TEXT,
+      canceled INTEGER NOT NULL DEFAULT 0,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      handled_by INTEGER,
+      FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE,
+      FOREIGN KEY(handled_by) REFERENCES users(id) ON DELETE SET NULL
+    );
+    INSERT INTO time_correction_requests_new (id, user_id, date, note, status, created_at, handled_by)
+    SELECT id, user_id, date, note, status, created_at, handled_by FROM time_correction_requests;
+    DROP TABLE time_correction_requests;
+    ALTER TABLE time_correction_requests_new RENAME TO time_correction_requests;
+    COMMIT;
+    PRAGMA foreign_keys=on;
+  `);
+};
+
 ensureTableColumn('bookings', 'clock_in_lat', 'clock_in_lat REAL');
 ensureTableColumn('bookings', 'clock_in_lng', 'clock_in_lng REAL');
 ensureTableColumn('bookings', 'clock_out_lat', 'clock_out_lat REAL');
 ensureTableColumn('bookings', 'clock_out_lng', 'clock_out_lng REAL');
 upgradeAbsenceStatusConstraint();
+upgradeCorrectionStatusConstraint();
+upgradeTimeEntrySourceConstraint();
 ensureTableColumn('users', 'first_name', 'first_name TEXT');
 ensureTableColumn('users', 'last_name', 'last_name TEXT');
 ensureTableColumn('user_profiles', 'tracking_start_date', 'tracking_start_date TEXT');
@@ -291,6 +356,9 @@ ensureTableColumn('absence_requests', 'cancel_requested', 'cancel_requested INTE
 ensureTableColumn('absence_requests', 'cancel_reason', 'cancel_reason TEXT');
 ensureTableColumn('absence_requests', 'canceled', 'canceled INTEGER NOT NULL DEFAULT 0');
 ensureTableColumn('absence_requests', 'comment', 'comment TEXT');
+ensureTableColumn('time_correction_requests', 'cancel_requested', 'cancel_requested INTEGER NOT NULL DEFAULT 0');
+ensureTableColumn('time_correction_requests', 'cancel_reason', 'cancel_reason TEXT');
+ensureTableColumn('time_correction_requests', 'canceled', 'canceled INTEGER NOT NULL DEFAULT 0');
 ensureTableColumn('user_profiles', 'start_date', 'start_date TEXT');
 ensureTableColumn('user_profiles', 'end_date', 'end_date TEXT');
 const absenceKindCount = db.prepare('SELECT COUNT(*) as count FROM absence_kinds').get() as { count: number };
@@ -384,7 +452,10 @@ CREATE TABLE IF NOT EXISTS time_correction_requests (
   user_id INTEGER NOT NULL,
   date TEXT NOT NULL,
   note TEXT,
-  status TEXT NOT NULL CHECK(status IN ('pending','approved','rejected')) DEFAULT 'pending',
+  status TEXT NOT NULL CHECK(status IN ('pending','approved','rejected','canceled')) DEFAULT 'pending',
+  cancel_requested INTEGER NOT NULL DEFAULT 0,
+  cancel_reason TEXT,
+  canceled INTEGER NOT NULL DEFAULT 0,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   handled_by INTEGER,
   FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE,
@@ -400,6 +471,10 @@ CREATE TABLE IF NOT EXISTS time_correction_entries (
   type TEXT NOT NULL CHECK(type IN ('CLOCK_IN','CLOCK_OUT')),
   action TEXT NOT NULL CHECK(action IN ('add','delete','replace')) DEFAULT 'add',
   entry_id INTEGER,
+  created_entry_id INTEGER,
+  original_timestamp TEXT,
+  original_type TEXT,
+  original_source TEXT,
   FOREIGN KEY(request_id) REFERENCES time_correction_requests(id) ON DELETE CASCADE
 );
 `);
@@ -408,11 +483,27 @@ CREATE TABLE IF NOT EXISTS time_correction_entries (
 const correctionColumns = db.prepare("PRAGMA table_info('time_correction_entries')").all() as { name: string }[];
 const hasAction = correctionColumns.some((col) => col.name === 'action');
 const hasEntryId = correctionColumns.some((col) => col.name === 'entry_id');
+const hasCreatedEntry = correctionColumns.some((col) => col.name === 'created_entry_id');
+const hasOriginalTs = correctionColumns.some((col) => col.name === 'original_timestamp');
+const hasOriginalType = correctionColumns.some((col) => col.name === 'original_type');
+const hasOriginalSource = correctionColumns.some((col) => col.name === 'original_source');
 if (!hasAction) {
   db.exec("ALTER TABLE time_correction_entries ADD COLUMN action TEXT NOT NULL DEFAULT 'add'");
 }
 if (!hasEntryId) {
   db.exec('ALTER TABLE time_correction_entries ADD COLUMN entry_id INTEGER');
+}
+if (!hasCreatedEntry) {
+  db.exec('ALTER TABLE time_correction_entries ADD COLUMN created_entry_id INTEGER');
+}
+if (!hasOriginalTs) {
+  db.exec('ALTER TABLE time_correction_entries ADD COLUMN original_timestamp TEXT');
+}
+if (!hasOriginalType) {
+  db.exec('ALTER TABLE time_correction_entries ADD COLUMN original_type TEXT');
+}
+if (!hasOriginalSource) {
+  db.exec('ALTER TABLE time_correction_entries ADD COLUMN original_source TEXT');
 }
 
 if (adminId) {

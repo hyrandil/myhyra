@@ -41,7 +41,7 @@ export interface TimeEntry {
   user_id: number;
   timestamp: string;
   type: 'CLOCK_IN' | 'CLOCK_OUT' | 'BREAK_START' | 'BREAK_END';
-  source: 'WEB' | 'APP' | 'TERMINAL';
+  source: 'WEB' | 'APP' | 'TERMINAL' | 'CORRECTION';
   lat?: number | null;
   lng?: number | null;
 }
@@ -157,7 +157,9 @@ export interface TimeCorrectionRequest {
   user_id: number;
   date: string;
   note?: string | null;
-  status: 'pending' | 'approved' | 'rejected';
+  status: 'pending' | 'approved' | 'rejected' | 'canceled';
+  cancel_requested?: boolean | number;
+  cancel_reason?: string | null;
   created_at?: string;
   user_name?: string;
   user_email?: string;
@@ -167,6 +169,9 @@ export interface TimeCorrectionRequest {
     type: 'CLOCK_IN' | 'CLOCK_OUT';
     action?: 'add' | 'delete' | 'replace';
     entryId?: number | null;
+    createdEntryId?: number | null;
+    originalTimestamp?: string | null;
+    originalType?: string | null;
   }[];
 }
 

@@ -113,6 +113,9 @@ export function ApprovalListPage() {
                     <p className="font-semibold">{req.user_name ?? req.user_id}</p>
                     <p className="text-slate-500 text-sm">{req.date}</p>
                     {req.note && <p className="text-xs text-slate-600">{req.note}</p>}
+                    {req.cancel_requested ? (
+                      <p className="text-xs text-amber-600">Stornierung angefragt</p>
+                    ) : null}
                     {req.entries?.length ? (
                       <ul className="mt-1 text-xs text-slate-600 space-y-0.5">
                         {req.entries.map((entry: NonNullable<TimeCorrectionRequest['entries']>[number], idx: number) => (
