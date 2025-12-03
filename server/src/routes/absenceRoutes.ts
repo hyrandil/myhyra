@@ -21,6 +21,27 @@ type AbsenceKind = {
 const absenceKindByCode = (code: string): AbsenceKind | undefined =>
   db.prepare('SELECT * FROM absence_kinds WHERE code = ?').get(code) as AbsenceKind | undefined;
 
+type AbsenceRequestRow = {
+  id: number;
+  user_id: number;
+  start_date: string;
+  end_date: string;
+  type: string;
+  status: 'pending' | 'approved' | 'rejected';
+  comment?: string | null;
+  user_name?: string;
+  cancel_requested?: number;
+  cancel_reason?: string | null;
+  canceled?: number;
+};
+
+const serializeRequest = (row: AbsenceRequestRow) => ({
+  ...row,
+  cancel_requested: Boolean(row.cancel_requested),
+  canceled: Boolean(row.canceled),
+  status: row.canceled ? 'canceled' : row.status,
+});
+
 const kindUsage = (code: string) => {
   const used = db
     .prepare(
@@ -278,8 +299,8 @@ router.post('/request', (req: AuthRequest, res) => {
 router.get('/requests/me', (req: AuthRequest, res) => {
   const rows = db
     .prepare('SELECT * FROM absence_requests WHERE user_id = ? ORDER BY start_date DESC')
-    .all(req.user!.id);
-  res.json(rows);
+    .all(req.user!.id) as AbsenceRequestRow[];
+  res.json(rows.map(serializeRequest));
 });
 
 router.post('/requests/:id/cancel-request', (req: AuthRequest, res) => {
@@ -361,8 +382,8 @@ router.get('/requests', (req: AuthRequest, res) => {
       .prepare(
         `${baseQuery} WHERE (ar.status = 'pending' OR ar.cancel_requested = 1) ORDER BY ar.start_date DESC, ar.created_at DESC`
       )
-      .all();
-    return res.json(rows);
+      .all() as AbsenceRequestRow[];
+    return res.json(rows.map(serializeRequest));
   }
   const allowedDepartments = managedDepartments(req.user!.id);
   if (allowedDepartments.length === 0) return res.json([]);
@@ -374,8 +395,8 @@ router.get('/requests', (req: AuthRequest, res) => {
        WHERE dm.department_id IN (${placeholders}) AND (ar.status = 'pending' OR ar.cancel_requested = 1)
        ORDER BY ar.start_date DESC, ar.created_at DESC`
     )
-    .all(...allowedDepartments);
-  res.json(rows);
+    .all(...allowedDepartments) as AbsenceRequestRow[];
+  res.json(rows.map(serializeRequest));
 });
 
 router.patch('/requests/:id/status', (req: AuthRequest, res) => {

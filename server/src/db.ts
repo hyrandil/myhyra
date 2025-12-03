@@ -242,15 +242,18 @@ ensureTableColumn('absence_requests', 'canceled', 'canceled INTEGER NOT NULL DEF
 ensureTableColumn('absence_requests', 'comment', 'comment TEXT');
 ensureTableColumn('user_profiles', 'start_date', 'start_date TEXT');
 ensureTableColumn('user_profiles', 'end_date', 'end_date TEXT');
-db.exec(`
-  INSERT OR IGNORE INTO absence_kinds (code, label, counts_as_work, allow_full, allow_half, allow_hourly)
-  VALUES
-    ('vacation', 'Urlaub', 1, 1, 1, 0),
-    ('sick', 'Krankheit', 1, 1, 1, 1),
-    ('remote', 'Remote', 1, 1, 1, 0),
-    ('other', 'Sonstige', 0, 1, 1, 0),
-    ('flex', 'Gleitzeit', 0, 1, 1, 1)
-`);
+const absenceKindCount = db.prepare('SELECT COUNT(*) as count FROM absence_kinds').get() as { count: number };
+if (absenceKindCount.count === 0) {
+  db.exec(`
+    INSERT INTO absence_kinds (code, label, counts_as_work, allow_full, allow_half, allow_hourly)
+    VALUES
+      ('vacation', 'Urlaub', 1, 1, 1, 0),
+      ('sick', 'Krankheit', 1, 1, 1, 1),
+      ('remote', 'Remote', 1, 1, 1, 0),
+      ('other', 'Sonstige', 0, 1, 1, 0),
+      ('flex', 'Gleitzeit', 0, 1, 1, 1)
+  `);
+}
 
 function ensureAdminUser() {
   const existing = db.prepare('SELECT id FROM users WHERE email = ?').get(ADMIN_EMAIL) as

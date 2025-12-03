@@ -102,6 +102,19 @@ export function RequestsPage({ view = 'hub' }: { view?: RequestView }) {
     (req) => req.status === 'approved' && !req.cancel_requested && !req.canceled
   );
 
+  const statusMeta = (status: AbsenceRequest['status'] | TimeCorrectionRequest['status']) => {
+    switch (status) {
+      case 'approved':
+        return { label: 'Genehmigt', className: 'badge bg-emerald-100 text-emerald-700' };
+      case 'rejected':
+        return { label: 'Abgelehnt', className: 'badge bg-rose-100 text-rose-700' };
+      case 'canceled':
+        return { label: 'Storniert', className: 'badge bg-slate-200 text-slate-700' };
+      default:
+        return { label: 'Offen', className: 'badge bg-amber-100 text-amber-700' };
+    }
+  };
+
   if (view === 'hub') {
     return (
       <div className="space-y-4">
@@ -199,7 +212,7 @@ export function RequestsPage({ view = 'hub' }: { view?: RequestView }) {
                 <div key={req.id} className="p-3 rounded-lg border border-slate-200 bg-slate-50 space-y-1">
                   <div className="flex items-center justify-between">
                     <p className="font-semibold">{req.start_date} – {req.end_date}</p>
-                    <span className="badge bg-slate-200 text-slate-700">{req.status}</span>
+                    <span className={statusMeta(req.status).className}>{statusMeta(req.status).label}</span>
                   </div>
                   <p className="text-sm text-slate-600">{req.type}</p>
                   {req.cancel_requested && <p className="text-xs text-amber-600">Stornierung angefragt</p>}
@@ -403,9 +416,7 @@ export function RequestsPage({ view = 'hub' }: { view?: RequestView }) {
                 <div key={item.id} className="p-3 rounded-lg border border-slate-200 bg-white">
                   <div className="flex items-center justify-between">
                     <p className="font-semibold">{item.date}</p>
-                    <span className={`badge ${item.status === 'pending' ? 'bg-amber-100 text-amber-700' : 'bg-slate-200 text-slate-700'}`}>
-                      {item.status}
-                    </span>
+                    <span className={statusMeta(item.status).className}>{statusMeta(item.status).label}</span>
                   </div>
                   {item.note && <p className="text-xs text-slate-600 mt-1">{item.note}</p>}
                   {item.entries?.length ? (
