@@ -12,6 +12,7 @@ import {
   MonthlyReport,
   TimeEntry,
   UserInfo,
+  AuditLogEntry,
 } from './types';
 
 const api = axios.create({
@@ -51,6 +52,16 @@ export async function fetchPublicDepartments() {
 
 export async function fetchHolidayProfiles() {
   const res = await api.get<HolidayProfile[]>('/holidays/profiles');
+  return res.data;
+}
+
+export async function fetchAuditLogs(params?: { q?: string; userId?: number }) {
+  const res = await api.get<AuditLogEntry[]>('/logs', {
+    params: {
+      q: params?.q,
+      userId: params?.userId,
+    },
+  });
   return res.data;
 }
 

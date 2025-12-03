@@ -6,6 +6,7 @@ import { Absence, TimeEntry, WorkScheduleEntry } from '../types';
 import { Holiday } from '../utils/holidays';
 import { computeDayWorkMinutes, computeDayWorkStats, computeDelta } from '../services/timeService';
 import { canManageUser, managedDepartments } from '../utils/permissions';
+import { logAction } from '../utils/logger';
 
 const router = Router();
 
@@ -83,7 +84,9 @@ function insertEntry(
   const stmt = db.prepare(
     'INSERT INTO time_entries (user_id, timestamp, type, source, lat, lng) VALUES (?, ?, ?, ?, ?, ?)'
   );
-  return stmt.run(userId, now, type, source, location?.lat ?? null, location?.lng ?? null);
+  const result = stmt.run(userId, now, type, source, location?.lat ?? null, location?.lng ?? null);
+  logAction(userId, `time.${type.toLowerCase()}`, userId, { source, location });
+  return result;
 }
 
 function buildMonthlyReport(userId: number, monthValue?: string) {
@@ -117,7 +120,7 @@ function buildMonthlyReport(userId: number, monthValue?: string) {
     .all(userId, start.toISOString().slice(0, 10), end.toISOString().slice(0, 10)) as Absence[];
   const approvedRequests = db
     .prepare(
-      "SELECT user_id, start_date, end_date, type, 'full' as duration, NULL as note, created_at, id FROM absence_requests WHERE user_id = ? AND status = 'approved' AND NOT (end_date < ? OR start_date > ?)"
+      "SELECT user_id, start_date, end_date, type, 'full' as duration, NULL as note, created_at, id FROM absence_requests WHERE user_id = ? AND status = 'approved' AND canceled = 0 AND NOT (end_date < ? OR start_date > ?)"
     )
     .all(userId, start.toISOString().slice(0, 10), end.toISOString().slice(0, 10)) as Absence[];
   const absenceKey = new Set(
@@ -130,7 +133,9 @@ function buildMonthlyReport(userId: number, monthValue?: string) {
     ),
   ];
   const pendingRequests = db
-    .prepare("SELECT * FROM absence_requests WHERE user_id = ? AND status = 'pending' AND NOT (end_date < ? OR start_date > ?)")
+    .prepare(
+      "SELECT * FROM absence_requests WHERE user_id = ? AND status = 'pending' AND canceled = 0 AND NOT (end_date < ? OR start_date > ?)"
+    )
     .all(userId, start.toISOString().slice(0, 10), end.toISOString().slice(0, 10)) as any[];
 
   const absenceMap = new Map<string, Absence[]>();
@@ -333,7 +338,7 @@ function buildDailySummary(userId: number, month?: string, maskAbsences = false)
 
   const approvedRequests = db
     .prepare(
-      "SELECT user_id, start_date, end_date, type, 'full' as duration, NULL as note, created_at, id FROM absence_requests WHERE user_id = ? AND status = 'approved' AND end_date >= ?"
+      "SELECT user_id, start_date, end_date, type, 'full' as duration, NULL as note, created_at, id FROM absence_requests WHERE user_id = ? AND status = 'approved' AND canceled = 0 AND end_date >= ?"
     )
     .all(userId, start.toISOString().slice(0, 10)) as Absence[];
 
@@ -347,7 +352,7 @@ function buildDailySummary(userId: number, month?: string, maskAbsences = false)
 
   const pendingRequests = db
     .prepare(
-      "SELECT * FROM absence_requests WHERE user_id = ? AND status = 'pending' AND NOT (end_date < ? OR start_date > ?)"
+      "SELECT * FROM absence_requests WHERE user_id = ? AND status = 'pending' AND canceled = 0 AND NOT (end_date < ? OR start_date > ?)"
     )
     .all(userId, start.toISOString().slice(0, 10), end.toISOString().slice(0, 10)) as {
       start_date: string;
@@ -875,7 +880,7 @@ router.get('/overview', (req: AuthRequest, res) => {
     .prepare(
       `SELECT user_id, start_date, end_date, type, 'full' as duration, NULL as note, created_at, id
        FROM absence_requests
-       WHERE status = 'approved' AND user_id IN (${placeholders}) AND NOT (end_date < ? OR start_date > ?)`
+       WHERE status = 'approved' AND canceled = 0 AND user_id IN (${placeholders}) AND NOT (end_date < ? OR start_date > ?)`
     )
     .all(...userIds, startStr, endStr) as Absence[];
 
@@ -948,6 +953,7 @@ router.post('/user/:userId/manual', authorize(['admin', 'hr', 'lead']), (req: Au
   );
   const result = stmt.run(userId, timestamp, type, source ?? 'WEB', location?.lat ?? null, location?.lng ?? null);
   const entry = db.prepare('SELECT * FROM time_entries WHERE id = ?').get(result.lastInsertRowid) as TimeEntry;
+  logAction(req.user!.id, 'time.manual.create', userId, { timestamp, type, source: source ?? 'WEB' });
   res.status(201).json(entry);
 });
 
@@ -974,6 +980,7 @@ router.patch('/entry/:entryId', authorize(['admin', 'hr', 'lead']), (req: AuthRe
   const { timestamp, type } = parsed.data;
   db.prepare('UPDATE time_entries SET timestamp = ?, type = ? WHERE id = ?').run(timestamp, type, entryId);
   const updated = db.prepare('SELECT * FROM time_entries WHERE id = ?').get(entryId) as TimeEntry;
+  logAction(req.user!.id, 'time.manual.update', entry.user_id, { entry_id: entryId, timestamp, type });
   res.json(updated);
 });
 
@@ -983,6 +990,7 @@ router.delete('/entry/:entryId', authorize(['admin', 'hr', 'lead']), (req: AuthR
   const entry = ensureEntryManageable(req, res, entryId);
   if (!entry) return;
   db.prepare('DELETE FROM time_entries WHERE id = ?').run(entryId);
+  logAction(req.user!.id, 'time.manual.delete', entry.user_id, { entry_id: entryId });
   res.status(204).send();
 });
 
@@ -1027,6 +1035,7 @@ router.post('/corrections', requireAuth, (req: AuthRequest, res) => {
     'INSERT INTO time_correction_entries (request_id, timestamp, type, action, entry_id) VALUES (?, ?, ?, ?, ?)' // timestamp already ISO/local string
   );
   entries.forEach((entry) => insertEntry.run(created.id, entry.timestamp, entry.type, entry.action ?? 'add', entry.entry_id ?? null));
+  logAction(req.user!.id, 'correction.request.create', req.user!.id, { date, entries: entries.length });
   res.status(201).json({ ...created, entries: loadCorrectionEntries(created.id) });
 });
 
@@ -1109,6 +1118,9 @@ router.patch('/corrections/:id/status', authorize(['admin', 'hr', 'lead']), (req
         }
         insertEntry.run(row.user_id, entry.timestamp, entry.type, 'CORRECTION');
       });
+      logAction(req.user!.id, 'correction.request.approve', row.user_id, { request_id: id, entries: entries.length });
+    } else {
+      logAction(req.user!.id, 'correction.request.reject', row.user_id, { request_id: id });
     }
   });
   transaction();

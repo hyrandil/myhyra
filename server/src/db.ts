@@ -104,6 +104,17 @@ CREATE TABLE IF NOT EXISTS absence_kinds (
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE TABLE IF NOT EXISTS audit_logs (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  actor_id INTEGER,
+  target_user_id INTEGER,
+  action TEXT NOT NULL,
+  detail TEXT,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY(actor_id) REFERENCES users(id) ON DELETE SET NULL,
+  FOREIGN KEY(target_user_id) REFERENCES users(id) ON DELETE SET NULL
+);
+
 CREATE TABLE IF NOT EXISTS user_profiles (
   user_id INTEGER PRIMARY KEY,
   location TEXT,

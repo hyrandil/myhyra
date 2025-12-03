@@ -4,6 +4,7 @@ import db from '../db';
 import { requireAuth, authorize, AuthRequest } from '../auth';
 import type { Absence, WorkScheduleEntry } from '../types';
 import { canManageUser, managedDepartments } from '../utils/permissions';
+import { logAction } from '../utils/logger';
 
 const router = Router();
 const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
@@ -293,6 +294,11 @@ router.post('/request', (req: AuthRequest, res) => {
      VALUES (?, ?, ?, ?, 'pending', ?, ?)`
   );
   const result = stmt.run(req.user!.id, start_date, end_date, type, comment ?? null, req.user!.id);
+  logAction(req.user!.id, 'absence.request.create', req.user!.id, {
+    start_date,
+    end_date,
+    type,
+  });
   res.status(201).json({ id: result.lastInsertRowid, status: 'pending' });
 });
 
@@ -325,6 +331,7 @@ router.post('/requests/:id/cancel-request', (req: AuthRequest, res) => {
     parsedReason.data ?? null,
     id
   );
+  logAction(req.user!.id, 'absence.request.cancel', req.user!.id, { request_id: id });
   res.json({ message: 'Stornierung eingereicht' });
 });
 
@@ -427,10 +434,12 @@ router.patch('/requests/:id/status', (req: AuthRequest, res) => {
         requestRow.start_date,
         requestRow.end_date
       );
-      db.prepare('UPDATE absence_requests SET cancel_requested = 0, canceled = 1 WHERE id = ?').run(id);
+      db.prepare("UPDATE absence_requests SET cancel_requested = 0, canceled = 1, status = 'canceled' WHERE id = ?").run(id);
+      logAction(req.user!.id, 'absence.request.cancel.approve', requestRow.user_id, { request_id: id });
       return res.json({ message: 'Stornierung bestätigt' });
     }
     db.prepare('UPDATE absence_requests SET cancel_requested = 0 WHERE id = ?').run(id);
+    logAction(req.user!.id, 'absence.request.cancel.reject', requestRow.user_id, { request_id: id });
     return res.json({ message: 'Stornierung abgelehnt' });
   }
 
@@ -444,6 +453,14 @@ router.patch('/requests/:id/status', (req: AuthRequest, res) => {
     db.prepare(
       "INSERT INTO absences (user_id, start_date, end_date, type, duration, start_time, end_time, minutes_override) VALUES (?, ?, ?, ?, 'full', NULL, NULL, NULL)"
     ).run(requestRow.user_id, requestRow.start_date, requestRow.end_date, requestRow.type);
+    logAction(req.user!.id, 'absence.request.approve', requestRow.user_id, {
+      request_id: id,
+      start_date: requestRow.start_date,
+      end_date: requestRow.end_date,
+      type: requestRow.type,
+    });
+  } else {
+    logAction(req.user!.id, 'absence.request.reject', requestRow.user_id, { request_id: id });
   }
   res.json({ message: 'Aktualisiert' });
 });
@@ -543,6 +560,7 @@ router.post('/user/:userId', (req: AuthRequest, res) => {
     minutesOverride ?? null
   );
   const created = db.prepare('SELECT * FROM absences WHERE id = ?').get(result.lastInsertRowid) as Absence;
+  logAction(req.user!.id, 'absence.create.manual', userId, { start_date, end_date, type, duration, minutes: minutesOverride });
   res.status(201).json(enrichAbsence({ ...created, start_date, end_date }, schedule));
 });
 
@@ -562,6 +580,7 @@ router.delete('/user/:userId', (req: AuthRequest, res) => {
     start_date,
     end_date
   );
+  logAction(req.user!.id, 'absence.delete.manual', userId, { start_date, end_date });
   res.json({ message: 'Abwesenheit entfernt' });
 });
 

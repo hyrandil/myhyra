@@ -18,6 +18,7 @@ import { useAuth } from './AuthProvider';
 import { MobileHomePage } from './pages/MobileHomePage';
 import { useIsMobile } from './hooks/useIsMobile';
 import { ApprovalListPage } from './pages/ApprovalListPage';
+import { LoggingPage } from './pages/LoggingPage';
 
 function Protected({ children }: { children: React.ReactNode }) {
   const { user, ready } = useAuth();
@@ -97,6 +98,7 @@ function Shell({ children }: { children: React.ReactNode }) {
           {auth.hasRole('hr', 'admin') && <NavItem to="/planung" label="Stundenplanung" />}
           {auth.hasRole('hr', 'admin') && <NavItem to="/mitarbeitende" label="Team" />}
           {auth.hasRole('hr', 'admin') && <NavItem to="/berichte" label="Berichte" />}
+          {auth.hasRole('admin', 'hr') && <NavItem to="/logging" label="Logging" />}
         </nav>
         <div className="p-4 border-t border-slate-200 bg-slate-50 sticky bottom-0">
             <div className="flex items-center gap-3">
@@ -176,6 +178,7 @@ function MobileShell({ children }: { children: React.ReactNode }) {
           {auth.hasRole('admin') && <MobileNavItem to="/abwesenheiten" label="Abwesen" />}
           <MobileNavItem to="/berichte" label="Berichte" />
           {auth.hasRole('lead', 'hr', 'admin') && <MobileNavItem to="/inkonsistenzen" label="Checks" />}
+          {auth.hasRole('admin', 'hr') && <MobileNavItem to="/logging" label="Log" />}
         </div>
       </nav>
     </div>
@@ -208,6 +211,7 @@ export default function App() {
                   <Route path="/uebersicht" element={<OverviewCalendarPage />} />
                   {auth.hasRole('hr', 'admin') && <Route path="/mitarbeitende" element={<EmployeesPage />} />}
                   <Route path="/inkonsistenzen" element={<InconsistentPage />} />
+                  {auth.hasRole('admin', 'hr') && <Route path="/logging" element={<LoggingPage />} />}
                   <Route path="/planung" element={<PlanningPage />} />
                 </Routes>
               </MobileShell>
@@ -229,6 +233,7 @@ export default function App() {
                   <Route path="/planung" element={<PlanningPage />} />
                   {auth.hasRole('hr', 'admin') && <Route path="/mitarbeitende" element={<EmployeesPage />} />}
                   <Route path="/berichte" element={<ReportsPage />} />
+                  {auth.hasRole('admin', 'hr') && <Route path="/logging" element={<LoggingPage />} />}
                 </Routes>
               </Shell>
             </Protected>

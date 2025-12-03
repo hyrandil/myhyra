@@ -170,3 +170,14 @@ export interface TimeCorrectionRequest {
   }[];
 }
 
+export interface AuditLogEntry {
+  id: number;
+  actor_id: number | null;
+  actor_name?: string | null;
+  target_user_id?: number | null;
+  target_name?: string | null;
+  action: string;
+  detail?: string | null;
+  created_at: string;
+}
+
