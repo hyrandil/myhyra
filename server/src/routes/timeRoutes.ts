@@ -173,7 +173,7 @@ function buildMonthlyReport(userId: number, monthValue?: string) {
     .all(userId, start.toISOString().slice(0, 10), end.toISOString().slice(0, 10)) as Absence[];
   const approvedRequests = db
     .prepare(
-      "SELECT user_id, start_date, end_date, type, 'full' as duration, NULL as note, created_at, id FROM absence_requests WHERE user_id = ? AND status = 'approved' AND canceled = 0 AND NOT (end_date < ? OR start_date > ?)"
+      "SELECT user_id, start_date, end_date, type, CASE WHEN duration = 'half' THEN 'half' ELSE 'full' END as duration, NULL as note, start_time, end_time, minutes_override, created_at, id FROM absence_requests WHERE user_id = ? AND status = 'approved' AND canceled = 0 AND NOT (end_date < ? OR start_date > ?)"
     )
     .all(userId, start.toISOString().slice(0, 10), end.toISOString().slice(0, 10)) as Absence[];
   const absenceKey = new Set(

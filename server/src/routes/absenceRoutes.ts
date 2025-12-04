@@ -29,6 +29,10 @@ type AbsenceRequestRow = {
   end_date: string;
   type: string;
   status: 'pending' | 'approved' | 'rejected' | 'canceled';
+  duration: 'full' | 'half' | 'hours';
+  start_time?: string | null;
+  end_time?: string | null;
+  minutes_override?: number | null;
   comment?: string | null;
   user_name?: string;
   cancel_requested?: number;
@@ -84,11 +88,23 @@ const absenceRequestSchema = z
     start_date: z.string().regex(dateRegex),
     end_date: z.string().regex(dateRegex),
     type: z.string().min(2),
+    duration: z.enum(['full', 'half', 'hours']).default('full'),
+    start_time: z.string().regex(timeRegex).optional(),
+    end_time: z.string().regex(timeRegex).optional(),
     comment: z.string().max(255).optional().or(z.literal('')).transform((value) => value || undefined),
   })
   .refine((value) => value.start_date <= value.end_date, {
     message: 'Enddatum muss nach dem Start liegen',
     path: ['end_date'],
+  })
+  .refine((value) => {
+    if (value.duration !== 'hours') return true;
+    return Boolean(value.start_time && value.end_time);
+  }, 'Start- und Endzeit sind nötig')
+  .refine((value) => {
+    if (value.duration !== 'hours') return true;
+    if (!value.start_time || !value.end_time) return false;
+    return value.start_date === value.end_date;
   });
 
 const parseDate = (value: string) => {
@@ -286,18 +302,35 @@ router.post('/request', (req: AuthRequest, res) => {
   if (!parsed.success) {
     return res.status(400).json({ errors: parsed.error.format() });
   }
-  const { start_date, end_date, type, comment } = parsed.data;
-  const validation = validateKind(type, 'full', false);
+  const { start_date, end_date, type, comment, duration, start_time, end_time } = parsed.data;
+  const hasHours = duration === 'hours';
+  const validation = validateKind(type, duration === 'half' ? 'half' : 'full', hasHours);
   if (!validation.ok) return res.status(400).json({ message: validation.message });
+  const minutesOverride = hasHours ? timeDiffMinutes(start_time, end_time) : null;
+  if (hasHours && minutesOverride === null) {
+    return res.status(400).json({ message: 'Ungültiger Zeitbereich' });
+  }
   const stmt = db.prepare(
-    `INSERT INTO absence_requests (user_id, start_date, end_date, type, status, comment, created_by)
-     VALUES (?, ?, ?, ?, 'pending', ?, ?)`
+    `INSERT INTO absence_requests (user_id, start_date, end_date, type, duration, start_time, end_time, minutes_override, status, comment, created_by)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?)`
   );
-  const result = stmt.run(req.user!.id, start_date, end_date, type, comment ?? null, req.user!.id);
+  const result = stmt.run(
+    req.user!.id,
+    start_date,
+    end_date,
+    type,
+    duration,
+    start_time ?? null,
+    end_time ?? null,
+    minutesOverride,
+    comment ?? null,
+    req.user!.id
+  );
   logAction(req.user!.id, 'absence.request.create', req.user!.id, {
     start_date,
     end_date,
     type,
+    duration,
   });
   res.status(201).json({ id: result.lastInsertRowid, status: 'pending' });
 });
@@ -322,7 +355,7 @@ router.post('/requests/:id/cancel-request', (req: AuthRequest, res) => {
   if (!parsedReason.success) return res.status(400).json({ message: 'Ungültige Begründung' });
   const row = db
     .prepare('SELECT * FROM absence_requests WHERE id = ?')
-    .get(id) as { id: number; user_id: number; status: string; cancel_requested?: number; canceled?: number } | undefined;
+    .get(id) as AbsenceRequestRow | undefined;
   if (!row) return res.status(404).json({ message: 'Antrag nicht gefunden' });
   if (row.user_id !== req.user!.id) return res.status(403).json({ message: 'Keine Berechtigung' });
   if (row.canceled) return res.status(400).json({ message: 'Antrag wurde bereits storniert' });
@@ -418,7 +451,7 @@ router.patch('/requests/:id/status', (req: AuthRequest, res) => {
   }
   const requestRow = db
     .prepare('SELECT * FROM absence_requests WHERE id = ?')
-    .get(id) as { user_id: number; start_date: string; end_date: string; type: string; cancel_requested?: number } | undefined;
+    .get(id) as AbsenceRequestRow | undefined;
   if (!requestRow) {
     return res.status(404).json({ message: 'Antrag nicht gefunden' });
   }
@@ -446,19 +479,30 @@ router.patch('/requests/:id/status', (req: AuthRequest, res) => {
 
   db.prepare('UPDATE absence_requests SET status = ?, canceled = 0 WHERE id = ?').run(parsed.data, id);
   if (parsed.data === 'approved') {
+    const storedDuration = requestRow.duration === 'half' ? 'half' : 'full';
     db.prepare('DELETE FROM absences WHERE user_id = ? AND NOT (end_date < ? OR start_date > ?)').run(
       requestRow.user_id,
       requestRow.start_date,
       requestRow.end_date
     );
     db.prepare(
-      "INSERT INTO absences (user_id, start_date, end_date, type, duration, start_time, end_time, minutes_override, source) VALUES (?, ?, ?, ?, 'full', NULL, NULL, NULL, 'request')"
-    ).run(requestRow.user_id, requestRow.start_date, requestRow.end_date, requestRow.type);
+      "INSERT INTO absences (user_id, start_date, end_date, type, duration, start_time, end_time, minutes_override, source) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'request')"
+    ).run(
+      requestRow.user_id,
+      requestRow.start_date,
+      requestRow.end_date,
+      requestRow.type,
+      storedDuration,
+      requestRow.start_time ?? null,
+      requestRow.end_time ?? null,
+      requestRow.minutes_override ?? null
+    );
     logAction(req.user!.id, 'absence.request.approve', requestRow.user_id, {
       request_id: id,
       start_date: requestRow.start_date,
       end_date: requestRow.end_date,
       type: requestRow.type,
+      duration: requestRow.duration,
     });
   } else {
     logAction(req.user!.id, 'absence.request.reject', requestRow.user_id, { request_id: id });

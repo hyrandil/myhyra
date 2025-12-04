@@ -36,6 +36,10 @@ export function RequestsPage({ view = 'hub' }: { view?: RequestView }) {
   const kinds = useQuery({ queryKey: ['absence', 'kinds'], queryFn: fetchAbsenceKinds });
   const myRequests = useQuery({ queryKey: ['absence', 'mine'], queryFn: fetchMyAbsenceRequests });
   const myCorrections = useQuery({ queryKey: ['corrections', 'mine'], queryFn: fetchMyCorrections });
+  const [selectedType, setSelectedType] = useState('');
+  const [duration, setDuration] = useState<'full' | 'half' | 'hours'>('full');
+  const [startTime, setStartTime] = useState('');
+  const [endTime, setEndTime] = useState('');
   const dayEntries = useQuery<DayDetail | undefined>({
     queryKey: ['corrections', 'day', correctionDate, auth.user?.id],
     enabled: Boolean(correctionDate && auth.user?.id),
@@ -71,13 +75,30 @@ export function RequestsPage({ view = 'hub' }: { view?: RequestView }) {
   const handleRequestSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const form = new FormData(e.currentTarget);
+    const type = String(form.get('type'));
+    const selected = (kinds.data ?? []).find((k: any) => k.code === type);
+    const allowHalf = Boolean(selected?.allow_half);
+    const allowHours = Boolean(selected?.allow_hourly);
+    const chosenDuration: 'full' | 'half' | 'hours' = allowHours
+      ? duration
+      : allowHalf && duration === 'half'
+      ? 'half'
+      : 'full';
+
     createMutation.mutate({
       start_date: String(form.get('start_date')),
       end_date: String(form.get('end_date')),
-      type: String(form.get('type')),
+      type,
+      duration: chosenDuration,
+      start_time: chosenDuration === 'hours' ? startTime : undefined,
+      end_time: chosenDuration === 'hours' ? endTime : undefined,
       comment: String(form.get('comment') || ''),
     });
     e.currentTarget.reset();
+    setDuration('full');
+    setSelectedType('');
+    setStartTime('');
+    setEndTime('');
   };
 
   const handleCancelSubmit = (e: React.FormEvent<HTMLFormElement>) => {
@@ -199,7 +220,18 @@ export function RequestsPage({ view = 'hub' }: { view?: RequestView }) {
                   <input type="date" name="end_date" required className="input" />
                 </label>
               </div>
-              <select name="type" className="input" required>
+              <select
+                name="type"
+                className="input"
+                required
+                value={selectedType}
+                onChange={(e) => {
+                  setSelectedType(e.target.value);
+                  setDuration('full');
+                  setStartTime('');
+                  setEndTime('');
+                }}
+              >
                 <option value="">Abwesenheitstyp</option>
                 {(kinds.data ?? []).map((kind: any) => (
                   <option key={kind.code} value={kind.code}>
@@ -207,6 +239,47 @@ export function RequestsPage({ view = 'hub' }: { view?: RequestView }) {
                   </option>
                 ))}
               </select>
+              {selectedType && (
+                <div className="grid sm:grid-cols-3 gap-2">
+                  <label className="text-xs text-slate-500 uppercase">Dauer
+                    <select
+                      className="input"
+                      value={duration}
+                      onChange={(e) => setDuration(e.target.value as 'full' | 'half' | 'hours')}
+                    >
+                      <option value="full">Ganzer Tag</option>
+                      {(kinds.data ?? []).find((k: any) => k.code === selectedType)?.allow_half ? (
+                        <option value="half">Halber Tag</option>
+                      ) : null}
+                      {(kinds.data ?? []).find((k: any) => k.code === selectedType)?.allow_hourly ? (
+                        <option value="hours">Stundenweise</option>
+                      ) : null}
+                    </select>
+                  </label>
+                  {duration === 'hours' && (
+                    <>
+                      <label className="text-xs text-slate-500 uppercase">Startzeit
+                        <input
+                          type="time"
+                          className="input"
+                          value={startTime}
+                          onChange={(e) => setStartTime(e.target.value)}
+                          required
+                        />
+                      </label>
+                      <label className="text-xs text-slate-500 uppercase">Endzeit
+                        <input
+                          type="time"
+                          className="input"
+                          value={endTime}
+                          onChange={(e) => setEndTime(e.target.value)}
+                          required
+                        />
+                      </label>
+                    </>
+                  )}
+                </div>
+              )}
               <textarea name="comment" className="input" placeholder="Kommentar (optional)" />
               <button className="btn-primary w-full" type="submit" disabled={createMutation.isPending}>
                 Antrag stellen

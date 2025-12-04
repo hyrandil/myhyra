@@ -253,7 +253,15 @@ export async function fetchInconsistentDays() {
   return res.data;
 }
 
-export async function createAbsenceRequest(data: { start_date: string; end_date: string; type: string; comment?: string }) {
+export async function createAbsenceRequest(data: {
+  start_date: string;
+  end_date: string;
+  type: string;
+  duration?: 'full' | 'half' | 'hours';
+  start_time?: string | null;
+  end_time?: string | null;
+  comment?: string;
+}) {
   const res = await api.post('/absences/request', data);
   return res.data;
 }

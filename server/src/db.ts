@@ -210,6 +210,10 @@ CREATE TABLE IF NOT EXISTS absence_requests (
   end_date TEXT NOT NULL,
   type TEXT NOT NULL CHECK(type IN ('vacation','sick','remote','other')),
   status TEXT NOT NULL CHECK(status IN ('pending','approved','rejected','canceled')) DEFAULT 'pending',
+  duration TEXT NOT NULL CHECK(duration IN ('full','half','hours')) DEFAULT 'full',
+  start_time TEXT,
+  end_time TEXT,
+  minutes_override INTEGER,
   comment TEXT,
   cancel_requested INTEGER NOT NULL DEFAULT 0,
   cancel_reason TEXT,
@@ -387,6 +391,10 @@ ensureTableColumn('absence_requests', 'cancel_requested', 'cancel_requested INTE
 ensureTableColumn('absence_requests', 'cancel_reason', 'cancel_reason TEXT');
 ensureTableColumn('absence_requests', 'canceled', 'canceled INTEGER NOT NULL DEFAULT 0');
 ensureTableColumn('absence_requests', 'comment', 'comment TEXT');
+ensureTableColumn('absence_requests', 'duration', "duration TEXT NOT NULL DEFAULT 'full' CHECK(duration IN ('full','half','hours'))");
+ensureTableColumn('absence_requests', 'start_time', 'start_time TEXT');
+ensureTableColumn('absence_requests', 'end_time', 'end_time TEXT');
+ensureTableColumn('absence_requests', 'minutes_override', 'minutes_override INTEGER');
 ensureTableColumn('time_correction_requests', 'cancel_requested', 'cancel_requested INTEGER NOT NULL DEFAULT 0');
 ensureTableColumn('time_correction_requests', 'cancel_reason', 'cancel_reason TEXT');
 ensureTableColumn('time_correction_requests', 'canceled', 'canceled INTEGER NOT NULL DEFAULT 0');

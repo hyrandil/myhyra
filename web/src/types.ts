@@ -156,11 +156,15 @@ export interface AbsenceRequest {
   end_date: string;
   type: 'vacation' | 'sick' | 'remote' | 'other';
   status: 'pending' | 'approved' | 'rejected' | 'canceled';
+  duration?: 'full' | 'half' | 'hours';
+  start_time?: string | null;
+  end_time?: string | null;
   comment?: string | null;
   user_name?: string;
   cancel_requested?: boolean | number;
   cancel_reason?: string | null;
   canceled?: boolean | number;
+  minutes_override?: number | null;
 }
 
 export interface TimeCorrectionRequest {
