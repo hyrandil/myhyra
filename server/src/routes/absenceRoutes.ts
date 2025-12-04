@@ -452,7 +452,7 @@ router.patch('/requests/:id/status', (req: AuthRequest, res) => {
       requestRow.end_date
     );
     db.prepare(
-      "INSERT INTO absences (user_id, start_date, end_date, type, duration, start_time, end_time, minutes_override) VALUES (?, ?, ?, ?, 'full', NULL, NULL, NULL)"
+      "INSERT INTO absences (user_id, start_date, end_date, type, duration, start_time, end_time, minutes_override, source) VALUES (?, ?, ?, ?, 'full', NULL, NULL, NULL, 'request')"
     ).run(requestRow.user_id, requestRow.start_date, requestRow.end_date, requestRow.type);
     logAction(req.user!.id, 'absence.request.approve', requestRow.user_id, {
       request_id: id,
@@ -537,7 +537,7 @@ router.post('/user/:userId', (req: AuthRequest, res) => {
   const validation = validateKind(type, duration, Boolean(minutesOverride));
   if (!validation.ok) return res.status(400).json({ message: validation.message });
   const schedule = getSchedule(userId);
-  db.prepare('DELETE FROM absences WHERE user_id = ? AND NOT (end_date < ? OR start_date > ?)').run(
+  db.prepare("DELETE FROM absences WHERE user_id = ? AND source != 'request' AND NOT (end_date < ? OR start_date > ?)").run(
     userId,
     start_date,
     end_date
@@ -546,7 +546,7 @@ router.post('/user/:userId', (req: AuthRequest, res) => {
     return res.status(400).json({ message: 'Zeitfenster ist ungültig' });
   }
   const stmt = db.prepare(
-    'INSERT INTO absences (user_id, start_date, end_date, date, type, duration, note, start_time, end_time, minutes_override) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+    "INSERT INTO absences (user_id, start_date, end_date, date, type, duration, note, start_time, end_time, minutes_override, source) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'manual')"
   );
   const result = stmt.run(
     userId,
@@ -576,7 +576,7 @@ router.delete('/user/:userId', (req: AuthRequest, res) => {
     return res.status(400).json({ errors: parsed.error.format() });
   }
   const { start_date, end_date } = parsed.data;
-  db.prepare('DELETE FROM absences WHERE user_id = ? AND NOT (end_date < ? OR start_date > ?)').run(
+  db.prepare("DELETE FROM absences WHERE user_id = ? AND source != 'request' AND NOT (end_date < ? OR start_date > ?)").run(
     userId,
     start_date,
     end_date
@@ -591,10 +591,13 @@ router.delete('/:id', (req: AuthRequest, res) => {
     return res.status(400).json({ message: 'Ungültige Abwesenheits-ID' });
   }
   const existing = db
-    .prepare('SELECT user_id FROM absences WHERE id = ?')
-    .get(absenceId) as { user_id: number } | undefined;
+    .prepare('SELECT user_id, source FROM absences WHERE id = ?')
+    .get(absenceId) as { user_id: number; source: string } | undefined;
   if (!existing) {
     return res.status(404).json({ message: 'Eintrag nicht gefunden' });
+  }
+  if (existing.source === 'request') {
+    return res.status(400).json({ message: 'Abwesenheit wurde über einen Antrag erfasst und kann hier nicht gelöscht werden.' });
   }
   if (!canManageUser(req.user!.id, req.user!.role, existing.user_id)) {
     return res.status(403).json({ message: 'Keine Berechtigung für diesen Nutzer' });

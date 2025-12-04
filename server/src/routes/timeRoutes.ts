@@ -720,6 +720,7 @@ router.get('/user/:userId/day', requireAuth, (req: AuthRequest, res) => {
   );
   const enrichedAbsences = [...absences, ...holidays].map((a) => ({
     ...a,
+    source: (a as any).source ?? ((a as any).type === 'holiday' ? 'holiday' : 'manual'),
     label: (a as any).type === 'holiday' ? a.note ?? 'Feiertag' : kindMap.get(a.type) ?? a.type,
   }));
   const stats = computeDayWorkStats(entries);

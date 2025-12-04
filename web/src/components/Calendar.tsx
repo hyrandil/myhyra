@@ -3,6 +3,12 @@ import { DailySummary } from '../types';
 
 const weekdays = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'];
 
+const formatDateGerman = (value?: string | null) => {
+  if (!value) return '';
+  const d = new Date(`${value}T00:00:00Z`);
+  return d.toLocaleDateString('de-DE', { timeZone: 'Europe/Berlin' });
+};
+
 type CalendarProps = {
   month: string;
   days: Record<string, DailySummary>;
@@ -161,7 +167,7 @@ export function Calendar({
         <div className="p-3 card">
           <div className="flex items-center justify-between">
             <div>
-              <h4 className="font-semibold text-sm mb-1">{selectedDate ?? internalSelected}</h4>
+              <h4 className="font-semibold text-sm mb-1">{formatDateGerman(selectedDate ?? internalSelected)}</h4>
               {selectedSummary ? (
                 <div className="text-sm space-y-1">
                   {!absencesOnly && (

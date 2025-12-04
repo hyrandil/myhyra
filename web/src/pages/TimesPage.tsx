@@ -44,6 +44,17 @@ export function TimesPage() {
   const [showTimeForm, setShowTimeForm] = useState(true);
   const [showAbsenceForm, setShowAbsenceForm] = useState(true);
 
+  const formatDateGerman = (value?: string | null) => {
+    if (!value) return '';
+    const d = new Date(`${value}T00:00:00Z`);
+    return d.toLocaleDateString('de-DE', { timeZone: 'Europe/Berlin' });
+  };
+
+  const monthLabel = useMemo(() => {
+    const base = new Date(`${month}-01T00:00:00Z`);
+    return base.toLocaleDateString('de-DE', { month: 'long', year: 'numeric', timeZone: 'Europe/Berlin' });
+  }, [month]);
+
   useEffect(() => {
     if (!selectedDate) {
       const today = new Date();
@@ -140,6 +151,20 @@ export function TimesPage() {
     queryFn: () => fetchDayEntriesForUser(selectedUserId!, selectedDate!),
     enabled: enableManagement && Boolean(selectedUserId && selectedDate),
   });
+
+  const requestAbsence = useMemo(() => {
+    return dayDetail.data?.absences?.find((a) => a.source === 'request');
+  }, [dayDetail.data]);
+
+  const requestBlocksAbsence = requestAbsence?.duration === 'full';
+  const requestHalfDay = requestAbsence?.duration === 'half';
+  const absenceFormDisabled = Boolean(requestBlocksAbsence);
+
+  useEffect(() => {
+    if (requestHalfDay && absenceDuration !== 'half') {
+      setAbsenceDuration('half');
+    }
+  }, [absenceDuration, requestHalfDay]);
 
   const timeline = useMemo(
     () => {
@@ -307,11 +332,12 @@ export function TimesPage() {
   const onManualAbsence = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (!selectedUserId || !absenceType) return;
+    if (requestBlocksAbsence) return;
     const payload: any = {
       start_date: absenceStart,
       end_date: absenceEnd,
       type: absenceType,
-      duration: absenceDuration,
+      duration: requestHalfDay ? 'half' : absenceDuration,
     };
     if (absenceDuration === 'hours') {
       payload.start_time = absenceStartTime;
@@ -325,7 +351,7 @@ export function TimesPage() {
       <div className="card p-4 flex items-center justify-between">
         <div>
           <p className="text-xs uppercase text-slate-500">Monat</p>
-          <h2 className="text-2xl font-semibold">{month}</h2>
+          <h2 className="text-2xl font-semibold">{monthLabel}</h2>
           <p className="text-sm text-slate-500">Kompakte Kalenderansicht mit Statusfarben</p>
         </div>
         <div className="flex gap-2">
@@ -359,8 +385,8 @@ export function TimesPage() {
         </div>
       )}
 
-      <div className="grid md:grid-cols-3 gap-4 items-start">
-        <div className="md:col-span-2 space-y-4">
+      <div className="grid gap-5 items-start xl:grid-cols-[2.4fr,1fr] w-full">
+        <div className="space-y-4">
           <div className="card p-4">
             <div className="flex items-center justify-between mb-2">
               <h3 className="text-lg font-semibold">Kalender</h3>
@@ -387,13 +413,21 @@ export function TimesPage() {
             <div className="card p-4 space-y-3">
               <div className="flex items-center justify-between">
                 <div>
-                  <h3 className="text-lg font-semibold">Buchungen am {selectedDate}</h3>
+                  <h3 className="text-lg font-semibold">Buchungen am {formatDateGerman(selectedDate)}</h3>
                   <p className="text-sm text-slate-500">Einzelne Stempel bearbeiten oder löschen.</p>
                 </div>
                 {dayDetail.isFetching && <span className="text-xs text-slate-500">Aktualisiere…</span>}
               </div>
               {dayDetail.data?.inconsistent ? (
                 <div className="p-2 rounded bg-amber-100 text-amber-800 text-sm">Inkonsistente Buchung erkannt (mehrfache Kommen/Gehen in Folge).</div>
+              ) : null}
+              {requestAbsence ? (
+                <div className="p-2 rounded bg-slate-50 border border-slate-200 text-sm text-slate-700">
+                  Diese Abwesenheit stammt aus einem Antrag und kann hier nicht manuell entfernt werden.
+                  {requestHalfDay
+                    ? ' Für den freien Halbtag sind nur ergänzende Halbtags-Einträge möglich.'
+                    : ' Bitte einen Stornierungsantrag stellen.'}
+                </div>
               ) : null}
               {timeline.length ? (
                 <div className="space-y-2">
@@ -557,7 +591,10 @@ export function TimesPage() {
                 </div>
                 {showAbsenceForm && (
                   <>
-                    <form className="space-y-2" onSubmit={onManualAbsence}>
+                    <form
+                      className={`space-y-2 ${absenceFormDisabled ? 'opacity-60 pointer-events-none' : ''}`}
+                      onSubmit={onManualAbsence}
+                    >
                       <div className="grid grid-cols-2 gap-2">
                         <div>
                           <label className="text-sm text-slate-600">Von</label>
@@ -603,7 +640,7 @@ export function TimesPage() {
                             name="duration"
                             value="full"
                             checked={absenceDuration === 'full'}
-                            disabled={selectedKind ? selectedKind.allow_full === false : false}
+                            disabled={absenceFormDisabled || requestHalfDay || (selectedKind ? selectedKind.allow_full === false : false)}
                             onChange={() => setAbsenceDuration('full')}
                           />{' '}
                           Ganzer Tag
@@ -614,7 +651,7 @@ export function TimesPage() {
                             name="duration"
                             value="half"
                             checked={absenceDuration === 'half'}
-                            disabled={selectedKind ? selectedKind.allow_half === false : false}
+                            disabled={absenceFormDisabled || (selectedKind ? selectedKind.allow_half === false : false)}
                             onChange={() => setAbsenceDuration('half')}
                           />{' '}
                           Halber Tag
@@ -626,6 +663,7 @@ export function TimesPage() {
                               name="duration"
                               value="hours"
                               checked={absenceDuration === 'hours'}
+                              disabled={absenceFormDisabled || requestHalfDay}
                               onChange={() => setAbsenceDuration('hours')}
                             />{' '}
                             Stundenweise
@@ -652,22 +690,41 @@ export function TimesPage() {
                           />
                         </div>
                       )}
-                      <button className="btn-primary" type="submit" disabled={manualAbsence.isPending}>
+                      <button className="btn-primary" type="submit" disabled={manualAbsence.isPending || absenceFormDisabled}>
                         Eintragen
                       </button>
                     </form>
+                    {requestAbsence && requestBlocksAbsence && (
+                      <p className="text-xs text-slate-600">
+                        Dieser Tag ist über einen Antrag gebucht. Bitte nutzen Sie einen Stornierungsantrag, um Änderungen
+                        vorzunehmen.
+                      </p>
+                    )}
+                    {requestAbsence && requestHalfDay && (
+                      <p className="text-xs text-slate-600">
+                        Es ist bereits ein halber Tag über einen Antrag gebucht. Für den zweiten Halbtag können Sie nur
+                        Halbtags-Einträge ergänzen.
+                      </p>
+                    )}
                     {days[selectedDate ?? '']?.absences?.length ? (
-                      <button
-                        className="text-sm text-rose-700 border border-rose-200 bg-rose-50 rounded-md px-3 py-2 font-semibold"
-                        type="button"
-                        onClick={() => {
-                          if (!selectedDate || !selectedUserId) return;
-                          deleteAbsence.mutate({ start_date: selectedDate, end_date: selectedDate });
-                        }}
-                        disabled={deleteAbsence.isPending}
-                      >
-                        Abwesenheit am ausgewählten Tag löschen
-                      </button>
+                      <div className="space-y-1">
+                        <button
+                          className="text-sm text-rose-700 border border-rose-200 bg-rose-50 rounded-md px-3 py-2 font-semibold disabled:opacity-60"
+                          type="button"
+                          onClick={() => {
+                            if (!selectedDate || !selectedUserId || requestAbsence) return;
+                            deleteAbsence.mutate({ start_date: selectedDate, end_date: selectedDate });
+                          }}
+                          disabled={deleteAbsence.isPending || Boolean(requestAbsence)}
+                        >
+                          Abwesenheit am ausgewählten Tag löschen
+                        </button>
+                        {requestAbsence && (
+                          <p className="text-xs text-slate-600">
+                            Dieser Eintrag stammt aus einem Antrag und lässt sich nur über einen Stornierungsantrag entfernen.
+                          </p>
+                        )}
+                      </div>
                     ) : null}
                   </>
                 )}
@@ -680,7 +737,7 @@ export function TimesPage() {
           <div className="card p-4 space-y-3">
             <div className="flex items-center justify-between">
               <h3 className="text-lg font-semibold">Monatsübersicht</h3>
-              {selectedDate && <p className="text-sm text-slate-500">Ausgewählt: {selectedDate}</p>}
+              {selectedDate && <p className="text-sm text-slate-500">Ausgewählt: {formatDateGerman(selectedDate)}</p>}
             </div>
             <div className="grid grid-cols-2 gap-2 text-sm">
               <div className="p-3 rounded-lg bg-slate-50 border border-slate-200">

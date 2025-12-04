@@ -99,6 +99,7 @@ CREATE TABLE IF NOT EXISTS absences (
   date TEXT,
   type TEXT NOT NULL,
   duration TEXT NOT NULL CHECK(duration IN ('full','half')),
+  source TEXT NOT NULL DEFAULT 'manual',
   canceled INTEGER NOT NULL DEFAULT 0,
   note TEXT,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -354,14 +355,15 @@ db.prepare("UPDATE user_settings SET time_format = '24h' WHERE time_format IS NU
 db.prepare('UPDATE user_settings SET flex_enabled = 0 WHERE flex_enabled IS NULL').run();
 db.prepare('UPDATE user_settings SET flex_adjust_minutes = 0 WHERE flex_adjust_minutes IS NULL').run();
 db.exec(`INSERT OR IGNORE INTO user_settings (user_id) SELECT id FROM users;`);
-ensureTableColumn('absences', 'start_date', 'start_date TEXT');
-ensureTableColumn('absences', 'end_date', 'end_date TEXT');
-ensureTableColumn('absences', 'canceled', 'canceled INTEGER NOT NULL DEFAULT 0');
-db.prepare('UPDATE absences SET start_date = date WHERE start_date IS NULL').run();
-db.prepare('UPDATE absences SET end_date = date WHERE end_date IS NULL').run();
-ensureTableColumn('absences', 'start_time', 'start_time TEXT');
-ensureTableColumn('absences', 'end_time', 'end_time TEXT');
-ensureTableColumn('absences', 'minutes_override', 'minutes_override INTEGER');
+  ensureTableColumn('absences', 'start_date', 'start_date TEXT');
+  ensureTableColumn('absences', 'end_date', 'end_date TEXT');
+  ensureTableColumn('absences', 'canceled', 'canceled INTEGER NOT NULL DEFAULT 0');
+  ensureTableColumn('absences', 'source', "source TEXT NOT NULL DEFAULT 'manual'");
+  db.prepare('UPDATE absences SET start_date = date WHERE start_date IS NULL').run();
+  db.prepare('UPDATE absences SET end_date = date WHERE end_date IS NULL').run();
+  ensureTableColumn('absences', 'start_time', 'start_time TEXT');
+  ensureTableColumn('absences', 'end_time', 'end_time TEXT');
+  ensureTableColumn('absences', 'minutes_override', 'minutes_override INTEGER');
 ensureTableColumn('user_profiles', 'location', 'location TEXT');
 ensureTableColumn('user_profiles', 'department', 'department TEXT');
 ensureTableColumn('user_profiles', 'work_model_id', 'work_model_id INTEGER');

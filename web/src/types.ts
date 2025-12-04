@@ -59,7 +59,7 @@ export interface DailySummary {
 
 export interface DayDetail {
   entries: TimeEntry[];
-  absences: { type: string; duration?: string; note?: string | null; label?: string; start_time?: string | null; end_time?: string | null; minutes_override?: number | null }[];
+  absences: { type: string; duration?: string; note?: string | null; label?: string; start_time?: string | null; end_time?: string | null; minutes_override?: number | null; source?: string }[];
   pending: boolean;
   autoBreakMinutes?: number;
   recordedBreakMinutes?: number;
