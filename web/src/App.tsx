@@ -83,12 +83,12 @@ function Shell({ children }: { children: React.ReactNode }) {
       .join(' ') || auth.user?.name;
   return (
     <div className="min-h-screen flex bg-surface">
-      <aside className="w-72 bg-white text-slate-900 flex flex-col shadow-lg border-r border-slate-200 sticky top-0 self-start h-screen">
+      <aside className="w-72 bg-white text-slate-900 flex flex-col shadow-lg border-r border-slate-200 sticky top-0 h-screen">
         <div className="p-6 border-b border-slate-200 relative bg-gradient-to-r from-sky-50 via-white to-blue-50">
           <p className="text-[11px] uppercase tracking-[0.35em] text-slate-500">Zeiterfassung</p>
           <p className="text-3xl font-black text-sky-800">ZeitPilot</p>
         </div>
-        <nav className="p-4 space-y-1 flex-1 relative">
+        <nav className="p-4 space-y-1 flex-1 overflow-y-auto">
           <NavItem to="/" label="Dashboard" />
           <NavItem to="/zeiten" label="Kalender & Zeiten" />
           <NavItem to="/uebersicht" label="Übersichtkalender" />
@@ -100,16 +100,16 @@ function Shell({ children }: { children: React.ReactNode }) {
           {auth.hasRole('hr', 'admin') && <NavItem to="/berichte" label="Berichte" />}
           {auth.hasRole('admin', 'hr') && <NavItem to="/logging" label="Logging" />}
         </nav>
-        <div className="p-4 border-t border-slate-200 bg-slate-50 sticky bottom-0">
-            <div className="flex items-center gap-3">
-              <div className="h-11 w-11 rounded-full bg-sky-100 flex items-center justify-center text-lg font-bold text-sky-800">
-                {displayName?.[0] ?? '?'}
-              </div>
-              <div className="flex-1">
+        <div className="p-4 border-t border-slate-200 bg-slate-50 mt-auto">
+          <div className="flex items-center gap-3">
+            <div className="h-11 w-11 rounded-full bg-sky-100 flex items-center justify-center text-lg font-bold text-sky-800">
+              {displayName?.[0] ?? '?'}
+            </div>
+            <div className="flex-1">
               <p className="text-xs uppercase text-slate-500">{roleLabel(auth.user?.role)}</p>
-                <p className="font-semibold leading-tight text-slate-900">{displayName}</p>
-                <p className="text-xs text-slate-600 truncate">{auth.user?.email}</p>
-              </div>
+              <p className="font-semibold leading-tight text-slate-900">{displayName}</p>
+              <p className="text-xs text-slate-600 truncate">{auth.user?.email}</p>
+            </div>
           </div>
           <button
             onClick={auth.logout}

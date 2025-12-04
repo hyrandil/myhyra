@@ -41,6 +41,8 @@ export function TimesPage() {
   const [absenceType, setAbsenceType] = useState('');
   const [absenceDuration, setAbsenceDuration] = useState<'full' | 'half' | 'hours'>('full');
   const [editingEntryId, setEditingEntryId] = useState<number | null>(null);
+  const [showTimeForm, setShowTimeForm] = useState(true);
+  const [showAbsenceForm, setShowAbsenceForm] = useState(true);
 
   useEffect(() => {
     if (!selectedDate) {
@@ -230,6 +232,7 @@ export function TimesPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['daily', month, selectedUserId] });
       queryClient.invalidateQueries({ queryKey: ['overview'] });
+      queryClient.invalidateQueries({ queryKey: ['vacation-overview'] });
       queryClient.invalidateQueries({ queryKey: ['dayEntries', selectedUserId, selectedDate] });
     },
   });
@@ -253,6 +256,7 @@ export function TimesPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['daily', month, selectedUserId] });
       queryClient.invalidateQueries({ queryKey: ['overview'] });
+      queryClient.invalidateQueries({ queryKey: ['vacation-overview'] });
       queryClient.invalidateQueries({ queryKey: ['dayEntries', selectedUserId, selectedDate] });
     },
   });
@@ -503,148 +507,179 @@ export function TimesPage() {
           {enableManagement && canEditTarget && (
             <div className="grid lg:grid-cols-2 gap-4">
               <div className="card p-4 space-y-3">
-                <h3 className="text-lg font-semibold">Zeitnachtrag</h3>
-                <form className="space-y-2" onSubmit={onManualTime}>
-                  <label className="block text-sm text-slate-600">Zeitpunkt</label>
-                  <input
-                    name="timestamp"
-                    type="datetime-local"
-                    required
-                    className="input w-full"
-                    value={manualTimestamp}
-                    onChange={(e) => setManualTimestamp(e.target.value)}
-                  />
-                  <label className="block text-sm text-slate-600">Typ</label>
-                  <select name="type" className="input w-full">
-                    <option value="CLOCK_IN">Kommen</option>
-                    <option value="CLOCK_OUT">Gehen</option>
-                  </select>
-                  <div className="grid grid-cols-2 gap-2">
-                    <input name="lat" className="input" placeholder="Lat (optional)" />
-                    <input name="lng" className="input" placeholder="Lng (optional)" />
-                  </div>
-                  <button className="btn-primary" type="submit" disabled={manualTime.isPending}>
-                    Speichern
+                <div className="flex items-center justify-between">
+                  <h3 className="text-lg font-semibold">Zeitnachtrag</h3>
+                  <button
+                    className="text-sm text-sky-700 underline"
+                    type="button"
+                    onClick={() => setShowTimeForm((v) => !v)}
+                  >
+                    {showTimeForm ? 'Einklappen' : 'Aufklappen'}
                   </button>
-                </form>
+                </div>
+                {showTimeForm && (
+                  <form className="space-y-2" onSubmit={onManualTime}>
+                    <label className="block text-sm text-slate-600">Zeitpunkt</label>
+                    <input
+                      name="timestamp"
+                      type="datetime-local"
+                      required
+                      className="input w-full"
+                      value={manualTimestamp}
+                      onChange={(e) => setManualTimestamp(e.target.value)}
+                    />
+                    <label className="block text-sm text-slate-600">Typ</label>
+                    <select name="type" className="input w-full">
+                      <option value="CLOCK_IN">Kommen</option>
+                      <option value="CLOCK_OUT">Gehen</option>
+                    </select>
+                    <div className="grid grid-cols-2 gap-2">
+                      <input name="lat" className="input" placeholder="Lat (optional)" />
+                      <input name="lng" className="input" placeholder="Lng (optional)" />
+                    </div>
+                    <button className="btn-primary" type="submit" disabled={manualTime.isPending}>
+                      Speichern
+                    </button>
+                  </form>
+                )}
               </div>
 
               <div className="card p-4 space-y-3">
-                <h3 className="text-lg font-semibold">Abwesenheit eintragen</h3>
-                <form className="space-y-2" onSubmit={onManualAbsence}>
-                  <div className="grid grid-cols-2 gap-2">
-                    <input
-                      name="start_date"
-                      type="date"
-                      required
-                      className="input"
-                      value={absenceStart}
-                      onChange={(e) => setAbsenceStart(e.target.value)}
-                    />
-                    <input
-                      name="end_date"
-                      type="date"
-                      required
-                      className="input"
-                      value={absenceEnd}
-                      onChange={(e) => setAbsenceEnd(e.target.value)}
-                    />
-                  </div>
-                  <select
-                    name="type"
-                    className="input w-full"
-                    value={absenceType}
-                    onChange={(e) => setAbsenceType(e.target.value)}
-                  >
-                    {absenceOptions.map((kind) => (
-                      <option key={kind.code} value={kind.code}>
-                        {kind.label}
-                      </option>
-                    ))}
-                  </select>
-                  <div className="flex gap-3 items-center text-sm">
-                    <label className="text-slate-600">Umfang</label>
-                    <label className="flex items-center gap-1 text-slate-700">
-                      <input
-                        type="radio"
-                        name="duration"
-                        value="full"
-                        checked={absenceDuration === 'full'}
-                        disabled={selectedKind ? selectedKind.allow_full === false : false}
-                        onChange={() => setAbsenceDuration('full')}
-                      />{' '}
-                      Ganzer Tag
-                    </label>
-                    <label className="flex items-center gap-1 text-slate-700">
-                      <input
-                        type="radio"
-                        name="duration"
-                        value="half"
-                        checked={absenceDuration === 'half'}
-                        disabled={selectedKind ? selectedKind.allow_half === false : false}
-                        onChange={() => setAbsenceDuration('half')}
-                      />{' '}
-                      Halber Tag
-                    </label>
-                    {selectedKind?.allow_hourly && (
-                      <label className="flex items-center gap-1 text-slate-700">
-                        <input
-                          type="radio"
-                          name="duration"
-                          value="hours"
-                          checked={absenceDuration === 'hours'}
-                          onChange={() => setAbsenceDuration('hours')}
-                        />{' '}
-                        Stundenweise
-                      </label>
-                    )}
-                  </div>
-                  {absenceDuration === 'hours' && (
-                    <div className="grid grid-cols-2 gap-2">
-                      <input
-                        name="start_time"
-                        type="time"
-                        required
-                        className="input"
-                        value={absenceStartTime}
-                        onChange={(e) => setAbsenceStartTime(e.target.value)}
-                      />
-                      <input
-                        name="end_time"
-                        type="time"
-                        required
-                        className="input"
-                        value={absenceEndTime}
-                        onChange={(e) => setAbsenceEndTime(e.target.value)}
-                      />
-                    </div>
-                  )}
-                  <button className="btn-primary" type="submit" disabled={manualAbsence.isPending}>
-                    Eintragen
-                  </button>
-                </form>
-                {days[selectedDate ?? '']?.absences?.length ? (
+                <div className="flex items-center justify-between">
+                  <h3 className="text-lg font-semibold">Abwesenheit eintragen</h3>
                   <button
-                    className="text-sm text-rose-700 border border-rose-200 bg-rose-50 rounded-md px-3 py-2 font-semibold"
+                    className="text-sm text-sky-700 underline"
                     type="button"
-                    onClick={() => {
-                      if (!selectedDate || !selectedUserId) return;
-                      deleteAbsence.mutate({ start_date: selectedDate, end_date: selectedDate });
-                    }}
-                    disabled={deleteAbsence.isPending}
+                    onClick={() => setShowAbsenceForm((v) => !v)}
                   >
-                    Abwesenheit am ausgewählten Tag löschen
+                    {showAbsenceForm ? 'Einklappen' : 'Aufklappen'}
                   </button>
-                ) : null}
+                </div>
+                {showAbsenceForm && (
+                  <>
+                    <form className="space-y-2" onSubmit={onManualAbsence}>
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <label className="text-sm text-slate-600">Von</label>
+                          <input
+                            name="start_date"
+                            type="date"
+                            className="input"
+                            required
+                            value={absenceStart}
+                            onChange={(e) => setAbsenceStart(e.target.value)}
+                          />
+                        </div>
+                        <div>
+                          <label className="text-sm text-slate-600">Bis</label>
+                          <input
+                            name="end_date"
+                            type="date"
+                            className="input"
+                            required
+                            value={absenceEnd}
+                            onChange={(e) => setAbsenceEnd(e.target.value)}
+                          />
+                        </div>
+                      </div>
+                      <label className="block text-sm text-slate-600">Art</label>
+                      <select
+                        name="type"
+                        className="input w-full"
+                        value={absenceType}
+                        onChange={(e) => setAbsenceType(e.target.value)}
+                      >
+                        {absenceOptions.map((kind) => (
+                          <option key={kind.code} value={kind.code}>
+                            {kind.label}
+                          </option>
+                        ))}
+                      </select>
+                      <div className="flex gap-3 items-center text-sm">
+                        <label className="text-slate-600">Umfang</label>
+                        <label className="flex items-center gap-1 text-slate-700">
+                          <input
+                            type="radio"
+                            name="duration"
+                            value="full"
+                            checked={absenceDuration === 'full'}
+                            disabled={selectedKind ? selectedKind.allow_full === false : false}
+                            onChange={() => setAbsenceDuration('full')}
+                          />{' '}
+                          Ganzer Tag
+                        </label>
+                        <label className="flex items-center gap-1 text-slate-700">
+                          <input
+                            type="radio"
+                            name="duration"
+                            value="half"
+                            checked={absenceDuration === 'half'}
+                            disabled={selectedKind ? selectedKind.allow_half === false : false}
+                            onChange={() => setAbsenceDuration('half')}
+                          />{' '}
+                          Halber Tag
+                        </label>
+                        {selectedKind?.allow_hourly && (
+                          <label className="flex items-center gap-1 text-slate-700">
+                            <input
+                              type="radio"
+                              name="duration"
+                              value="hours"
+                              checked={absenceDuration === 'hours'}
+                              onChange={() => setAbsenceDuration('hours')}
+                            />{' '}
+                            Stundenweise
+                          </label>
+                        )}
+                      </div>
+                      {absenceDuration === 'hours' && (
+                        <div className="grid grid-cols-2 gap-2">
+                          <input
+                            name="start_time"
+                            type="time"
+                            required
+                            className="input"
+                            value={absenceStartTime}
+                            onChange={(e) => setAbsenceStartTime(e.target.value)}
+                          />
+                          <input
+                            name="end_time"
+                            type="time"
+                            required
+                            className="input"
+                            value={absenceEndTime}
+                            onChange={(e) => setAbsenceEndTime(e.target.value)}
+                          />
+                        </div>
+                      )}
+                      <button className="btn-primary" type="submit" disabled={manualAbsence.isPending}>
+                        Eintragen
+                      </button>
+                    </form>
+                    {days[selectedDate ?? '']?.absences?.length ? (
+                      <button
+                        className="text-sm text-rose-700 border border-rose-200 bg-rose-50 rounded-md px-3 py-2 font-semibold"
+                        type="button"
+                        onClick={() => {
+                          if (!selectedDate || !selectedUserId) return;
+                          deleteAbsence.mutate({ start_date: selectedDate, end_date: selectedDate });
+                        }}
+                        disabled={deleteAbsence.isPending}
+                      >
+                        Abwesenheit am ausgewählten Tag löschen
+                      </button>
+                    ) : null}
+                  </>
+                )}
               </div>
             </div>
           )}
-        </div>
+          </div>
 
         <div className="space-y-4">
           <div className="card p-4 space-y-3">
             <div className="flex items-center justify-between">
-              <h3 className="text-lg font-semibold">Monatsübersicht (Auswahl)</h3>
+              <h3 className="text-lg font-semibold">Monatsübersicht</h3>
               {selectedDate && <p className="text-sm text-slate-500">Ausgewählt: {selectedDate}</p>}
             </div>
             <div className="grid grid-cols-2 gap-2 text-sm">
@@ -663,16 +698,11 @@ export function TimesPage() {
                 </p>
               </div>
             </div>
-            <p className="text-sm text-slate-600">
-              Werte beziehen sich ausschließlich auf den ausgewählten Mitarbeitenden und werden automatisch neu geladen,
-              sobald eine andere Person gewählt wird.
-            </p>
           </div>
 
           <div className="card p-4 space-y-3">
             <div className="flex items-center justify-between">
               <h3 className="text-lg font-semibold">Urlaubsübersicht</h3>
-              <p className="text-xs text-slate-500">Nur für den aktuell ausgewählten Mitarbeitenden</p>
             </div>
             {selectedVacation ? (
               <div className="space-y-2 text-sm">
