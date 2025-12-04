@@ -42,7 +42,8 @@ const getHolidayProfileId = (userId: number, dateKey: string) => {
 };
 
 const holidayDatesBetween = (userId: number, start: string, end: string) => {
-  const profileId = getHolidayProfileId(userId, start);
+  const reference = end || start;
+  const profileId = getHolidayProfileId(userId, reference);
   if (!profileId) return new Set<string>();
   const rows = db
     .prepare('SELECT date FROM holidays WHERE profile_id = ? AND date BETWEEN ? AND ?')
@@ -213,23 +214,20 @@ const buildVacationOverview = (userIds: number[], today: string) => {
     let used = 0;
     let planned = 0;
     absences.forEach((row) => {
-      let cursor = parseDate(row.start_date);
-      const endDate = parseDate(row.end_date);
-      while (cursor.getTime() <= endDate.getTime()) {
-        const key = cursor.toISOString().slice(0, 10);
+      const holidaySetForRange = holidayDatesBetween(user.id, row.start_date, row.end_date);
+      const workingDays = workingDatesBetween(user.id, row.start_date, row.end_date, holidaySetForRange);
+      workingDays.forEach((key) => {
         const plannedMinutes = plannedMinutesForDate(user.id, key);
-        if (plannedMinutes > 0 && !holidaySet.has(key)) {
-          let minutes = row.minutes_override ?? null;
-          if (minutes === null) {
-            minutes = row.duration === 'half' ? Math.round(plannedMinutes / 2) : plannedMinutes;
-          }
-          const effective = minutes ?? plannedMinutes;
-          const portion = plannedMinutes ? Math.min(effective / plannedMinutes, 1) : 0;
-          if (key <= today) used += portion;
-          else planned += portion;
+        if (plannedMinutes <= 0 || holidaySet.has(key)) return;
+        let minutes = row.minutes_override ?? null;
+        if (minutes === null) {
+          minutes = row.duration === 'half' ? Math.round(plannedMinutes / 2) : plannedMinutes;
         }
-        cursor = new Date(cursor.getTime() + 24 * 60 * 60 * 1000);
-      }
+        const effective = minutes ?? plannedMinutes;
+        const portion = plannedMinutes ? Math.min(effective / plannedMinutes, 1) : 0;
+        if (key <= today) used += portion;
+        else planned += portion;
+      });
     });
     const remaining = Math.max(allowance - used - planned, 0);
     return {

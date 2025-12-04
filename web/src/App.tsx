@@ -83,7 +83,7 @@ function Shell({ children }: { children: React.ReactNode }) {
       .join(' ') || auth.user?.name;
   return (
     <div className="min-h-screen flex bg-surface">
-      <aside className="w-72 bg-white text-slate-900 flex flex-col shadow-lg border-r border-slate-200 relative">
+      <aside className="w-72 bg-white text-slate-900 flex flex-col shadow-lg border-r border-slate-200 sticky top-0 self-start h-screen">
         <div className="p-6 border-b border-slate-200 relative bg-gradient-to-r from-sky-50 via-white to-blue-50">
           <p className="text-[11px] uppercase tracking-[0.35em] text-slate-500">Zeiterfassung</p>
           <p className="text-3xl font-black text-sky-800">ZeitPilot</p>
@@ -119,7 +119,7 @@ function Shell({ children }: { children: React.ReactNode }) {
           </button>
         </div>
       </aside>
-      <div className="flex-1 flex flex-col">
+      <div className="flex-1 flex flex-col min-h-screen">
         <header className="border-b bg-white/80 backdrop-blur sticky top-0 z-10 shadow-sm">
           <div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
             <div>
