@@ -12,9 +12,16 @@ const labels: Record<TimeEntry['type'], string> = {
 };
 
 function formatStamp(ts: string) {
-  const [datePart, timePart] = ts.split(' ');
-  const [hour = '00', minute = '00'] = (timePart ?? '').split(':');
-  return `${datePart ?? ''} ${hour}:${minute}`.trim();
+  const date = new Date(ts);
+  if (!Number.isFinite(date.getTime())) return ts;
+  return date.toLocaleString('de-DE', {
+    timeZone: 'Europe/Berlin',
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
 }
 
 const MS_IN_MINUTE = 60000;
