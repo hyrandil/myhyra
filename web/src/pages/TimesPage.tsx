@@ -10,11 +10,12 @@ import {
   fetchDailyForUser,
   fetchDayEntriesForUser,
   fetchEmployees,
+  fetchVacationOverview,
   updateTimeEntry,
   deleteTimeEntry,
 } from '../api';
 import { useAuth } from '../AuthProvider';
-import { AbsenceKind, DailySummary, DayDetail, Employee, TimeEntry } from '../types';
+import { AbsenceKind, DailySummary, DayDetail, Employee, TimeEntry, VacationOverviewItem } from '../types';
 import { useIsMobile } from '../hooks/useIsMobile';
 
 export function TimesPage() {
@@ -185,6 +186,28 @@ export function TimesPage() {
         { code: 'sick', label: 'Krank' },
         { code: 'away', label: 'Nicht im Haus' },
       ];
+
+  const { data: vacationOverview } = useQuery<VacationOverviewItem[]>({
+    queryKey: ['vacation-overview'],
+    queryFn: fetchVacationOverview,
+  });
+
+  const selectedVacation = useMemo(() => {
+    if (!vacationOverview) return null;
+    const target = selectedUserId ?? user?.id ?? null;
+    if (!target) return null;
+    const entry = vacationOverview.find((item: VacationOverviewItem) => item.userId === target);
+    if (entry) return entry;
+    return {
+      userId: target,
+      name: '',
+      email: '',
+      allowance: 0,
+      used: 0,
+      planned: 0,
+      remaining: 0,
+    };
+  }, [selectedUserId, user?.id, vacationOverview]);
 
   useEffect(() => {
     if (selectedDate) {
@@ -499,6 +522,35 @@ export function TimesPage() {
             Werte beziehen sich ausschließlich auf den ausgewählten Mitarbeitenden und werden automatisch neu geladen,
             sobald eine andere Person gewählt wird.
           </p>
+        </div>
+
+        <div className="card p-4 space-y-3">
+          <div className="flex items-center justify-between">
+            <h3 className="text-lg font-semibold">Urlaubsübersicht</h3>
+            <p className="text-xs text-slate-500">Nur für den aktuell ausgewählten Mitarbeitenden</p>
+          </div>
+          {selectedVacation ? (
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-sm">
+              <div className="p-3 rounded-lg bg-slate-50 border border-slate-200">
+                <p className="text-xs uppercase text-slate-500">Kontingent</p>
+                <p className="text-xl font-semibold">{selectedVacation.allowance.toFixed(2)} Tage</p>
+              </div>
+              <div className="p-3 rounded-lg bg-slate-50 border border-slate-200">
+                <p className="text-xs uppercase text-slate-500">Genommen</p>
+                <p className="text-xl font-semibold">{selectedVacation.used.toFixed(2)} Tage</p>
+              </div>
+              <div className="p-3 rounded-lg bg-slate-50 border border-slate-200">
+                <p className="text-xs uppercase text-slate-500">Geplant</p>
+                <p className="text-xl font-semibold">{selectedVacation.planned.toFixed(2)} Tage</p>
+              </div>
+              <div className="p-3 rounded-lg bg-slate-50 border border-slate-200">
+                <p className="text-xs uppercase text-slate-500">Verbleibend</p>
+                <p className="text-xl font-semibold text-emerald-700">{selectedVacation.remaining.toFixed(2)} Tage</p>
+              </div>
+            </div>
+          ) : (
+            <p className="text-sm text-slate-500">Noch keine Urlaubsdaten verfügbar.</p>
+          )}
         </div>
       </div>
 

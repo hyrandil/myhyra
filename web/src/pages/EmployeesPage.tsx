@@ -161,9 +161,15 @@ export function EmployeesPage() {
               </option>
             ))}
           </select>
-          <input name="holidayProfileValidFrom" type="date" placeholder="Feiertagsprofil gültig ab" className="input" />
+          <div className="space-y-1">
+            <label className="text-sm text-slate-600">Feiertagsprofil gültig ab</label>
+            <input name="holidayProfileValidFrom" type="date" className="input" />
+          </div>
           <input name="location" placeholder="Standort" className="input" />
-          <input name="trackingStartDate" type="date" placeholder="Erfassungsbeginn" className="input" />
+          <div className="space-y-1">
+            <label className="text-sm text-slate-600">Erfassungsbeginn</label>
+            <input name="trackingStartDate" type="date" className="input" />
+          </div>
           <button className="btn-primary md:col-span-3" type="submit" disabled={createMutation.isPending}>
             Speichern
           </button>
@@ -379,33 +385,39 @@ export function EmployeesPage() {
                   </option>
                 ))}
               </select>
-              <input
-                className="input"
-                type="date"
-                value={selected.holidayProfileValidFrom ?? ''}
-                onChange={(e) => setSelected({ ...selected, holidayProfileValidFrom: e.target.value })}
-                placeholder="Feiertagsprofil gültig ab"
-              />
-              <input
-                className="input"
-                type="date"
-                value={selected.endDate ?? ''}
-                onChange={(e) => setSelected({ ...selected, endDate: e.target.value })}
-                placeholder="Austrittsdatum"
-              />
+              <div className="space-y-1">
+                <label className="text-sm text-slate-600">Feiertagsprofil gültig ab</label>
+                <input
+                  className="input"
+                  type="date"
+                  value={selected.holidayProfileValidFrom ?? ''}
+                  onChange={(e) => setSelected({ ...selected, holidayProfileValidFrom: e.target.value })}
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="text-sm text-slate-600">Austrittsdatum</label>
+                <input
+                  className="input"
+                  type="date"
+                  value={selected.endDate ?? ''}
+                  onChange={(e) => setSelected({ ...selected, endDate: e.target.value })}
+                />
+              </div>
               <input
                 className="input"
                 value={selected.location ?? ''}
                 placeholder="Standort"
                 onChange={(e) => setSelected({ ...selected, location: e.target.value })}
               />
-              <input
-                className="input"
-                value={selected.trackingStartDate ?? ''}
-                type="date"
-                placeholder="Erfassungsbeginn"
-                onChange={(e) => setSelected({ ...selected, trackingStartDate: e.target.value })}
-              />
+              <div className="space-y-1">
+                <label className="text-sm text-slate-600">Erfassungsbeginn</label>
+                <input
+                  className="input"
+                  value={selected.trackingStartDate ?? ''}
+                  type="date"
+                  onChange={(e) => setSelected({ ...selected, trackingStartDate: e.target.value })}
+                />
+              </div>
               <div className="grid grid-cols-3 gap-2 items-end">
                 <div className="col-span-2">
                   <label className="text-sm text-slate-600">Neues Passwort setzen</label>
