@@ -203,7 +203,7 @@ const buildVacationOverview = (userIds: number[], today: string) => {
   const allowanceMap = new Map(settings.map((s) => [s.user_id, s.vacation_allowance]));
 
   const results = users.map((user) => {
-    const allowance = allowanceMap.get(user.id) ?? 0;
+    const allowance = allowanceMap.get(user.id) ?? 30;
     const holidaySet = holidayDatesBetween(user.id, '1970-01-01', today);
     const absences = db
       .prepare(

@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   createDepartment,
   createEmployee,
@@ -16,6 +16,22 @@ import {
 } from '../api';
 import { Employee } from '../types';
 
+type StrengthInfo = { label: string; className: string };
+
+const getStrength = (value: string): StrengthInfo => {
+  let score = 0;
+  if (value.length >= 12) score += 1;
+  if (/[A-Z]/.test(value)) score += 1;
+  if (/[a-z]/.test(value)) score += 1;
+  if (/[0-9]/.test(value)) score += 1;
+  if (/[^A-Za-z0-9]/.test(value)) score += 1;
+
+  if (!value) return { label: 'Bitte Passwort eingeben', className: 'text-slate-500' };
+  if (score <= 2) return { label: 'Schwach', className: 'text-rose-600' };
+  if (score === 3) return { label: 'Mittel', className: 'text-amber-600' };
+  return { label: 'Stark', className: 'text-emerald-600' };
+};
+
 export function EmployeesPage() {
   const queryClient = useQueryClient();
   const [search, setSearch] = useState('');
@@ -23,9 +39,13 @@ export function EmployeesPage() {
   const [showDepartments, setShowDepartments] = useState(false);
   const [editingDeptId, setEditingDeptId] = useState<number | null>(null);
   const [resetPasswordValue, setResetPasswordValue] = useState('');
+  const [newPassword, setNewPassword] = useState('');
   const { data } = useQuery({ queryKey: ['employees', search], queryFn: () => fetchEmployees(search || undefined) });
   const { data: departments } = useQuery({ queryKey: ['departments'], queryFn: fetchDepartments });
   const { data: holidayProfiles } = useQuery({ queryKey: ['holiday-profiles'], queryFn: fetchHolidayProfiles });
+
+  const creationStrength = useMemo(() => getStrength(newPassword), [newPassword]);
+  const resetStrength = useMemo(() => getStrength(resetPasswordValue), [resetPasswordValue]);
 
   const memberMutation = useMutation({
     mutationFn: ({ departmentId, userId, role }: { departmentId: number; userId: number; role?: 'member' | 'lead' | 'hr' }) =>
@@ -137,7 +157,17 @@ export function EmployeesPage() {
           <input name="firstName" required placeholder="Vorname" className="input" />
           <input name="lastName" required placeholder="Nachname" className="input" />
           <input name="email" required placeholder="E-Mail" className="input" />
-          <input name="password" required placeholder="Passwort" className="input" type="password" />
+          <div className="space-y-1">
+            <input
+              name="password"
+              required
+              placeholder="Passwort"
+              className="input"
+              type="password"
+              onChange={(e) => setNewPassword(e.target.value)}
+            />
+            <p className={`text-xs ${creationStrength.className}`}>Passwort-Stärke: {creationStrength.label}</p>
+          </div>
           <select name="role" className="input">
             <option value="employee">Mitarbeiter</option>
             <option value="lead">Teamleiter</option>
@@ -419,7 +449,7 @@ export function EmployeesPage() {
                 />
               </div>
               <div className="grid grid-cols-3 gap-2 items-end">
-                <div className="col-span-2">
+                <div className="col-span-2 space-y-1">
                   <label className="text-sm text-slate-600">Neues Passwort setzen</label>
                   <input
                     className="input"
@@ -428,6 +458,7 @@ export function EmployeesPage() {
                     onChange={(e) => setResetPasswordValue(e.target.value)}
                     placeholder="Neues Passwort"
                   />
+                  <p className={`text-xs ${resetStrength.className}`}>Passwort-Stärke: {resetStrength.label}</p>
                 </div>
                 <button
                   className="btn-ghost"
