@@ -1,0 +1,13 @@
+node_modules
+*.log
+server/.env
+server/dist
+web/.env*
+web/dist
+mobile/.env*
+server/data/*.db
+server/data/*.db-journal
+.expo
+.expo-shared
+mobile/.expo
+mobile/.expo-shared
