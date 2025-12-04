@@ -30,6 +30,54 @@ function getSchedule(userId: number): WorkScheduleEntry[] {
     .all(userId) as WorkScheduleEntry[];
 }
 
+function seedScheduleVersion(userId: number) {
+  const exists = db
+    .prepare('SELECT COUNT(1) as count FROM work_schedule_versions WHERE user_id = ?')
+    .get(userId) as { count: number };
+  if (exists?.count && exists.count > 0) return;
+  const schedule = getSchedule(userId);
+  const minutes = new Map(schedule.map((s) => [s.weekday, s.minutes]));
+  const startRow = db
+    .prepare('SELECT tracking_start_date FROM user_profiles WHERE user_id = ?')
+    .get(userId) as { tracking_start_date?: string | null } | undefined;
+  const validFrom = startRow?.tracking_start_date || '1970-01-01';
+  db.prepare(
+    `INSERT OR IGNORE INTO work_schedule_versions
+      (user_id, valid_from, mon_minutes, tue_minutes, wed_minutes, thu_minutes, fri_minutes, sat_minutes, sun_minutes)
+      VALUES (?,?,?,?,?,?,?,?,?)`
+  ).run(
+    userId,
+    validFrom,
+    minutes.get(0) ?? 0,
+    minutes.get(1) ?? 0,
+    minutes.get(2) ?? 0,
+    minutes.get(3) ?? 0,
+    minutes.get(4) ?? 0,
+    minutes.get(5) ?? 0,
+    minutes.get(6) ?? 0
+  );
+}
+
+function plannedMinutesForDate(userId: number, dateKey: string) {
+  seedScheduleVersion(userId);
+  const versions = db
+    .prepare('SELECT * FROM work_schedule_versions WHERE user_id = ? ORDER BY date(valid_from) DESC, id DESC')
+    .all(userId) as any[];
+  const target = versions.find((v) => v.valid_from <= dateKey) || versions[versions.length - 1];
+  const minutesByWeekday = [
+    target?.mon_minutes ?? 0,
+    target?.tue_minutes ?? 0,
+    target?.wed_minutes ?? 0,
+    target?.thu_minutes ?? 0,
+    target?.fri_minutes ?? 0,
+    target?.sat_minutes ?? 0,
+    target?.sun_minutes ?? 0,
+  ];
+  const dateObj = new Date(`${dateKey}T00:00:00Z`);
+  const weekday = (dateObj.getUTCDay() + 6) % 7;
+  return minutesByWeekday[weekday] ?? 0;
+}
+
 function getHolidayProfileId(userId: number): number | null {
   try {
     const row = db
@@ -96,8 +144,6 @@ function buildMonthlyReport(userId: number, monthValue?: string) {
   const start = new Date(Date.UTC(baseDate.getUTCFullYear(), baseDate.getUTCMonth(), 1));
   const end = new Date(Date.UTC(baseDate.getUTCFullYear(), baseDate.getUTCMonth() + 1, 0));
 
-  const schedule = getSchedule(userId);
-  const planMap = new Map(schedule.map((entry) => [entry.weekday, entry.minutes]));
   const absenceKinds = db
     .prepare('SELECT code, label, counts_as_work FROM absence_kinds ORDER BY label ASC')
     .all() as { code: string; label: string; counts_as_work: number }[];
@@ -150,21 +196,24 @@ function buildMonthlyReport(userId: number, monthValue?: string) {
     note: holiday.name,
     created_at: holiday.date,
   })) as (Absence & { type: Absence['type'] | 'holiday' })[];
+  const holidayDays = new Set(enrichedHolidays.map((h) => h.start_date));
   [...absences, ...enrichedHolidays].forEach((absence) => {
-    const days = (() => {
-      const workingMap = new Map(schedule.map((entry) => [entry.weekday, entry.minutes]));
-      const results: string[] = [];
-      let cursor = new Date(`${absence.start_date}T00:00:00Z`);
-      const endDate = new Date(`${absence.end_date}T00:00:00Z`);
-      while (cursor.getTime() <= endDate.getTime()) {
-        const weekday = (cursor.getUTCDay() + 6) % 7;
-        const minutes = workingMap.get(weekday) ?? 0;
-        if (minutes > 0) results.push(cursor.toISOString().slice(0, 10));
-        cursor.setUTCDate(cursor.getUTCDate() + 1);
+    const results: string[] = [];
+    let cursor = new Date(`${absence.start_date}T00:00:00Z`);
+    const endDate = new Date(`${absence.end_date}T00:00:00Z`);
+    while (cursor.getTime() <= endDate.getTime()) {
+      const key = cursor.toISOString().slice(0, 10);
+      const planned = plannedMinutesForDate(userId, key);
+      if (planned > 0) {
+        const isHoliday = holidayDays.has(key);
+        const isVacation = (absence as any).type === 'vacation';
+        if (!(isHoliday && isVacation)) {
+          results.push(key);
+        }
       }
-      return results;
-    })();
-    days.forEach((day) => {
+      cursor.setUTCDate(cursor.getUTCDate() + 1);
+    }
+    results.forEach((day) => {
       const list = absenceMap.get(day) ?? [];
       list.push(absence as Absence);
       absenceMap.set(day, list);
@@ -175,8 +224,7 @@ function buildMonthlyReport(userId: number, monthValue?: string) {
   const cursor = new Date(start);
   while (cursor.getTime() <= end.getTime()) {
     const key = cursor.toISOString().slice(0, 10);
-    const weekday = (cursor.getUTCDay() + 6) % 7;
-    const planned = planMap.get(weekday) ?? 0;
+    const planned = plannedMinutesForDate(userId, key);
     const dayEntries = grouped.get(key) ?? [];
     const workStats = computeDayWorkStats(dayEntries);
     const absencesForDay = absenceMap.get(key) ?? [];
@@ -321,8 +369,6 @@ function buildDailySummary(userId: number, month?: string, maskAbsences = false)
     .get(userId) as { tracking_start_date?: string | null; start_date?: string | null } | undefined;
   const trackingStartValue = profile?.tracking_start_date || profile?.start_date;
   const trackingStartDate = trackingStartValue ? new Date(`${trackingStartValue}T00:00:00Z`) : undefined;
-  const schedule = getSchedule(userId);
-  const planMap = new Map(schedule.map((entry) => [entry.weekday, entry.minutes]));
   const absenceKinds = db
     .prepare('SELECT code, label, counts_as_work FROM absence_kinds ORDER BY label ASC')
     .all() as { code: string; label: string; counts_as_work: number }[];
@@ -380,21 +426,23 @@ function buildDailySummary(userId: number, month?: string, maskAbsences = false)
     note: holiday.name,
     created_at: holiday.date,
   })) as (Absence & { type: Absence['type'] | 'holiday' })[];
+  const holidayDays = new Set(holidays.map((h) => h.start_date));
   [...absences, ...holidays].forEach((absence) => {
-    const days = (() => {
-      const workingMap = new Map(schedule.map((entry) => [entry.weekday, entry.minutes]));
-      const results: string[] = [];
-      let cursor = new Date(`${absence.start_date}T00:00:00Z`);
-      const endDate = new Date(`${absence.end_date}T00:00:00Z`);
-      while (cursor.getTime() <= endDate.getTime()) {
-        const weekday = (cursor.getUTCDay() + 6) % 7;
-        if ((workingMap.get(weekday) ?? 0) > 0) {
-          results.push(cursor.toISOString().slice(0, 10));
+    const days: string[] = [];
+    let cursor = new Date(`${absence.start_date}T00:00:00Z`);
+    const endDate = new Date(`${absence.end_date}T00:00:00Z`);
+    while (cursor.getTime() <= endDate.getTime()) {
+      const key = cursor.toISOString().slice(0, 10);
+      const planned = plannedMinutesForDate(userId, key);
+      if (planned > 0) {
+        const isHoliday = holidayDays.has(key);
+        const isVacation = (absence as any).type === 'vacation';
+        if (!(isHoliday && isVacation)) {
+          days.push(key);
         }
-        cursor = new Date(cursor.getTime() + 24 * 60 * 60 * 1000);
       }
-      return results;
-    })();
+      cursor = new Date(cursor.getTime() + 24 * 60 * 60 * 1000);
+    }
     days.forEach((day) => {
       const list = absenceMap.get(day) ?? [];
       list.push(absence);
@@ -471,8 +519,7 @@ function buildDailySummary(userId: number, month?: string, maskAbsences = false)
 
   while (cursor.getTime() <= endCursor.getTime()) {
     const key = cursor.toISOString().slice(0, 10);
-    const weekday = (cursor.getUTCDay() + 6) % 7;
-    const planned = planMap.get(weekday) ?? 0;
+    const planned = plannedMinutesForDate(userId, key);
     const entries = grouped.get(key) ?? [];
     const absencesForDay = absenceMap.get(key) ?? [];
     const workStats = computeDayWorkStats(entries);

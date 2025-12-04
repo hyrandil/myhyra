@@ -8,6 +8,7 @@ import {
   fetchProfileHolidays,
   fetchSchedule,
   importHolidayProfile,
+  deleteLatestScheduleVersion,
   updateSchedule,
 } from '../api';
 import { Employee, HolidayEntry, HolidayProfile } from '../types';
@@ -20,6 +21,7 @@ export function PlanningPage() {
   const queryClient = useQueryClient();
   const [selectedUser, setSelectedUser] = useState<number | null>(null);
   const [dayMinutes, setDayMinutes] = useState<number[]>([480, 480, 480, 480, 480, 0, 0]);
+  const [validFrom, setValidFrom] = useState<string>('');
   const [selectedProfile, setSelectedProfile] = useState<number | null>(null);
   const [holidayYear, setHolidayYear] = useState<number>(new Date().getFullYear());
   const [holidayStart, setHolidayStart] = useState<number | ''>('');
@@ -50,8 +52,16 @@ export function PlanningPage() {
   });
 
   const updateMutation = useMutation({
-    mutationFn: (payload: { userId: number; days: { weekday: number; minutes: number }[] }) =>
-      updateSchedule(payload.userId, payload.days),
+    mutationFn: (payload: { userId: number; days: { weekday: number; minutes: number }[]; validFrom?: string }) =>
+      updateSchedule(payload.userId, { days: payload.days, validFrom: payload.validFrom }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['schedule', selectedUser] });
+      queryClient.invalidateQueries({ queryKey: ['daily'] });
+    },
+  });
+
+  const deleteVersionMutation = useMutation({
+    mutationFn: (userId: number) => deleteLatestScheduleVersion(userId),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['schedule', selectedUser] });
       queryClient.invalidateQueries({ queryKey: ['daily'] });
@@ -95,8 +105,11 @@ export function PlanningPage() {
     if (schedules.data?.days) {
       schedules.data.days.forEach((d) => base.set(d.weekday, d.minutes));
       setDayMinutes(weekdayLabels.map((_, idx) => base.get(idx) ?? (idx < 5 ? 480 : 0)));
+      const latestHistory = schedules.data.history?.[schedules.data.history.length - 1];
+      setValidFrom(latestHistory?.validFrom ?? new Date().toISOString().slice(0, 10));
     } else {
       setDayMinutes(weekdayLabels.map((_, idx) => (idx < 5 ? 480 : 0)));
+      setValidFrom(new Date().toISOString().slice(0, 10));
     }
   }, [schedules.data, selectedUser]);
 
@@ -136,7 +149,7 @@ export function PlanningPage() {
               const hours = Number(form.get(`day-${idx}`) || 0);
               return { weekday: idx, minutes: Math.max(Math.round(hours * 60), 0) };
             });
-            updateMutation.mutate({ userId: selectedUser, days: payload });
+            updateMutation.mutate({ userId: selectedUser, days: payload, validFrom: validFrom || undefined });
           }}
         >
           {weekdayLabels.map((label, idx) => (
@@ -160,13 +173,55 @@ export function PlanningPage() {
               </div>
             </label>
           ))}
-          <div className="md:col-span-2 flex justify-end">
-            <button className="btn-primary" type="submit" disabled={updateMutation.isPending}>
-              Speichern
-            </button>
+          <div className="md:col-span-2 flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+            <div className="flex items-center gap-2">
+              <label className="text-sm text-slate-600">Änderung gültig ab</label>
+              <input
+                type="date"
+                className="input"
+                value={validFrom}
+                onChange={(e) => setValidFrom(e.target.value)}
+                required
+              />
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                className="btn-secondary"
+                disabled={deleteVersionMutation.isPending || !selectedUser}
+                onClick={() => selectedUser && deleteVersionMutation.mutate(selectedUser)}
+              >
+                Letzte Version löschen
+              </button>
+              <button className="btn-primary" type="submit" disabled={updateMutation.isPending}>
+                Speichern
+              </button>
+            </div>
           </div>
         </form>
       </div>
+
+      {schedules.data?.history && schedules.data.history.length > 0 && (
+        <div className="card p-4 space-y-2">
+          <p className="text-xs uppercase text-slate-500">Historie</p>
+          <div className="space-y-2">
+            {schedules.data.history.map((entry) => (
+              <div key={entry.id} className="border rounded p-3 flex flex-col md:flex-row md:items-center md:justify-between">
+                <div>
+                  <p className="text-sm font-semibold">
+                    {entry.validFrom} – {entry.validTo || 'aktuell'}
+                  </p>
+                  <p className="text-xs text-slate-500">
+                    {weekdayLabels
+                      .map((label, idx) => `${label.slice(0, 2)}: ${(entry.days[idx]?.minutes ?? 0) / 60}h`)
+                      .join(' · ')}
+                  </p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div className="card p-4 space-y-3">
         <div className="flex flex-col md:flex-row md:items-center gap-3">

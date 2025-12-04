@@ -337,12 +337,23 @@ export async function resetUserPassword(userId: number, password: string) {
 }
 
 export async function fetchSchedule(userId: number) {
-  const res = await api.get<{ days: { weekday: number; minutes: number }[] }>(`/users/${userId}/schedule`);
+  const res = await api.get<{
+    days: { weekday: number; minutes: number }[];
+    history?: { id: number; validFrom: string; validTo: string | null; days: { weekday: number; minutes: number }[] }[];
+  }>(`/users/${userId}/schedule`);
   return res.data;
 }
 
-export async function updateSchedule(userId: number, days: { weekday: number; minutes: number }[]) {
-  const res = await api.put<{ days: { weekday: number; minutes: number }[] }>(`/users/${userId}/schedule`, { days });
+export async function updateSchedule(
+  userId: number,
+  payload: { days: { weekday: number; minutes: number }[]; validFrom?: string }
+) {
+  const res = await api.put<{ days: { weekday: number; minutes: number }[]; history?: any[] }>(`/users/${userId}/schedule`, payload);
+  return res.data;
+}
+
+export async function deleteLatestScheduleVersion(userId: number) {
+  const res = await api.delete<{ days: { weekday: number; minutes: number }[]; history?: any[] }>(`/users/${userId}/schedule/latest`);
   return res.data;
 }
 

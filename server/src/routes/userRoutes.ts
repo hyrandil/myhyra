@@ -4,7 +4,7 @@ import { z } from 'zod';
 import db from '../db';
 import { requireAuth, authorize, AuthRequest } from '../auth';
 import { managedDepartments } from '../utils/permissions';
-import type { User, Booking, Absence, WorkScheduleEntry } from '../types';
+import type { User, Booking, Absence } from '../types';
 
 const router = Router();
 const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
@@ -34,6 +34,101 @@ const ensureSchedule = (userId: number) => {
   const defaults = [480, 480, 480, 480, 480, 0, 0];
   const insert = db.prepare('INSERT OR IGNORE INTO work_schedules (user_id, weekday, minutes) VALUES (?, ?, ?)');
   defaults.forEach((minutes, weekday) => insert.run(userId, weekday, minutes));
+};
+
+const seedScheduleVersion = (userId: number) => {
+  ensureSchedule(userId);
+  const versions = db
+    .prepare('SELECT COUNT(1) as count FROM work_schedule_versions WHERE user_id = ?')
+    .get(userId) as { count: number };
+  if (versions?.count && versions.count > 0) return;
+
+  const schedule = db
+    .prepare('SELECT weekday, minutes FROM work_schedules WHERE user_id = ? ORDER BY weekday ASC')
+    .all(userId) as { weekday: number; minutes: number }[];
+  const startRow = db
+    .prepare('SELECT tracking_start_date FROM user_profiles WHERE user_id = ?')
+    .get(userId) as { tracking_start_date?: string | null } | undefined;
+  const validFrom = startRow?.tracking_start_date || '1970-01-01';
+  const minutes = new Map(schedule.map((s) => [s.weekday, s.minutes]));
+  db.prepare(
+    `INSERT OR IGNORE INTO work_schedule_versions
+      (user_id, valid_from, mon_minutes, tue_minutes, wed_minutes, thu_minutes, fri_minutes, sat_minutes, sun_minutes)
+      VALUES (?,?,?,?,?,?,?,?,?)`
+  ).run(
+    userId,
+    validFrom,
+    minutes.get(0) ?? 0,
+    minutes.get(1) ?? 0,
+    minutes.get(2) ?? 0,
+    minutes.get(3) ?? 0,
+    minutes.get(4) ?? 0,
+    minutes.get(5) ?? 0,
+    minutes.get(6) ?? 0
+  );
+};
+
+const plannedMinutesForDate = (userId: number, dateKey: string) => {
+  seedScheduleVersion(userId);
+  const versions = db
+    .prepare('SELECT * FROM work_schedule_versions WHERE user_id = ? ORDER BY date(valid_from) DESC, id DESC')
+    .all(userId) as any[];
+  const target = versions.find((v) => v.valid_from <= dateKey) || versions[versions.length - 1];
+  const minutesByWeekday = [
+    target?.mon_minutes ?? 0,
+    target?.tue_minutes ?? 0,
+    target?.wed_minutes ?? 0,
+    target?.thu_minutes ?? 0,
+    target?.fri_minutes ?? 0,
+    target?.sat_minutes ?? 0,
+    target?.sun_minutes ?? 0,
+  ];
+  const weekday = weekdayFromDate(dateKey);
+  return minutesByWeekday[weekday] ?? 0;
+};
+
+const getHolidayProfileId = (userId: number): number | null => {
+  try {
+    const row = db
+      .prepare('SELECT holiday_profile_id FROM user_profiles WHERE user_id = ?')
+      .get(userId) as { holiday_profile_id?: number | null } | undefined;
+    return row?.holiday_profile_id ?? null;
+  } catch (err) {
+    console.error('Holiday profile column missing', err);
+    return null;
+  }
+};
+
+const getHolidaysForRange = (userId: number, startDate: string, endDate: string) => {
+  const profileId = getHolidayProfileId(userId);
+  if (!profileId) return [] as { date: string; name: string; duration: string }[];
+  return db
+    .prepare('SELECT date, name, duration FROM holidays WHERE profile_id = ? AND date BETWEEN ? AND ? ORDER BY date ASC')
+    .all(profileId, startDate, endDate) as { date: string; name: string; duration: string }[];
+};
+
+const scheduleHistory = (userId: number) => {
+  seedScheduleVersion(userId);
+  const versions = db
+    .prepare('SELECT * FROM work_schedule_versions WHERE user_id = ? ORDER BY date(valid_from) ASC, id ASC')
+    .all(userId) as any[];
+  return versions.map((version, idx) => {
+    const next = versions[idx + 1];
+    return {
+      id: version.id,
+      validFrom: version.valid_from,
+      validTo: next ? new Date(new Date(`${next.valid_from}T00:00:00Z`).getTime() - 86400000).toISOString().slice(0, 10) : null,
+      days: [
+        { weekday: 0, minutes: version.mon_minutes },
+        { weekday: 1, minutes: version.tue_minutes },
+        { weekday: 2, minutes: version.wed_minutes },
+        { weekday: 3, minutes: version.thu_minutes },
+        { weekday: 4, minutes: version.fri_minutes },
+        { weekday: 5, minutes: version.sat_minutes },
+        { weekday: 6, minutes: version.sun_minutes },
+      ],
+    };
+  });
 };
 
 const guardMissingUser = (userId: number, res: Response) => {
@@ -119,35 +214,6 @@ const weekdayFromDate = (value: string) => {
   return (date.getUTCDay() + 6) % 7;
 };
 
-const scheduleForUser = (userId: number): WorkScheduleEntry[] => {
-  const entries = db
-    .prepare('SELECT weekday, minutes FROM work_schedules WHERE user_id = ? ORDER BY weekday ASC')
-    .all(userId) as WorkScheduleEntry[];
-  if (entries.length === 7) return entries;
-  ensureSchedule(userId);
-  return db
-    .prepare('SELECT weekday, minutes FROM work_schedules WHERE user_id = ? ORDER BY weekday ASC')
-    .all(userId) as WorkScheduleEntry[];
-};
-
-const workingDatesBetween = (start: string, end: string, schedule: WorkScheduleEntry[]) => {
-  const map = new Map(schedule.map((entry) => [entry.weekday, entry.minutes]));
-  const startParts = toDateParts(start);
-  const endParts = toDateParts(end);
-  const cursor = new Date(Date.UTC(startParts.year, startParts.month - 1, startParts.day));
-  const endDate = new Date(Date.UTC(endParts.year, endParts.month - 1, endParts.day));
-  const results: string[] = [];
-  while (cursor.getTime() <= endDate.getTime()) {
-    const weekday = (cursor.getUTCDay() + 6) % 7;
-    const minutes = map.get(weekday) ?? 0;
-    if (minutes > 0) {
-      results.push(cursor.toISOString().slice(0, 10));
-    }
-    cursor.setUTCDate(cursor.getUTCDate() + 1);
-  }
-  return results;
-};
-
 const computeDayWorkMinutes = (bookings: Booking[]) => {
   const sorted = [...bookings].sort(
     (a, b) => new Date(a.clock_in).getTime() - new Date(b.clock_in).getTime()
@@ -204,9 +270,8 @@ const computeDayWorkMinutes = (bookings: Booking[]) => {
 
 const computeFlexBalance = (userId: number) => {
   ensureSchedule(userId);
+  seedScheduleVersion(userId);
   ensureSettingsRow(userId);
-  const schedule = scheduleForUser(userId);
-  const planMap = new Map(schedule.map((entry) => [entry.weekday, entry.minutes]));
   const bookings = db
     .prepare('SELECT * FROM bookings WHERE user_id = ? ORDER BY clock_in ASC')
     .all(userId) as Booking[];
@@ -229,14 +294,6 @@ const computeFlexBalance = (userId: number) => {
   });
 
   const absenceMap = new Map<string, Absence[]>();
-  absences.forEach((absence) => {
-    const days = workingDatesBetween(absence.start_date, absence.end_date, schedule);
-    days.forEach((day) => {
-      const list = absenceMap.get(day) ?? [];
-      list.push(absence);
-      absenceMap.set(day, list);
-    });
-  });
 
   const earliestBooking = bookings.length ? dateKey(bookings[0]!.clock_in) : null;
   const earliestAbsence = absences.length ? absences[0]!.start_date : null;
@@ -249,6 +306,27 @@ const computeFlexBalance = (userId: number) => {
     return candidates.reduce((min, curr) => (curr < min ? curr : min));
   })();
 
+  const holidayRows = getHolidaysForRange(userId, startCursor, endCursor.toISOString().slice(0, 10));
+  const holidayDays = new Set(holidayRows.map((h) => h.date));
+  absences.forEach((absence) => {
+    let cursor = new Date(`${absence.start_date}T00:00:00Z`);
+    const endDate = new Date(`${absence.end_date}T00:00:00Z`);
+    while (cursor.getTime() <= endDate.getTime()) {
+      const dayKey = cursor.toISOString().slice(0, 10);
+      const planned = plannedMinutesForDate(userId, dayKey);
+      if (planned > 0) {
+        const isHoliday = holidayDays.has(dayKey);
+        const isVacation = absence.type === 'vacation';
+        if (!(isHoliday && isVacation)) {
+          const list = absenceMap.get(dayKey) ?? [];
+          list.push(absence);
+          absenceMap.set(dayKey, list);
+        }
+      }
+      cursor.setUTCDate(cursor.getUTCDate() + 1);
+    }
+  });
+
   let plannedTotal = 0;
   let workedTotal = 0;
   let flexCarry = 0;
@@ -257,8 +335,7 @@ const computeFlexBalance = (userId: number) => {
   if (cursor.getTime() <= endCursor.getTime()) {
     while (cursor.getTime() <= endCursor.getTime()) {
       const dayKey = cursor.toISOString().slice(0, 10);
-      const weekday = weekdayFromDate(dayKey);
-      const planned = planMap.get(weekday) ?? 0;
+      const planned = plannedMinutesForDate(userId, dayKey);
       const baseWork = computeDayWorkMinutes(bookingsByDay.get(dayKey) ?? []);
       const absencesForDay = absenceMap.get(dayKey) ?? [];
 
@@ -834,11 +911,11 @@ router.get('/:id/schedule', (req, res) => {
     return res.status(400).json({ message: 'Ungültige Nutzer-ID' });
   }
   if (guardMissingUser(userId, res)) return;
-  ensureSchedule(userId);
+  seedScheduleVersion(userId);
   const schedule = db
     .prepare('SELECT weekday, minutes FROM work_schedules WHERE user_id = ? ORDER BY weekday ASC')
     .all(userId);
-  res.json({ days: schedule });
+  res.json({ days: schedule, history: scheduleHistory(userId) });
 });
 
 router.put('/:id/schedule', (req, res) => {
@@ -847,7 +924,7 @@ router.put('/:id/schedule', (req, res) => {
     return res.status(400).json({ message: 'Ungültige Nutzer-ID' });
   }
   if (guardMissingUser(userId, res)) return;
-  const parsed = scheduleSchema.safeParse(req.body);
+  const parsed = scheduleSchema.extend({ validFrom: z.string().optional() }).safeParse(req.body);
   if (!parsed.success) {
     return res.status(400).json({ errors: parsed.error.format() });
   }
@@ -855,12 +932,68 @@ router.put('/:id/schedule', (req, res) => {
     db.prepare('DELETE FROM work_schedules WHERE user_id = ?').run(userId);
     const insert = db.prepare('INSERT INTO work_schedules (user_id, weekday, minutes) VALUES (?, ?, ?)');
     payload.days.forEach((day) => insert.run(userId, day.weekday, day.minutes));
+
+    const versionStmt = db.prepare(
+      `INSERT OR REPLACE INTO work_schedule_versions
+        (user_id, valid_from, mon_minutes, tue_minutes, wed_minutes, thu_minutes, fri_minutes, sat_minutes, sun_minutes)
+        VALUES (?,?,?,?,?,?,?,?,?)`
+    );
+    const minutes = new Map(payload.days.map((d) => [d.weekday, d.minutes]));
+    const validFrom = payload.validFrom || new Date().toISOString().slice(0, 10);
+    versionStmt.run(
+      userId,
+      validFrom,
+      minutes.get(0) ?? 0,
+      minutes.get(1) ?? 0,
+      minutes.get(2) ?? 0,
+      minutes.get(3) ?? 0,
+      minutes.get(4) ?? 0,
+      minutes.get(5) ?? 0,
+      minutes.get(6) ?? 0
+    );
   });
   tx(parsed.data);
-  const schedule = db
-    .prepare('SELECT weekday, minutes FROM work_schedules WHERE user_id = ? ORDER BY weekday ASC')
-    .all(userId);
-  res.json({ days: schedule });
+  res.json({
+    days: db.prepare('SELECT weekday, minutes FROM work_schedules WHERE user_id = ? ORDER BY weekday ASC').all(userId),
+    history: scheduleHistory(userId),
+  });
+});
+
+router.delete('/:id/schedule/latest', (req, res) => {
+  const userId = Number(req.params.id);
+  if (Number.isNaN(userId)) {
+    return res.status(400).json({ message: 'Ungültige Nutzer-ID' });
+  }
+  if (guardMissingUser(userId, res)) return;
+  seedScheduleVersion(userId);
+  const versions = db
+    .prepare('SELECT * FROM work_schedule_versions WHERE user_id = ? ORDER BY date(valid_from) ASC, id ASC')
+    .all(userId) as any[];
+  if (versions.length <= 1) {
+    return res.status(400).json({ message: 'Keine frühere Version vorhanden' });
+  }
+  const latest = versions[versions.length - 1];
+  db.prepare('DELETE FROM work_schedule_versions WHERE id = ?').run(latest.id);
+  const newCurrent = versions[versions.length - 2];
+  const minutesByWeekday = [
+    newCurrent.mon_minutes,
+    newCurrent.tue_minutes,
+    newCurrent.wed_minutes,
+    newCurrent.thu_minutes,
+    newCurrent.fri_minutes,
+    newCurrent.sat_minutes,
+    newCurrent.sun_minutes,
+  ];
+  const resetTx = db.transaction(() => {
+    db.prepare('DELETE FROM work_schedules WHERE user_id = ?').run(userId);
+    const insert = db.prepare('INSERT INTO work_schedules (user_id, weekday, minutes) VALUES (?, ?, ?)');
+    minutesByWeekday.forEach((minutes, idx) => insert.run(userId, idx, minutes));
+  });
+  resetTx();
+  res.json({
+    days: db.prepare('SELECT weekday, minutes FROM work_schedules WHERE user_id = ? ORDER BY weekday ASC').all(userId),
+    history: scheduleHistory(userId),
+  });
 });
 
 router.get('/:id/flex', (req, res) => {
