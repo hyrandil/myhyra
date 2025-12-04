@@ -66,7 +66,7 @@ export function TimesPage() {
     }
   }, [selectedDate]);
   const [targetUser, setTargetUser] = useState<number | null>(() =>
-    hasRole('admin', 'hr', 'lead') ? null : user?.id ?? null
+    hasRole('admin', 'hr', 'lead') ? user?.id ?? null : user?.id ?? null
   );
   const selectedUserId = targetUser ?? user?.id ?? null;
   const enableManagement = hasRole('admin', 'hr', 'lead');
@@ -108,9 +108,8 @@ export function TimesPage() {
   const absenceOptions = absenceKindsData && absenceKindsData.length > 0 ? absenceKindsData : defaultAbsenceKinds;
 
   useEffect(() => {
-    if (enableManagement && employees && employees.length > 0 && !targetUser) {
-      const firstOther = employees.find((emp) => emp.id !== user?.id) ?? employees[0];
-      setTargetUser(firstOther.id);
+    if (enableManagement && employees && employees.length > 0 && !targetUser && user?.id) {
+      setTargetUser(user.id);
     }
   }, [enableManagement, employees, targetUser, user?.id]);
 
@@ -165,6 +164,8 @@ export function TimesPage() {
       setAbsenceDuration('half');
     }
   }, [absenceDuration, requestHalfDay]);
+
+  const isSelfSelection = selectedUserId === user?.id;
 
   const timeline = useMemo(
     () => {
@@ -374,6 +375,9 @@ export function TimesPage() {
                 value={targetUser ?? ''}
                 onChange={(e) => setTargetUser(Number(e.target.value))}
               >
+                {user && (
+                  <option value={user.id}>{user.name} (Ich)</option>
+                )}
                 {(employees as Employee[] | undefined)?.map((emp) => (
                   <option key={emp.id} value={emp.id}>
                     {emp.name} ({emp.personnelNumber || emp.email})
@@ -457,27 +461,31 @@ export function TimesPage() {
                               {formatLocalTime(entry.timestamp)} – {labels[entry.type]}
                             </p>
                             <p className="text-xs text-slate-500">Quelle: {entry.source}</p>
-                            {mapUrl && (
+                            {mapUrl && canEditTarget && (
                               <a className="text-xs text-sky-600 hover:underline" href={mapUrl} target="_blank" rel="noreferrer">
                                 Standort öffnen (Google Maps)
                               </a>
                             )}
                           </div>
-                          <div className="flex gap-2 items-center">
-                            <button
-                              className="text-xs text-slate-700 underline"
-                              onClick={() => setEditingEntryId(isEditing ? null : entry.id)}
-                            >
-                              {isEditing ? 'Abbrechen' : 'Ändern'}
-                            </button>
-                            <button
-                              className="text-rose-600 text-xs"
-                              onClick={() => deleteEntryMutation.mutate(entry.id)}
-                              disabled={deleteEntryMutation.isPending}
-                            >
-                              Löschen
-                            </button>
-                          </div>
+                          {canEditTarget ? (
+                            <div className="flex gap-2 items-center">
+                              <button
+                                className="text-xs text-slate-700 underline"
+                                onClick={() => setEditingEntryId(isEditing ? null : entry.id)}
+                              >
+                                {isEditing ? 'Abbrechen' : 'Ändern'}
+                              </button>
+                              <button
+                                className="text-rose-600 text-xs"
+                                onClick={() => deleteEntryMutation.mutate(entry.id)}
+                                disabled={deleteEntryMutation.isPending}
+                              >
+                                Löschen
+                              </button>
+                            </div>
+                          ) : (
+                            <span className="text-xs text-slate-500">Nur Leserechte</span>
+                          )}
                         </div>
                         {isEditing ? (
                           <form

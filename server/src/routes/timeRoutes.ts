@@ -676,6 +676,9 @@ router.get('/user/:userId/daily', authorize(['admin', 'hr', 'lead']), (req: Auth
   if (!exists) {
     return res.status(404).json({ message: 'Nutzer nicht gefunden' });
   }
+  if (req.user!.id === userId) {
+    return res.json(buildDailySummary(userId, month, true));
+  }
   if (!ensureManageable(req, res, userId)) return;
   res.json(buildDailySummary(userId, month));
 });
@@ -687,14 +690,14 @@ router.get('/user/:userId/day', requireAuth, (req: AuthRequest, res) => {
   if (Number.isNaN(userId)) return res.status(400).json({ message: 'Ungültige Nutzer-ID' });
   const exists = db.prepare('SELECT id FROM users WHERE id = ?').get(userId) as { id: number } | undefined;
   if (!exists) return res.status(404).json({ message: 'Nutzer nicht gefunden' });
-  if (req.user!.role !== 'admin' && req.user!.role !== 'hr' && req.user!.role !== 'lead' && req.user!.id !== userId) {
-    return res.status(403).json({ message: 'Keine Berechtigung' });
-  }
-  if (req.user!.role !== 'admin' && req.user!.role !== 'hr' && req.user!.role !== 'lead') {
-    const allowed = req.user!.id === userId;
-    if (!allowed) return res.status(403).json({ message: 'Keine Berechtigung' });
-  } else if (!ensureManageable(req, res, userId)) {
-    return;
+  if (req.user!.id !== userId) {
+    if (req.user!.role === 'admin' || req.user!.role === 'hr') {
+      if (!ensureManageable(req, res, userId)) return;
+    } else if (req.user!.role === 'lead') {
+      if (!ensureManageable(req, res, userId)) return;
+    } else {
+      return res.status(403).json({ message: 'Keine Berechtigung' });
+    }
   }
   const entries = db
     .prepare('SELECT * FROM time_entries WHERE user_id = ? AND date(timestamp) = ? ORDER BY timestamp ASC')
