@@ -19,6 +19,7 @@ import { MobileHomePage } from './pages/MobileHomePage';
 import { useIsMobile } from './hooks/useIsMobile';
 import { ApprovalListPage } from './pages/ApprovalListPage';
 import { LoggingPage } from './pages/LoggingPage';
+import { VacationOverviewPage } from './pages/VacationOverviewPage';
 
 function Protected({ children }: { children: React.ReactNode }) {
   const { user, ready } = useAuth();
@@ -91,6 +92,7 @@ function Shell({ children }: { children: React.ReactNode }) {
         <nav className="p-4 space-y-1 flex-1 relative">
           <NavItem to="/" label="Dashboard" />
           <NavItem to="/zeiten" label="Kalender & Zeiten" />
+          <NavItem to="/urlaub" label="Urlaubsübersicht" />
           <NavItem to="/uebersicht" label="Übersichtkalender" />
           <NavItem to="/antraege" label="Anträge" />
           {auth.hasRole('admin') && <NavItem to="/abwesenheiten" label="Abwesenheiten" />}
@@ -174,6 +176,7 @@ function MobileShell({ children }: { children: React.ReactNode }) {
         <div className="max-w-4xl mx-auto px-6 py-3 flex items-center justify-between text-center gap-2">
           <MobileNavItem to="/" label="Cockpit" />
           <MobileNavItem to="/zeiten" label="Zeiten" />
+          <MobileNavItem to="/urlaub" label="Urlaub" />
           <MobileNavItem to="/antraege" label="Anträge" />
           {auth.hasRole('admin') && <MobileNavItem to="/abwesenheiten" label="Abwesen" />}
           <MobileNavItem to="/berichte" label="Berichte" />
@@ -200,6 +203,7 @@ export default function App() {
               <MobileShell>
                 <Routes>
                   <Route path="/" element={<MobileHomePage />} />
+                  <Route path="/urlaub" element={<VacationOverviewPage />} />
                   <Route path="/zeiten" element={<TimesPage />} />
                   <Route path="/antraege" element={<RequestsPage />} />
                   <Route path="/antraege/abwesenheit" element={<AbsenceRequestsPage />} />
@@ -221,6 +225,7 @@ export default function App() {
               <Shell>
                 <Routes>
                   <Route path="/" element={<DashboardPage />} />
+                  <Route path="/urlaub" element={<VacationOverviewPage />} />
                   <Route path="/zeiten" element={<TimesPage />} />
                   <Route path="/uebersicht" element={<OverviewCalendarPage />} />
                   <Route path="/antraege" element={<RequestsPage />} />

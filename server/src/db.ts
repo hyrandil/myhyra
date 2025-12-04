@@ -30,6 +30,17 @@ CREATE TABLE IF NOT EXISTS holiday_profiles (
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE TABLE IF NOT EXISTS holiday_profile_versions (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER NOT NULL,
+  holiday_profile_id INTEGER NOT NULL,
+  valid_from TEXT NOT NULL,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE(user_id, valid_from),
+  FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE,
+  FOREIGN KEY(holiday_profile_id) REFERENCES holiday_profiles(id) ON DELETE CASCADE
+);
+
 CREATE TABLE IF NOT EXISTS holidays (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   profile_id INTEGER NOT NULL,
@@ -377,6 +388,34 @@ ensureTableColumn('time_correction_requests', 'cancel_reason', 'cancel_reason TE
 ensureTableColumn('time_correction_requests', 'canceled', 'canceled INTEGER NOT NULL DEFAULT 0');
 ensureTableColumn('user_profiles', 'start_date', 'start_date TEXT');
 ensureTableColumn('user_profiles', 'end_date', 'end_date TEXT');
+
+// Ensure holiday profile version support
+db.exec(`
+CREATE TABLE IF NOT EXISTS holiday_profile_versions (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER NOT NULL,
+  holiday_profile_id INTEGER NOT NULL,
+  valid_from TEXT NOT NULL,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE(user_id, valid_from),
+  FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE,
+  FOREIGN KEY(holiday_profile_id) REFERENCES holiday_profiles(id) ON DELETE CASCADE
+);
+`);
+
+const seedHolidayProfileVersions = () => {
+  const existing = db.prepare('SELECT COUNT(*) as count FROM holiday_profile_versions').get() as { count: number };
+  if (existing.count > 0) return;
+  const rows = db
+    .prepare('SELECT user_id, holiday_profile_id FROM user_profiles WHERE holiday_profile_id IS NOT NULL')
+    .all() as { user_id: number; holiday_profile_id: number }[];
+  const stmt = db.prepare(
+    'INSERT OR IGNORE INTO holiday_profile_versions (user_id, holiday_profile_id, valid_from) VALUES (?, ?, ?)' 
+  );
+  rows.forEach((row) => stmt.run(row.user_id, row.holiday_profile_id, '1970-01-01'));
+};
+
+seedHolidayProfileVersions();
 const absenceKindCount = db.prepare('SELECT COUNT(*) as count FROM absence_kinds').get() as { count: number };
 if (absenceKindCount.count === 0) {
   db.exec(`

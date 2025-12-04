@@ -19,6 +19,7 @@ export interface Employee extends UserInfo {
   startDate?: string;
   endDate?: string;
   holidayProfileId?: number;
+  holidayProfileValidFrom?: string;
 }
 
 export interface DepartmentMember {
@@ -88,6 +89,16 @@ export interface MonthlyReport {
     vacation?: { allowance: number; used: number; remaining: number };
     flexBalance?: number;
   };
+}
+
+export interface VacationOverviewItem {
+  userId: number;
+  name: string;
+  email: string;
+  allowance: number;
+  used: number;
+  planned: number;
+  remaining: number;
 }
 
 export interface InconsistentDay {

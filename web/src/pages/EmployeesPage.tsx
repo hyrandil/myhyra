@@ -112,6 +112,11 @@ export function EmployeesPage() {
     setResetPasswordValue('');
   }, [selected?.id]);
 
+  const activeEmployees = (data ?? []).filter((emp) => emp.active && (!emp.endDate || new Date(emp.endDate).getTime() > Date.now()));
+  const separatedEmployees = (data ?? []).filter(
+    (emp) => !emp.active || (emp.endDate && new Date(emp.endDate).getTime() <= Date.now())
+  );
+
   return (
     <div className="space-y-4">
       <div className="card p-4 flex items-center justify-between">
@@ -156,6 +161,7 @@ export function EmployeesPage() {
               </option>
             ))}
           </select>
+          <input name="holidayProfileValidFrom" type="date" placeholder="Feiertagsprofil gültig ab" className="input" />
           <input name="location" placeholder="Standort" className="input" />
           <input name="trackingStartDate" type="date" placeholder="Erfassungsbeginn" className="input" />
           <button className="btn-primary md:col-span-3" type="submit" disabled={createMutation.isPending}>
@@ -187,7 +193,7 @@ export function EmployeesPage() {
                 </tr>
               </thead>
               <tbody>
-                {(data ?? []).map((emp) => (
+                {activeEmployees.map((emp) => (
                   <tr key={emp.id} className="border-b hover:bg-slate-50">
                     <td className="py-2 font-medium">{[emp.firstName, emp.lastName].filter(Boolean).join(' ') || emp.name}</td>
                     <td>{emp.email}</td>
@@ -224,6 +230,28 @@ export function EmployeesPage() {
                       <button className="btn-ghost text-xs" onClick={() => setSelected(emp)}>
                         Bearbeiten
                       </button>
+                      <button
+                        className="btn-ghost text-xs text-rose-600"
+                        onClick={() =>
+                          updateMutation.mutate({
+                            id: emp.id,
+                            payload: {
+                              role: emp.role,
+                              active: false,
+                              endDate: new Date().toISOString().slice(0, 10),
+                              firstName: emp.firstName ?? emp.name.split(' ')[0] ?? '',
+                              lastName: emp.lastName ?? emp.name.split(' ').slice(1).join(' '),
+                              email: emp.email,
+                              location: emp.location,
+                              department: emp.department,
+                              trackingStartDate: emp.trackingStartDate,
+                              personnelNumber: emp.personnelNumber,
+                            },
+                          })
+                        }
+                      >
+                        Ausscheiden
+                      </button>
                     </td>
                   </tr>
                 ))}
@@ -232,6 +260,37 @@ export function EmployeesPage() {
             {(data ?? []).length === 0 && <p className="text-sm text-slate-500 mt-2">Keine Personen angelegt.</p>}
           </div>
         </div>
+
+        {separatedEmployees.length > 0 && (
+          <div className="card p-4">
+            <div className="flex justify-between items-center mb-2">
+              <h3 className="font-semibold">Ausgeschiedene Mitarbeitende</h3>
+              <span className="text-xs text-slate-500">{separatedEmployees.length}</span>
+            </div>
+            <div className="overflow-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-left text-slate-500 border-b">
+                    <th className="py-2">Name</th>
+                    <th>Email</th>
+                    <th>Abteilung</th>
+                    <th>Austritt</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {separatedEmployees.map((emp) => (
+                    <tr key={emp.id} className="border-b">
+                      <td className="py-2 font-medium">{[emp.firstName, emp.lastName].filter(Boolean).join(' ') || emp.name}</td>
+                      <td>{emp.email}</td>
+                      <td>{emp.department ?? '-'}</td>
+                      <td>{emp.endDate ?? '—'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
 
         <div className="card p-4 space-y-3">
           <h3 className="font-semibold">Details bearbeiten</h3>
@@ -253,6 +312,8 @@ export function EmployeesPage() {
                     trackingStartDate: selected.trackingStartDate,
                     personnelNumber: selected.personnelNumber,
                     holidayProfileId: selected.holidayProfileId,
+                    holidayProfileValidFrom: selected.holidayProfileValidFrom,
+                    endDate: selected.endDate,
                   },
                 });
               }}
@@ -318,6 +379,20 @@ export function EmployeesPage() {
                   </option>
                 ))}
               </select>
+              <input
+                className="input"
+                type="date"
+                value={selected.holidayProfileValidFrom ?? ''}
+                onChange={(e) => setSelected({ ...selected, holidayProfileValidFrom: e.target.value })}
+                placeholder="Feiertagsprofil gültig ab"
+              />
+              <input
+                className="input"
+                type="date"
+                value={selected.endDate ?? ''}
+                onChange={(e) => setSelected({ ...selected, endDate: e.target.value })}
+                placeholder="Austrittsdatum"
+              />
               <input
                 className="input"
                 value={selected.location ?? ''}

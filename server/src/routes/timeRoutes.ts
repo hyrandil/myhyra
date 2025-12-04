@@ -78,8 +78,15 @@ function plannedMinutesForDate(userId: number, dateKey: string) {
   return minutesByWeekday[weekday] ?? 0;
 }
 
-function getHolidayProfileId(userId: number): number | null {
+function getHolidayProfileId(userId: number, dateKey?: string): number | null {
   try {
+    const targetDate = dateKey ?? new Date().toISOString().slice(0, 10);
+    const versionRow = db
+      .prepare(
+        'SELECT holiday_profile_id FROM holiday_profile_versions WHERE user_id = ? AND date(valid_from) <= date(?) ORDER BY date(valid_from) DESC, id DESC LIMIT 1'
+      )
+      .get(userId, targetDate) as { holiday_profile_id?: number | null } | undefined;
+    if (versionRow?.holiday_profile_id) return versionRow.holiday_profile_id;
     const row = db
       .prepare('SELECT holiday_profile_id FROM user_profiles WHERE user_id = ?')
       .get(userId) as { holiday_profile_id?: number | null } | undefined;
@@ -91,7 +98,7 @@ function getHolidayProfileId(userId: number): number | null {
 }
 
 function getHolidays(userId: number, startDate: string, endDate: string): Holiday[] {
-  const profileId = getHolidayProfileId(userId);
+  const profileId = getHolidayProfileId(userId, startDate);
   if (!profileId) return [];
   return db
     .prepare('SELECT date, name, duration FROM holidays WHERE profile_id = ? AND date BETWEEN ? AND ? ORDER BY date ASC')

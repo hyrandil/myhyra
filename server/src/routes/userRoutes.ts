@@ -68,6 +68,16 @@ const seedScheduleVersion = (userId: number) => {
   );
 };
 
+const upsertHolidayProfileVersion = (userId: number, holidayProfileId?: number | null, validFrom?: string | null) => {
+  if (!holidayProfileId) return;
+  const effective = validFrom || '1970-01-01';
+  db.prepare(
+    `INSERT INTO holiday_profile_versions (user_id, holiday_profile_id, valid_from)
+     VALUES (?, ?, ?)
+     ON CONFLICT(user_id, valid_from) DO UPDATE SET holiday_profile_id = excluded.holiday_profile_id`
+  ).run(userId, holidayProfileId, effective);
+};
+
 const plannedMinutesForDate = (userId: number, dateKey: string) => {
   seedScheduleVersion(userId);
   const versions = db
@@ -543,6 +553,12 @@ const userSchema = z.object({
   department: z.string().max(120).optional().or(z.literal('')).transform((value) => value || undefined),
   work_model_id: z.number().int().optional(),
   holiday_profile_id: z.number().int().optional(),
+  holiday_profile_valid_from: z
+    .string()
+    .regex(dateRegex, 'Datum muss YYYY-MM-DD sein')
+    .optional()
+    .or(z.literal(''))
+    .transform((value) => value || undefined),
   tracking_start_date: z
     .string()
     .regex(dateRegex, 'Datum muss YYYY-MM-DD sein')
@@ -613,6 +629,7 @@ router.post('/', (req, res) => {
       createdUserId
     );
   }
+  upsertHolidayProfileVersion(createdUserId, profile.holiday_profile_id, profile.holiday_profile_valid_from);
   const created = db
     .prepare(
       `SELECT u.id, u.name, u.first_name, u.last_name, u.email, u.role, u.created_at, u.active, IFNULL(us.vacation_allowance, 0) as vacation_allowance
@@ -712,6 +729,12 @@ const userUpdateSchema = z.object({
   work_model_id: z.number().int().optional(),
   active: z.boolean().optional(),
   holiday_profile_id: z.number().int().optional(),
+  holiday_profile_valid_from: z
+    .string()
+    .regex(dateRegex, 'Datum muss YYYY-MM-DD sein')
+    .optional()
+    .or(z.literal(''))
+    .transform((value) => value || undefined),
 });
 
 const flexConfigSchema = z.object({
@@ -745,6 +768,12 @@ router.patch('/:id', (req, res) => {
   if (parsed.data.active !== undefined) {
     db.prepare('UPDATE users SET active = ? WHERE id = ?').run(parsed.data.active ? 1 : 0, userId);
   }
+  if (parsed.data.end_date) {
+    const endTs = new Date(`${parsed.data.end_date}T00:00:00Z`).getTime();
+    if (endTs <= Date.now()) {
+      db.prepare('UPDATE users SET active = 0 WHERE id = ?').run(userId);
+    }
+  }
   db.prepare(
     `UPDATE user_profiles
      SET personnel_number = COALESCE(?, personnel_number),
@@ -767,6 +796,9 @@ router.patch('/:id', (req, res) => {
     parsed.data.holiday_profile_id ?? null,
     userId
   );
+  if (parsed.data.holiday_profile_id) {
+    upsertHolidayProfileVersion(userId, parsed.data.holiday_profile_id, parsed.data.holiday_profile_valid_from || parsed.data.tracking_start_date);
+  }
   const updated = db
     .prepare(
       `SELECT u.id, u.name, u.first_name, u.last_name, u.email, u.role, u.created_at, u.active, IFNULL(us.vacation_allowance, 0) as vacation_allowance

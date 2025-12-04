@@ -1,15 +1,54 @@
 import { Router } from 'express';
 import { utils, write } from 'xlsx';
 import db from '../db';
-import { requireAuth, authorize } from '../auth';
-import type { WorkScheduleEntry } from '../types';
+import { requireAuth, authorize, AuthRequest } from '../auth';
 
 const router = Router();
 
 router.use(requireAuth);
-router.use(authorize(['admin', 'hr']));
 
 const monthRegex = /^\d{4}-\d{2}$/;
+
+const plannedMinutesForDate = (userId: number, dateKey: string) => {
+  const versions = db
+    .prepare('SELECT * FROM work_schedule_versions WHERE user_id = ? ORDER BY date(valid_from) DESC, id DESC')
+    .all(userId) as any[];
+  const target = versions.find((v) => v.valid_from <= dateKey) || versions[versions.length - 1];
+  if (!target) return 0;
+  const minutesByWeekday = [
+    target?.mon_minutes ?? 0,
+    target?.tue_minutes ?? 0,
+    target?.wed_minutes ?? 0,
+    target?.thu_minutes ?? 0,
+    target?.fri_minutes ?? 0,
+    target?.sat_minutes ?? 0,
+    target?.sun_minutes ?? 0,
+  ];
+  const weekday = (new Date(`${dateKey}T00:00:00Z`).getUTCDay() + 6) % 7;
+  return minutesByWeekday[weekday] ?? 0;
+};
+
+const getHolidayProfileId = (userId: number, dateKey: string) => {
+  const versionRow = db
+    .prepare(
+      'SELECT holiday_profile_id FROM holiday_profile_versions WHERE user_id = ? AND date(valid_from) <= date(?) ORDER BY date(valid_from) DESC, id DESC LIMIT 1'
+    )
+    .get(userId, dateKey) as { holiday_profile_id?: number | null } | undefined;
+  if (versionRow?.holiday_profile_id) return versionRow.holiday_profile_id;
+  const profile = db
+    .prepare('SELECT holiday_profile_id FROM user_profiles WHERE user_id = ?')
+    .get(userId) as { holiday_profile_id?: number | null } | undefined;
+  return profile?.holiday_profile_id ?? null;
+};
+
+const holidayDatesBetween = (userId: number, start: string, end: string) => {
+  const profileId = getHolidayProfileId(userId, start);
+  if (!profileId) return new Set<string>();
+  const rows = db
+    .prepare('SELECT date FROM holidays WHERE profile_id = ? AND date BETWEEN ? AND ?')
+    .all(profileId, start, end) as { date: string }[];
+  return new Set(rows.map((r) => r.date));
+};
 
 const parseDate = (value: string) => {
   const [yearStr, monthStr, dayStr] = value.split('-');
@@ -21,35 +60,19 @@ const parseDate = (value: string) => {
 
 const weekdayFromDate = (date: Date) => (date.getUTCDay() + 6) % 7;
 
-const workingDatesBetween = (start: string, end: string, schedule: WorkScheduleEntry[]) => {
-  const workingMap = new Map(schedule.map((entry) => [entry.weekday, entry.minutes]));
+const workingDatesBetween = (userId: number, start: string, end: string, holidaySet: Set<string>) => {
   const results: string[] = [];
   let cursor = parseDate(start);
   const endDate = parseDate(end);
   while (cursor.getTime() <= endDate.getTime()) {
-    const weekday = weekdayFromDate(cursor);
-    const minutes = workingMap.get(weekday) ?? 0;
-    if (minutes > 0) {
-      results.push(cursor.toISOString().slice(0, 10));
+    const key = cursor.toISOString().slice(0, 10);
+    const minutes = plannedMinutesForDate(userId, key);
+    if (minutes > 0 && !holidaySet.has(key)) {
+      results.push(key);
     }
     cursor = new Date(cursor.getTime() + 24 * 60 * 60 * 1000);
   }
   return results;
-};
-
-const scheduleForUser = (userId: number) => {
-  const rows = db
-    .prepare('SELECT weekday, minutes FROM work_schedules WHERE user_id = ? ORDER BY weekday ASC')
-    .all(userId) as WorkScheduleEntry[];
-  if (rows.length === 7) {
-    return rows;
-  }
-  const defaults = [480, 480, 480, 480, 480, 0, 0];
-  const insert = db.prepare('INSERT OR IGNORE INTO work_schedules (user_id, weekday, minutes) VALUES (?, ?, ?)');
-  defaults.forEach((minutes, weekday) => insert.run(userId, weekday, minutes));
-  return db
-    .prepare('SELECT weekday, minutes FROM work_schedules WHERE user_id = ? ORDER BY weekday ASC')
-    .all(userId) as WorkScheduleEntry[];
 };
 
 const buildAttendance = (monthParam?: string) => {
@@ -101,17 +124,17 @@ const buildAttendance = (monthParam?: string) => {
   const absenceUsage = new Map<number, Map<string, Map<string, number>>>();
   const absenceDays = new Map<number, Set<string>>();
 
-  const scheduleCache = new Map<number, WorkScheduleEntry[]>();
+  const holidayCache = new Map<number, Set<string>>();
 
   const addAbsence = (userId: number, type: string, duration: 'full' | 'half', start: string, end: string) => {
     if (!absenceUsage.has(userId)) {
       absenceUsage.set(userId, new Map());
     }
-    if (!scheduleCache.has(userId)) {
-      scheduleCache.set(userId, scheduleForUser(userId));
+    if (!holidayCache.has(userId)) {
+      holidayCache.set(userId, holidayDatesBetween(userId, monthStart, monthEnd));
     }
-    const schedule = scheduleCache.get(userId)!;
-    const days = workingDatesBetween(start, end, schedule);
+    const holidays = holidayCache.get(userId)!;
+    const days = workingDatesBetween(userId, start, end, holidays);
     const dayValue = duration === 'half' ? 0.5 : 1;
     const perUser = absenceUsage.get(userId)!;
     if (!perUser.has(type)) perUser.set(type, new Map());
@@ -125,11 +148,11 @@ const buildAttendance = (monthParam?: string) => {
   absences.forEach((row) => addAbsence(row.user_id, row.type, row.duration, row.start_date, row.end_date));
 
   absences.forEach((row) => {
-    if (!scheduleCache.has(row.user_id)) {
-      scheduleCache.set(row.user_id, scheduleForUser(row.user_id));
+    if (!holidayCache.has(row.user_id)) {
+      holidayCache.set(row.user_id, holidayDatesBetween(row.user_id, monthStart, monthEnd));
     }
-    const schedule = scheduleCache.get(row.user_id)!;
-    const days = workingDatesBetween(row.start_date, row.end_date, schedule);
+    const holidays = holidayCache.get(row.user_id)!;
+    const days = workingDatesBetween(row.user_id, row.start_date, row.end_date, holidays);
     if (!absenceDays.has(row.user_id)) absenceDays.set(row.user_id, new Set());
     days.forEach((day) => absenceDays.get(row.user_id)!.add(day));
   });
@@ -169,6 +192,73 @@ const buildAttendance = (monthParam?: string) => {
 
   return { month, kinds: absenceKinds, rows };
 };
+
+const buildVacationOverview = (userIds: number[], today: string) => {
+  const users = db
+    .prepare('SELECT id, name, email FROM users WHERE id IN (' + userIds.map(() => '?').join(',') + ')')
+    .all(...userIds) as { id: number; name: string; email: string }[];
+  const settings = db
+    .prepare('SELECT user_id, vacation_allowance FROM user_settings WHERE user_id IN (' + userIds.map(() => '?').join(',') + ')')
+    .all(...userIds) as { user_id: number; vacation_allowance: number }[];
+  const allowanceMap = new Map(settings.map((s) => [s.user_id, s.vacation_allowance]));
+
+  const results = users.map((user) => {
+    const allowance = allowanceMap.get(user.id) ?? 0;
+    const holidaySet = holidayDatesBetween(user.id, '1970-01-01', today);
+    const absences = db
+      .prepare(
+        "SELECT start_date, end_date, duration, minutes_override FROM absences WHERE user_id = ? AND type = 'vacation' AND canceled != 1"
+      )
+      .all(user.id) as { start_date: string; end_date: string; duration: 'full' | 'half'; minutes_override?: number | null }[];
+    let used = 0;
+    let planned = 0;
+    absences.forEach((row) => {
+      let cursor = parseDate(row.start_date);
+      const endDate = parseDate(row.end_date);
+      while (cursor.getTime() <= endDate.getTime()) {
+        const key = cursor.toISOString().slice(0, 10);
+        const plannedMinutes = plannedMinutesForDate(user.id, key);
+        if (plannedMinutes > 0 && !holidaySet.has(key)) {
+          let minutes = row.minutes_override ?? null;
+          if (minutes === null) {
+            minutes = row.duration === 'half' ? Math.round(plannedMinutes / 2) : plannedMinutes;
+          }
+          const effective = minutes ?? plannedMinutes;
+          const portion = plannedMinutes ? Math.min(effective / plannedMinutes, 1) : 0;
+          if (key <= today) used += portion;
+          else planned += portion;
+        }
+        cursor = new Date(cursor.getTime() + 24 * 60 * 60 * 1000);
+      }
+    });
+    const remaining = Math.max(allowance - used - planned, 0);
+    return {
+      userId: user.id,
+      name: user.name,
+      email: user.email,
+      allowance,
+      used,
+      planned,
+      remaining,
+    };
+  });
+  return results;
+};
+
+router.get('/vacation-overview', (req: AuthRequest, res) => {
+  const today = new Date().toISOString().slice(0, 10);
+  let targetIds: number[] = [];
+  if (req.user?.role === 'admin' || req.user?.role === 'hr' || req.user?.role === 'lead') {
+    const rows = db.prepare('SELECT id FROM users WHERE active = 1').all() as { id: number }[];
+    targetIds = rows.map((r) => r.id);
+  } else if (req.user) {
+    targetIds = [req.user.id];
+  }
+  if (targetIds.length === 0) return res.json([]);
+  res.json({ items: buildVacationOverview(targetIds, today) });
+});
+
+router.use(authorize(['admin', 'hr']));
 
 router.get('/attendance', (req, res) => {
   const data = buildAttendance(typeof req.query.month === 'string' ? req.query.month : undefined);

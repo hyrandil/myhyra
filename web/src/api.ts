@@ -13,6 +13,7 @@ import {
   TimeEntry,
   UserInfo,
   AuditLogEntry,
+  VacationOverviewItem,
 } from './types';
 
 const api = axios.create({
@@ -43,6 +44,11 @@ export async function fetchMe() {
 export async function fetchEmployees(search?: string) {
   const res = await api.get<Employee[]>('/users', { params: search ? { q: search } : undefined });
   return res.data;
+}
+
+export async function fetchVacationOverview() {
+  const res = await api.get<{ items: VacationOverviewItem[] }>('/reports/vacation-overview');
+  return res.data.items;
 }
 
 export async function fetchPublicDepartments() {
@@ -108,7 +114,9 @@ export async function createEmployee(payload: Partial<Employee> & { email: strin
     department: payload.department,
     location: payload.location,
     tracking_start_date: payload.trackingStartDate,
+    end_date: payload.endDate,
     holiday_profile_id: payload.holidayProfileId,
+    holiday_profile_valid_from: payload.holidayProfileValidFrom,
   });
   return res.data as Employee;
 }
@@ -122,9 +130,11 @@ export async function updateEmployee(id: number, payload: Partial<Employee> & { 
     location: payload.location,
     department: payload.department,
     tracking_start_date: payload.trackingStartDate,
+    end_date: payload.endDate,
     active: payload.active,
     personnel_number: payload.personnelNumber,
     holiday_profile_id: payload.holidayProfileId,
+    holiday_profile_valid_from: payload.holidayProfileValidFrom,
   });
   return res.data as Employee;
 }
