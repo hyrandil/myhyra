@@ -208,27 +208,47 @@ const buildVacationOverview = (userIds: number[], today: string) => {
     const holidaySet = holidayDatesBetween(user.id, '1970-01-01', today);
     const absences = db
       .prepare(
-        "SELECT start_date, end_date, duration, minutes_override FROM absences WHERE user_id = ? AND type = 'vacation' AND canceled != 1"
+        "SELECT start_date, end_date, duration, minutes_override, start_time, end_time FROM absences WHERE user_id = ? AND type = 'vacation' AND canceled != 1"
       )
-      .all(user.id) as { start_date: string; end_date: string; duration: 'full' | 'half'; minutes_override?: number | null }[];
-    let used = 0;
-    let planned = 0;
+      .all(user.id) as {
+        start_date: string;
+        end_date: string;
+        duration: 'full' | 'half';
+        minutes_override?: number | null;
+        start_time?: string | null;
+        end_time?: string | null;
+      }[];
+    const usedByDay = new Map<string, number>();
+    const plannedByDay = new Map<string, number>();
     absences.forEach((row) => {
       const holidaySetForRange = holidayDatesBetween(user.id, row.start_date, row.end_date);
       const workingDays = workingDatesBetween(user.id, row.start_date, row.end_date, holidaySetForRange);
+      const perDaySeen = new Set<string>();
       workingDays.forEach((key) => {
         const plannedMinutes = plannedMinutesForDate(user.id, key);
         if (plannedMinutes <= 0 || holidaySet.has(key)) return;
+        const dedupeKey = `${key}|${row.start_date}|${row.end_date}|${row.duration}|${row.minutes_override ?? ''}|${
+          row.start_time ?? ''
+        }|${row.end_time ?? ''}`;
+        if (perDaySeen.has(dedupeKey)) return;
+        perDaySeen.add(dedupeKey);
         let minutes = row.minutes_override ?? null;
         if (minutes === null) {
           minutes = row.duration === 'half' ? Math.round(plannedMinutes / 2) : plannedMinutes;
         }
         const effective = minutes ?? plannedMinutes;
         const portion = plannedMinutes ? Math.min(effective / plannedMinutes, 1) : 0;
-        if (key <= today) used += portion;
-        else planned += portion;
+        if (key <= today) {
+          const current = usedByDay.get(key) ?? 0;
+          usedByDay.set(key, Math.min(current + portion, 1));
+        } else {
+          const current = plannedByDay.get(key) ?? 0;
+          plannedByDay.set(key, Math.min(current + portion, 1));
+        }
       });
     });
+    const used = Array.from(usedByDay.values()).reduce((sum, value) => sum + value, 0);
+    const planned = Array.from(plannedByDay.values()).reduce((sum, value) => sum + value, 0);
     const remaining = Math.max(allowance - used - planned, 0);
     return {
       userId: user.id,

@@ -307,8 +307,15 @@ function buildMonthlyReport(userId: number, monthValue?: string) {
   days.forEach((day) => {
     const planned = day.planned || 0;
     if (!planned) return;
+    let dayPortion = 0;
+    const countedKeys = new Set<string>();
     day.absences.forEach((absence: Absence) => {
       if (absence.type !== 'vacation') return;
+      const key = `${absence.start_date ?? day.date}|${absence.end_date ?? day.date}|${absence.duration ?? 'full'}|${
+        absence.minutes_override ?? ''
+      }|${absence.start_time ?? ''}|${absence.end_time ?? ''}|${absence.id ?? ''}`;
+      if (countedKeys.has(key)) return;
+      countedKeys.add(key);
       let minutes = absence.minutes_override ?? null;
       if (minutes === null && absence.start_time && absence.end_time) {
         const startTs = new Date(`${day.date}T${absence.start_time}:00Z`).getTime();
@@ -319,8 +326,10 @@ function buildMonthlyReport(userId: number, monthValue?: string) {
         minutes = absence.duration === 'half' ? Math.round(planned / 2) : planned;
       }
       minutes = minutes ?? 0;
-      usedVacationDays += Math.min(minutes / planned, 1);
+      const portion = planned ? Math.min(minutes / planned, 1) : 0;
+      dayPortion = Math.min(dayPortion + portion, 1);
     });
+    usedVacationDays += dayPortion;
   });
   const allowance = userRow?.vacation_allowance ?? 0;
   const remaining = Math.max(allowance - usedVacationDays, 0);
