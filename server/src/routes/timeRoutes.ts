@@ -193,6 +193,7 @@ function buildMonthlyReport(userId: number, monthValue?: string) {
 
   const absenceMap = new Map<string, Absence[]>();
   const holidays = getHolidays(userId, start.toISOString().slice(0, 10), end.toISOString().slice(0, 10));
+  const holidayDurationMap = new Map<string, string>();
   const enrichedHolidays = holidays.map((holiday) => ({
     id: -1,
     user_id: userId,
@@ -203,6 +204,7 @@ function buildMonthlyReport(userId: number, monthValue?: string) {
     note: holiday.name,
     created_at: holiday.date,
   })) as (Absence & { type: Absence['type'] | 'holiday' })[];
+  enrichedHolidays.forEach((h) => holidayDurationMap.set(h.start_date, h.duration ?? 'full'));
   const holidayDays = new Set(enrichedHolidays.map((h) => h.start_date));
   [...absences, ...enrichedHolidays].forEach((absence) => {
     const results: string[] = [];
@@ -214,7 +216,8 @@ function buildMonthlyReport(userId: number, monthValue?: string) {
       if (planned > 0) {
         const isHoliday = holidayDays.has(key);
         const isVacation = (absence as any).type === 'vacation';
-        if (!(isHoliday && isVacation)) {
+        const holidayDuration = holidayDurationMap.get(key);
+        if (!(isHoliday && isVacation && holidayDuration !== 'half')) {
           results.push(key);
         }
       }
@@ -268,6 +271,11 @@ function buildMonthlyReport(userId: number, monthValue?: string) {
       delta,
       entries: dayEntries,
       absences: absencesForDay,
+      absenceDetails: absencesForDay.map((a) => ({
+        type: a.type,
+        duration: a.duration ?? 'full',
+        source: (a as any).source ?? 'manual',
+      })),
       absenceLabels,
       autoBreakMinutes: workStats.autoDeduction,
       recordedBreakMinutes: workStats.recordedBreakMinutes,
@@ -459,13 +467,25 @@ function buildDailySummary(userId: number, month?: string, maskAbsences = false)
 
   const hasInconsistent = (entries: TimeEntry[]) => {
     const sorted = [...entries].sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
-    for (let i = 1; i < sorted.length; i += 1) {
-      const prev = sorted[i - 1]!;
+    if (sorted.length > 0 && sorted[0]!.type === 'CLOCK_OUT') {
+      return true;
+    }
+    let clockInCount = 0;
+    let clockOutCount = 0;
+    for (let i = 0; i < sorted.length; i += 1) {
       const curr = sorted[i]!;
-      if (
-        (prev.type === 'CLOCK_IN' && curr.type === 'CLOCK_IN') ||
-        (prev.type === 'CLOCK_OUT' && curr.type === 'CLOCK_OUT')
-      ) {
+      if (curr.type === 'CLOCK_IN') clockInCount += 1;
+      if (curr.type === 'CLOCK_OUT') clockOutCount += 1;
+      if (i > 0) {
+        const prev = sorted[i - 1]!;
+        if (
+          (prev.type === 'CLOCK_IN' && curr.type === 'CLOCK_IN') ||
+          (prev.type === 'CLOCK_OUT' && curr.type === 'CLOCK_OUT')
+        ) {
+          return true;
+        }
+      }
+      if (clockOutCount > clockInCount) {
         return true;
       }
     }
@@ -479,7 +499,7 @@ function buildDailySummary(userId: number, month?: string, maskAbsences = false)
         return true;
       }
     }
-    return false;
+    return clockInCount !== clockOutCount;
   };
 
   const statusForDay = (entries: TimeEntry[], abs: Absence[], pending: boolean): string => {

@@ -52,6 +52,7 @@ export interface DailySummary {
   planned: number;
   flex: number;
   absences: string[];
+  absenceDetails?: { type: string; duration?: string; source?: string }[];
   status: string;
   pending?: boolean;
   users?: { id: number; name: string; department?: string | null }[];

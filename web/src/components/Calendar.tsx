@@ -61,6 +61,13 @@ function absenceColor(code: string) {
   return 'bg-slate-500';
 }
 
+function absenceHex(code: string) {
+  if (code === 'vacation') return '#f59e0b';
+  if (code === 'sick') return '#e11d48';
+  if (code === 'holiday') return '#0ea5e9';
+  return '#475569';
+}
+
 export function Calendar({
   month,
   days,
@@ -122,10 +129,10 @@ export function Calendar({
               onSelect?.(cell.date);
             }}
             disabled={!cell.date}
-          >
-            <div className="flex justify-between items-start">
-              <span className="font-semibold">{cell.label || ''}</span>
-              {cell.summary && !absencesOnly && (
+            >
+              <div className="flex justify-between items-start">
+                <span className="font-semibold">{cell.label || ''}</span>
+                {cell.summary && !absencesOnly && (
                 <span className="text-xs flex items-center gap-1">
                   <span className={`h-2 w-2 rounded-full ${statusAccent(cell.summary)}`}></span>
                   {!compactStatus && (
@@ -134,12 +141,24 @@ export function Calendar({
                       {formatHours(cell.summary.flex)}
                     </>
                   )}
-                </span>
+                  </span>
+                )}
+              </div>
+              {cell.summary?.absenceDetails && cell.summary.absenceDetails.length > 0 && (
+                <div className="flex flex-wrap gap-1 mt-1">
+                  {cell.summary.absenceDetails.map((a, i) => {
+                    const color = absenceHex(a.type);
+                    const isHalf = a.duration === 'half';
+                    const style = isHalf
+                      ? { background: `linear-gradient(90deg, ${color} 50%, #e2e8f0 50%)` }
+                      : { backgroundColor: color };
+                    return <span key={`${a.type}-${i}`} className="w-3 h-3 rounded-full border border-slate-200" style={style}></span>;
+                  })}
+                </div>
               )}
-            </div>
-            {cell.summary?.absences?.length ? (
-              <p className="text-[11px] mt-1 truncate">
-                {maskAbsences
+              {cell.summary?.absences?.length ? (
+                <p className="text-[11px] mt-1 truncate">
+                  {maskAbsences
                   ? cell.summary.absences.map((a) => (a.toLowerCase().includes('urlaub') ? 'Urlaub' : 'Nicht im Haus')).join(', ')
                   : cell.summary.absences.join(', ')}
               </p>

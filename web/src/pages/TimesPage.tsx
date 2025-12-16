@@ -155,6 +155,10 @@ export function TimesPage() {
     return dayDetail.data?.absences?.find((a) => a.source === 'request');
   }, [dayDetail.data]);
 
+  const hasManualAbsence = useMemo(() => {
+    return (dayDetail.data?.absences ?? []).some((a) => a.source !== 'request');
+  }, [dayDetail.data]);
+
   const requestBlocksAbsence = requestAbsence?.duration === 'full';
   const requestHalfDay = requestAbsence?.duration === 'half';
   const absenceFormDisabled = Boolean(requestBlocksAbsence);
@@ -720,16 +724,16 @@ export function TimesPage() {
                           className="text-sm text-rose-700 border border-rose-200 bg-rose-50 rounded-md px-3 py-2 font-semibold disabled:opacity-60"
                           type="button"
                           onClick={() => {
-                            if (!selectedDate || !selectedUserId || requestAbsence) return;
+                            if (!selectedDate || !selectedUserId) return;
                             deleteAbsence.mutate({ start_date: selectedDate, end_date: selectedDate });
                           }}
-                          disabled={deleteAbsence.isPending || Boolean(requestAbsence)}
+                          disabled={deleteAbsence.isPending || !hasManualAbsence}
                         >
                           Abwesenheit am ausgewählten Tag löschen
                         </button>
                         {requestAbsence && (
                           <p className="text-xs text-slate-600">
-                            Dieser Eintrag stammt aus einem Antrag und lässt sich nur über einen Stornierungsantrag entfernen.
+                            Antrag-basierte Einträge bleiben bestehen; nur manuelle Abwesenheiten werden entfernt.
                           </p>
                         )}
                       </div>
