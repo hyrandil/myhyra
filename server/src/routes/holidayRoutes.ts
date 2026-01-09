@@ -21,6 +21,11 @@ const customHolidaySchema = z.object({
   duration: z.enum(['full', 'half']).default('full'),
 });
 
+const profileUpdateSchema = z.object({
+  name: z.string().min(3),
+  state: z.string().regex(/^[A-Z]{2}$/),
+});
+
 router.use(requireAuth);
 router.use(authorize(['admin', 'hr']));
 
@@ -45,6 +50,35 @@ const resolveYears = (payload: {
 router.get('/profiles', (_req, res) => {
   const rows = db.prepare('SELECT * FROM holiday_profiles ORDER BY created_at DESC').all();
   res.json(rows);
+});
+
+router.patch('/profiles/:id', (req, res) => {
+  const profileId = Number(req.params.id);
+  if (Number.isNaN(profileId)) return res.status(400).json({ message: 'Ungültige Profil-ID' });
+  const parsed = profileUpdateSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ errors: parsed.error.format() });
+  const existing = db.prepare('SELECT id FROM holiday_profiles WHERE id = ?').get(profileId);
+  if (!existing) return res.status(404).json({ message: 'Profil nicht gefunden' });
+  db.prepare('UPDATE holiday_profiles SET name = ?, state = ? WHERE id = ?').run(
+    parsed.data.name,
+    parsed.data.state,
+    profileId
+  );
+  res.json({ id: profileId, name: parsed.data.name, state: parsed.data.state });
+});
+
+router.delete('/profiles/:id', (req, res) => {
+  const profileId = Number(req.params.id);
+  if (Number.isNaN(profileId)) return res.status(400).json({ message: 'Ungültige Profil-ID' });
+  const used = db
+    .prepare('SELECT COUNT(1) as count FROM user_profiles WHERE holiday_profile_id = ?')
+    .get(profileId) as { count: number };
+  if (used.count > 0) {
+    return res.status(409).json({ message: 'Profil ist noch Mitarbeitenden zugewiesen.' });
+  }
+  const result = db.prepare('DELETE FROM holiday_profiles WHERE id = ?').run(profileId);
+  if (result.changes === 0) return res.status(404).json({ message: 'Profil nicht gefunden' });
+  res.json({ message: 'Profil gelöscht' });
 });
 
 router.post('/profiles', (req, res) => {

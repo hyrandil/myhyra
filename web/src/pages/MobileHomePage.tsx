@@ -21,6 +21,7 @@ export function MobileHomePage() {
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const { data } = useQuery({ queryKey: ['entries'], queryFn: fetchEntries });
+  const requireLocation = user?.requireLocation ?? true;
   const [location, setLocation] = useState<{ lat: number; lng: number } | null>(null);
   const [locationError, setLocationError] = useState<string | null>(null);
   const canViewLocation = user ? ['lead', 'hr', 'admin'].includes(user.role) : false;
@@ -47,6 +48,11 @@ export function MobileHomePage() {
   }, [handleError, handleSuccess]);
 
   useEffect(() => {
+    if (!requireLocation) {
+      setLocation(null);
+      setLocationError(null);
+      return;
+    }
     if (!navigator.geolocation) {
       setLocationError('Standortbestimmung wird von diesem Browser nicht unterstützt.');
       return;
@@ -65,7 +71,7 @@ export function MobileHomePage() {
       navigator.geolocation.clearWatch(watchId);
       window.clearInterval(interval);
     };
-  }, [handleError, handleSuccess, requestFix]);
+  }, [handleError, handleSuccess, requestFix, requireLocation]);
 
   const mutate = useMutation({
     mutationFn: (vars: { type: TimeEntry['type']; location?: { lat: number; lng: number } }) => punch(vars.type, vars.location),
@@ -76,6 +82,11 @@ export function MobileHomePage() {
   const isWorking = last?.type === 'CLOCK_IN';
   const mainAction: TimeEntry['type'] = !last || last.type === 'CLOCK_OUT' ? 'CLOCK_IN' : 'CLOCK_OUT';
   const actionColor = mainAction === 'CLOCK_IN' ? 'bg-emerald-500 hover:bg-emerald-600' : 'bg-rose-500 hover:bg-rose-600';
+  const todayKey = useMemo(() => new Date().toISOString().slice(0, 10), []);
+  const todaysEntries = useMemo(
+    () => (data ?? []).filter((entry) => entry.timestamp.startsWith(todayKey)),
+    [data, todayKey]
+  );
 
   const greeting = useMemo(() => {
     const hour = new Date().getHours();
@@ -94,14 +105,19 @@ export function MobileHomePage() {
           <button
             className={`h-14 rounded-2xl font-semibold text-white shadow-lg active:scale-[0.99] transition ${actionColor} disabled:opacity-60`}
             disabled={
-              mutate.isPending || ((mainAction === 'CLOCK_IN' || mainAction === 'CLOCK_OUT') && (!location || !!locationError))
+              mutate.isPending ||
+              ((mainAction === 'CLOCK_IN' || mainAction === 'CLOCK_OUT') &&
+                requireLocation &&
+                (!location || !!locationError))
             }
-            onClick={() => mutate.mutate({ type: mainAction, location: location ?? undefined })}
+            onClick={() =>
+              mutate.mutate({ type: mainAction, location: requireLocation ? location ?? undefined : undefined })
+            }
           >
             {mainAction === 'CLOCK_IN' ? 'Kommen' : 'Gehen'}
           </button>
           {locationError && <p className="text-xs text-amber-200">{locationError}</p>}
-          {!location && (
+          {!location && requireLocation && (
             <button
               type="button"
               className="text-xs text-sky-100 underline self-start"
@@ -122,7 +138,7 @@ export function MobileHomePage() {
           <span className="text-[11px] uppercase text-slate-300">Chronik</span>
         </div>
         <div className="divide-y divide-slate-700/60">
-          {(data ?? []).map((entry) => (
+          {todaysEntries.map((entry) => (
             <div key={entry.id} className="py-3 flex items-center justify-between gap-2">
               <div>
                 <p className="font-semibold text-white">{labels[entry.type]}</p>
@@ -143,7 +159,7 @@ export function MobileHomePage() {
               </div>
             </div>
           ))}
-          {(data ?? []).length === 0 && <p className="text-sm text-slate-300">Noch keine Buchungen vorhanden.</p>}
+          {todaysEntries.length === 0 && <p className="text-sm text-slate-300">Heute noch keine Buchungen.</p>}
         </div>
       </div>
     </div>

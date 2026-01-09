@@ -16,6 +16,7 @@ export interface UserProfile {
   user_id: number;
   location?: string | null;
   department?: string | null;
+  require_location?: number | null;
   work_model_id?: number | null;
   holiday_profile_id?: number | null;
   start_date?: string | null;

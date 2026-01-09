@@ -95,7 +95,7 @@ export function AbsencePage() {
                             }}
                           >
                             <label className="text-xs block">
-                              Code
+                              Kürzel
                               <input name="code" defaultValue={kind.code} className="input mt-1" disabled={locked} />
                             </label>
                             <label className="text-xs block">
@@ -158,7 +158,7 @@ export function AbsencePage() {
               <h4 className="font-semibold">Neue Abwesenheitsart</h4>
               <div className="grid grid-cols-2 gap-2 text-sm">
                 <label className="block">
-                  Code
+                  Kürzel
                   <input name="code" required className="input mt-1" />
                 </label>
                 <label className="block">

@@ -12,11 +12,31 @@ import {
   updateDepartment,
   updateDepartmentMemberRole,
   updateEmployee,
+  updateEmployeeSettings,
   upsertDepartmentMember,
 } from '../api';
 import { Employee } from '../types';
 
 type StrengthInfo = { label: string; className: string };
+
+const stateLabels: Record<string, string> = {
+  BW: 'Baden-Württemberg',
+  BY: 'Bayern',
+  BE: 'Berlin',
+  BB: 'Brandenburg',
+  HB: 'Bremen',
+  HH: 'Hamburg',
+  HE: 'Hessen',
+  MV: 'Mecklenburg-Vorpommern',
+  NI: 'Niedersachsen',
+  NW: 'Nordrhein-Westfalen',
+  RP: 'Rheinland-Pfalz',
+  SL: 'Saarland',
+  SN: 'Sachsen',
+  ST: 'Sachsen-Anhalt',
+  SH: 'Schleswig-Holstein',
+  TH: 'Thüringen',
+};
 
 const getStrength = (value: string): StrengthInfo => {
   let score = 0;
@@ -73,6 +93,12 @@ export function EmployeesPage() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['employees'] }),
   });
 
+  const settingsMutation = useMutation({
+    mutationFn: ({ id, vacationAllowance }: { id: number; vacationAllowance: number }) =>
+      updateEmployeeSettings(id, { vacation_allowance: vacationAllowance }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['employees'] }),
+  });
+
   const departmentMutation = useMutation({
     mutationFn: createDepartment,
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['departments'] }),
@@ -116,6 +142,8 @@ export function EmployeesPage() {
       personnelNumber: String(form.get('personnelNumber') || ''),
       department: String(form.get('department') || ''),
       location: String(form.get('location') || ''),
+      requireLocation: form.get('requireLocation') === 'on',
+      vacationAllowance: Number(form.get('vacationAllowance') || 30),
       trackingStartDate: String(form.get('trackingStartDate') || ''),
       holidayProfileId: Number(form.get('holidayProfileId') || '') || undefined,
     });
@@ -142,7 +170,7 @@ export function EmployeesPage() {
       <div className="card p-4 flex items-center justify-between">
         <div>
           <p className="text-xs uppercase text-slate-500">Personalverwaltung</p>
-          <h2 className="text-2xl font-semibold">Team</h2>
+          <h2 className="text-2xl font-semibold">Personalverwaltung</h2>
           <p className="text-sm text-slate-500">Suche nach Name/Personalnummer und lege neue Accounts an</p>
         </div>
         <form className="flex gap-2" onSubmit={onSearch}>
@@ -175,6 +203,10 @@ export function EmployeesPage() {
             <option value="admin">Administrator</option>
           </select>
           <input name="personnelNumber" placeholder="Personalnummer" className="input" />
+          <div className="space-y-1">
+            <label className="text-sm text-slate-600">Jahresurlaub (Tage)</label>
+            <input name="vacationAllowance" type="number" min="0" max="80" defaultValue={30} className="input" />
+          </div>
           <select name="department" className="input" defaultValue="">
             <option value="">Abteilung wählen (optional)</option>
             {(departments ?? []).map((dept) => (
@@ -187,7 +219,7 @@ export function EmployeesPage() {
             <option value="">Feiertagsprofil wählen</option>
             {(holidayProfiles ?? []).map((profile) => (
               <option key={profile.id} value={profile.id}>
-                {profile.name} ({profile.state})
+                {profile.name} ({stateLabels[profile.state] ?? profile.state})
               </option>
             ))}
           </select>
@@ -196,6 +228,10 @@ export function EmployeesPage() {
             <input name="holidayProfileValidFrom" type="date" className="input" />
           </div>
           <input name="location" placeholder="Standort" className="input" />
+          <label className="flex items-center gap-2 text-sm text-slate-700">
+            <input name="requireLocation" type="checkbox" defaultChecked />
+            Standortpflicht beim Stempeln
+          </label>
           <div className="space-y-1">
             <label className="text-sm text-slate-600">Erfassungsbeginn</label>
             <input name="trackingStartDate" type="date" className="input" />
@@ -221,6 +257,7 @@ export function EmployeesPage() {
                   <th>Rolle</th>
                   <th>Personalnr.</th>
                   <th>Standort</th>
+                  <th>Standortpflicht</th>
                   <th>Abteilung</th>
                   <th>Feiertagsprofil</th>
                   <th>Erfassungsbeginn</th>
@@ -236,8 +273,13 @@ export function EmployeesPage() {
                     <td>{emp.role}</td>
                     <td>{emp.personnelNumber || '—'}</td>
                     <td>{emp.location ?? '-'}</td>
+                    <td>{emp.requireLocation === false ? 'Nein' : 'Ja'}</td>
                     <td>{emp.department ?? '-'}</td>
-                    <td>{emp.holidayProfileId ? holidayProfiles?.find((p) => p.id === emp.holidayProfileId)?.name ?? 'Profil' : '—'}</td>
+                    <td>
+                      {emp.holidayProfileId
+                        ? holidayProfiles?.find((p) => p.id === emp.holidayProfileId)?.name ?? 'Profil'
+                        : '—'}
+                    </td>
                     <td>{emp.trackingStartDate ?? '—'}</td>
                     <td>
                       <button
@@ -253,6 +295,7 @@ export function EmployeesPage() {
                                 email: emp.email,
                                 location: emp.location,
                                 department: emp.department,
+                                requireLocation: emp.requireLocation,
                                 trackingStartDate: emp.trackingStartDate,
                                 personnelNumber: emp.personnelNumber,
                               },
@@ -280,6 +323,7 @@ export function EmployeesPage() {
                               email: emp.email,
                               location: emp.location,
                               department: emp.department,
+                              requireLocation: emp.requireLocation,
                               trackingStartDate: emp.trackingStartDate,
                               personnelNumber: emp.personnelNumber,
                             },
@@ -345,6 +389,7 @@ export function EmployeesPage() {
                     email: selected.email,
                     location: selected.location,
                     department: selected.department,
+                    requireLocation: selected.requireLocation,
                     trackingStartDate: selected.trackingStartDate,
                     personnelNumber: selected.personnelNumber,
                     holidayProfileId: selected.holidayProfileId,
@@ -352,6 +397,9 @@ export function EmployeesPage() {
                     endDate: selected.endDate,
                   },
                 });
+                if (selected.vacationAllowance !== undefined) {
+                  settingsMutation.mutate({ id: selected.id, vacationAllowance: selected.vacationAllowance });
+                }
               }}
             >
               <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
@@ -379,6 +427,17 @@ export function EmployeesPage() {
                 placeholder="Personalnummer"
                 onChange={(e) => setSelected({ ...selected, personnelNumber: e.target.value })}
               />
+              <div className="space-y-1">
+                <label className="text-sm text-slate-600">Jahresurlaub (Tage)</label>
+                <input
+                  className="input"
+                  type="number"
+                  min="0"
+                  max="80"
+                  value={selected.vacationAllowance ?? 0}
+                  onChange={(e) => setSelected({ ...selected, vacationAllowance: Number(e.target.value) })}
+                />
+              </div>
               <select
                 className="input"
                 value={selected.role}
@@ -411,7 +470,7 @@ export function EmployeesPage() {
                 <option value="">Feiertagsprofil</option>
                 {(holidayProfiles ?? []).map((profile) => (
                   <option key={profile.id} value={profile.id}>
-                    {profile.name} ({profile.state})
+                    {profile.name} ({stateLabels[profile.state] ?? profile.state})
                   </option>
                 ))}
               </select>
@@ -439,6 +498,14 @@ export function EmployeesPage() {
                 placeholder="Standort"
                 onChange={(e) => setSelected({ ...selected, location: e.target.value })}
               />
+              <label className="flex items-center gap-2 text-sm text-slate-700">
+                <input
+                  type="checkbox"
+                  checked={selected.requireLocation !== false}
+                  onChange={(e) => setSelected({ ...selected, requireLocation: e.target.checked })}
+                />
+                Standortpflicht beim Stempeln
+              </label>
               <div className="space-y-1">
                 <label className="text-sm text-slate-600">Erfassungsbeginn</label>
                 <input

@@ -56,6 +56,16 @@ export async function fetchPublicDepartments() {
   return res.data;
 }
 
+export async function fetchUserFlex(id: number) {
+  const res = await api.get<{ balanceMinutes: number; adjustment: number; enabled: boolean }>(`/users/${id}/flex`);
+  return res.data;
+}
+
+export async function updateUserFlex(id: number, payload: { enabled: boolean; adjustment: number }) {
+  const res = await api.patch(`/users/${id}/flex`, payload);
+  return res.data as { balanceMinutes: number; adjustment: number; enabled: boolean };
+}
+
 export async function fetchHolidayProfiles() {
   const res = await api.get<HolidayProfile[]>('/holidays/profiles');
   return res.data;
@@ -91,6 +101,16 @@ export async function importHolidayProfile(
   return res.data as { message: string; count: number };
 }
 
+export async function updateHolidayProfile(id: number, payload: { name: string; state: string }) {
+  const res = await api.patch(`/holidays/profiles/${id}`, payload);
+  return res.data as HolidayProfile;
+}
+
+export async function deleteHolidayProfile(id: number) {
+  const res = await api.delete(`/holidays/profiles/${id}`);
+  return res.data as { message: string };
+}
+
 export async function addCustomHoliday(id: number, payload: { date: string; name: string; duration: 'full' | 'half' }) {
   const res = await api.post(`/holidays/profiles/${id}/holidays`, payload);
   return res.data;
@@ -110,9 +130,11 @@ export async function createEmployee(payload: Partial<Employee> & { email: strin
     email: payload.email,
     password: payload.password,
     role: payload.role,
+    vacationAllowance: payload.vacationAllowance,
     personnel_number: payload.personnelNumber,
     department: payload.department,
     location: payload.location,
+    require_location: payload.requireLocation,
     tracking_start_date: payload.trackingStartDate,
     end_date: payload.endDate,
     holiday_profile_id: payload.holidayProfileId,
@@ -129,6 +151,7 @@ export async function updateEmployee(id: number, payload: Partial<Employee> & { 
     role: payload.role,
     location: payload.location,
     department: payload.department,
+    require_location: payload.requireLocation,
     tracking_start_date: payload.trackingStartDate,
     end_date: payload.endDate,
     active: payload.active,
@@ -136,6 +159,11 @@ export async function updateEmployee(id: number, payload: Partial<Employee> & { 
     holiday_profile_id: payload.holidayProfileId,
     holiday_profile_valid_from: payload.holidayProfileValidFrom,
   });
+  return res.data as Employee;
+}
+
+export async function updateEmployeeSettings(id: number, payload: { vacation_allowance: number }) {
+  const res = await api.patch(`/users/${id}/settings`, payload);
   return res.data as Employee;
 }
 

@@ -1,8 +1,8 @@
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import jsPDF from 'jspdf';
-import { downloadAttendanceCsv, downloadAttendanceXlsx, fetchAttendance, fetchOwnMonthlyReport } from '../api';
-import { AttendanceResponse } from '../types';
+import { downloadAttendanceCsv, downloadAttendanceXlsx, fetchAttendance, fetchEmployees, fetchMonthlyReport, fetchOwnMonthlyReport } from '../api';
+import { AttendanceResponse, Employee } from '../types';
 import { useAuth } from '../AuthProvider';
 
 export function ReportsPage() {
@@ -11,15 +11,17 @@ export function ReportsPage() {
     const now = new Date();
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
   });
+  const [selectedEmployeeId, setSelectedEmployeeId] = useState<number | null>(null);
   const { data, isLoading } = useQuery<AttendanceResponse>({
     queryKey: ['reports', 'attendance', month],
     queryFn: () => fetchAttendance(month),
   });
+  const { data: employees } = useQuery<Employee[]>({
+    queryKey: ['employees', 'report'],
+    queryFn: () => fetchEmployees(),
+    enabled: hasRole('admin'),
+  });
 
-  const maxPresence = useMemo(() => {
-    const values = (data?.rows ?? []).map((r) => r.presenceDays);
-    return values.length ? Math.max(...values) : 0;
-  }, [data]);
 
   const triggerDownload = async (kind: 'csv' | 'xlsx') => {
     const blob = kind === 'csv' ? await downloadAttendanceCsv(month) : await downloadAttendanceXlsx(month);
@@ -44,9 +46,14 @@ export function ReportsPage() {
     return `${datePart} ${hour}:${minute}`;
   };
 
-  const exportPdf = async () => {
-    const report = await fetchOwnMonthlyReport(month);
-    const doc = new jsPDF();
+  const exportPdf = async (options?: { employeeId?: number | null; orientation?: 'portrait' | 'landscape' }) => {
+    const report = options?.employeeId
+      ? await fetchMonthlyReport(options.employeeId, month)
+      : await fetchOwnMonthlyReport(month);
+    const orientation = options?.orientation ?? 'portrait';
+    const doc = new jsPDF({ orientation });
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const pageHeight = doc.internal.pageSize.getHeight();
     const formatDate = (value: string) => {
       const [year, monthPart, day] = value.split('-').map((v) => parseInt(v, 10));
       const date = new Date(Date.UTC(year, (monthPart ?? 1) - 1, day ?? 1));
@@ -68,7 +75,7 @@ export function ReportsPage() {
       { label: 'GLZ', width: 18 },
       { label: 'Status', width: 32 },
     ];
-    const startX = 14;
+    const startX = 10;
     let y = 20;
     doc.setFontSize(14);
     doc.text('Monatsübersicht', startX, y);
@@ -99,19 +106,25 @@ export function ReportsPage() {
       }
     }
     y += 4;
-    doc.setFontSize(10);
-    const headerHeight = 8;
+    doc.setFontSize(orientation === 'landscape' ? 9 : 10);
+    const headerHeight = orientation === 'landscape' ? 6 : 8;
     let xCursor = startX;
+    const colTotal = cols.reduce((sum, c) => sum + c.width, 0);
+    const availableWidth = pageWidth - startX * 2;
+    const scale = colTotal > availableWidth ? availableWidth / colTotal : 1;
     doc.setFillColor(240, 245, 255);
-    doc.rect(startX - 2, y - headerHeight + 2, cols.reduce((sum, c) => sum + c.width, 0) + 4, headerHeight, 'F');
+    doc.rect(startX - 2, y - headerHeight + 2, colTotal * scale + 4, headerHeight, 'F');
     cols.forEach((col) => {
       doc.text(col.label, xCursor, y);
-      xCursor += col.width;
+      xCursor += col.width * scale;
     });
-    y += 4;
+    y += orientation === 'landscape' ? 3 : 4;
     const total = { planned: 0, worked: 0, delta: 0, pause: 0 };
+    const maxRows = report.days.length + 3;
+    const availableHeight = pageHeight - y - 16;
+    const rowHeight = orientation === 'landscape' ? Math.max(4, Math.floor(availableHeight / maxRows)) : 10;
     report.days.forEach((day) => {
-      if (y > 280) {
+      if (orientation === 'portrait' && y > 280) {
         doc.addPage();
         y = 20;
       }
@@ -145,20 +158,20 @@ export function ReportsPage() {
       xCursor = startX;
       doc.setFont('helvetica', day.pending ? 'italic' : 'normal');
       row.forEach((cell, idx) => {
-        doc.text(String(cell), xCursor, y + 6);
-        xCursor += cols[idx].width;
+        doc.text(String(cell), xCursor, y + rowHeight - 2);
+        xCursor += cols[idx].width * scale;
       });
-      doc.line(startX - 2, y + 8, startX + cols.reduce((sum, c) => sum + c.width, 0) + 2, y + 8);
-      y += 10;
+      doc.line(startX - 2, y + rowHeight, startX + colTotal * scale + 2, y + rowHeight);
+      y += rowHeight;
     });
     doc.setFont('helvetica', 'bold');
     xCursor = startX;
     const totalsRow = ['Summe', '', '', '', formatHours(total.pause), formatHours(total.planned), formatHours(total.worked), formatHours(total.delta), ''];
     totalsRow.forEach((cell, idx) => {
       if (cell) {
-        doc.text(String(cell), xCursor, y + 6);
+        doc.text(String(cell), xCursor, y + rowHeight - 2);
       }
-      xCursor += cols[idx].width;
+      xCursor += cols[idx].width * scale;
     });
     doc.save(`monatsreport-${month}-${report.meta?.personnelNumber || user?.id || 'ich'}.pdf`);
   };
@@ -181,6 +194,23 @@ export function ReportsPage() {
           />
           {hasRole('admin') && (
             <>
+              <label className="text-sm text-slate-600">Mitarbeiter:</label>
+              <select
+                className="input"
+                value={selectedEmployeeId ?? ''}
+                onChange={(e) => setSelectedEmployeeId(Number(e.target.value) || null)}
+              >
+                <option value="">Ich</option>
+                {(employees ?? []).map((emp) => (
+                  <option key={emp.id} value={emp.id}>
+                    {emp.name} ({emp.personnelNumber || emp.email})
+                  </option>
+                ))}
+              </select>
+            </>
+          )}
+          {hasRole('admin') && (
+            <>
               <button className="btn-primary" onClick={() => triggerDownload('csv')}>
                 CSV Export
               </button>
@@ -189,13 +219,21 @@ export function ReportsPage() {
               </button>
             </>
           )}
-          <button className="btn-primary" onClick={exportPdf}>
+          <button className="btn-primary" onClick={() => exportPdf({ employeeId: selectedEmployeeId })}>
             PDF Export
           </button>
+          {hasRole('admin') && (
+            <button
+              className="btn-primary"
+              onClick={() => exportPdf({ employeeId: selectedEmployeeId, orientation: 'landscape' })}
+            >
+              PDF Querformat
+            </button>
+          )}
         </div>
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-2">
+      <div className="grid gap-4">
         <div className="card p-4">
           {isLoading && <p className="text-sm text-slate-500">Lade…</p>}
           <div className="overflow-auto">
@@ -224,37 +262,6 @@ export function ReportsPage() {
               </tbody>
             </table>
             {(data?.rows ?? []).length === 0 && <p className="text-sm text-slate-500 mt-2">Keine Daten vorhanden.</p>}
-          </div>
-        </div>
-
-        <div className="card p-4 space-y-3">
-          <h3 className="text-lg font-semibold">Visualisierung</h3>
-          <p className="text-sm text-slate-500">Vergleich Präsenz- und Abwesenheitstage.</p>
-          <div className="space-y-2">
-            {(data?.rows ?? []).map((row) => {
-              const presenceWidth = maxPresence ? Math.round((row.presenceDays / maxPresence) * 100) : 0;
-              const vacationWidth = Math.min(100, Math.round((row.absences['vacation'] ?? 0) * 4));
-              return (
-                <div key={row.user_id} className="space-y-1">
-                  <div className="flex justify-between text-xs text-slate-600">
-                    <span>{row.name}</span>
-                    <span>{row.presenceDays} Tage</span>
-                  </div>
-                  <div className="h-2 rounded-full bg-slate-200 overflow-hidden">
-                    <div className="h-2 bg-emerald-500" style={{ width: `${presenceWidth}%` }}></div>
-                  </div>
-                  <div className="flex justify-between text-[11px] text-slate-500">
-                    {(data?.kinds ?? []).map((kind) => (
-                      <span key={`${row.user_id}-${kind.code}`}>{kind.label}: {row.absences[kind.code] ?? 0}</span>
-                    ))}
-                  </div>
-                  <div className="h-2 rounded-full bg-amber-100 overflow-hidden">
-                    <div className="h-2 bg-amber-500" style={{ width: `${vacationWidth}%` }}></div>
-                  </div>
-                </div>
-              );
-            })}
-            {(data?.rows ?? []).length === 0 && <p className="text-sm text-slate-500">Keine Daten vorhanden.</p>}
           </div>
         </div>
       </div>

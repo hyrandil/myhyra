@@ -10,9 +10,12 @@ import {
   fetchDailyForUser,
   fetchDayEntriesForUser,
   fetchEmployees,
+  fetchUserFlex,
   fetchVacationOverview,
   updateTimeEntry,
   deleteTimeEntry,
+  updateUserFlex,
+  updateEmployeeSettings,
 } from '../api';
 import { useAuth } from '../AuthProvider';
 import { AbsenceKind, DailySummary, DayDetail, Employee, TimeEntry, VacationOverviewItem } from '../types';
@@ -41,8 +44,6 @@ export function TimesPage() {
   const [absenceType, setAbsenceType] = useState('');
   const [absenceDuration, setAbsenceDuration] = useState<'full' | 'half' | 'hours'>('full');
   const [editingEntryId, setEditingEntryId] = useState<number | null>(null);
-  const [showTimeForm, setShowTimeForm] = useState(true);
-  const [showAbsenceForm, setShowAbsenceForm] = useState(true);
 
   const formatDateGerman = (value?: string | null) => {
     if (!value) return '';
@@ -151,6 +152,35 @@ export function TimesPage() {
     enabled: enableManagement && Boolean(selectedUserId && selectedDate),
   });
 
+  const selectedEmployee = useMemo(
+    () => (employees ?? []).find((emp) => emp.id === selectedUserId),
+    [employees, selectedUserId]
+  );
+
+  const flexInfo = useQuery({
+    queryKey: ['flex', selectedUserId],
+    queryFn: () => fetchUserFlex(selectedUserId!),
+    enabled: Boolean(selectedUserId && hasRole('admin')),
+  });
+
+  const [flexAdjustmentHours, setFlexAdjustmentHours] = useState('');
+  const [vacationAdjustmentDays, setVacationAdjustmentDays] = useState('');
+
+  const adjustFlexMutation = useMutation({
+    mutationFn: (payload: { userId: number; adjustmentMinutes: number; enabled: boolean }) =>
+      updateUserFlex(payload.userId, { enabled: payload.enabled, adjustment: payload.adjustmentMinutes }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['flex', selectedUserId] });
+      queryClient.invalidateQueries({ queryKey: ['daily', month, selectedUserId] });
+    },
+  });
+
+  const adjustVacationMutation = useMutation({
+    mutationFn: (payload: { userId: number; allowance: number }) =>
+      updateEmployeeSettings(payload.userId, { vacation_allowance: payload.allowance }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['vacation-overview'] }),
+  });
+
   const requestAbsence = useMemo(() => {
     return dayDetail.data?.absences?.find((a) => a.source === 'request');
   }, [dayDetail.data]);
@@ -211,13 +241,10 @@ export function TimesPage() {
     setSelectedDate(null);
   };
 
-  const absenceLegend = absenceOptions.length
-    ? absenceOptions
-    : [
-        { code: 'vacation', label: 'Urlaub' },
-        { code: 'sick', label: 'Krank' },
-        { code: 'away', label: 'Nicht im Haus' },
-      ];
+  const absenceLegend = [
+    ...absenceOptions,
+    { code: 'holiday', label: 'Feiertag', counts_as_work: true },
+  ];
 
   const { data: vacationOverview } = useQuery<VacationOverviewItem[]>({
     queryKey: ['vacation-overview'],
@@ -325,10 +352,6 @@ export function TimesPage() {
     manualTime.mutate({
       timestamp: String(form.get('timestamp') || manualTimestamp),
       type: (form.get('type') as 'CLOCK_IN' | 'CLOCK_OUT') ?? 'CLOCK_IN',
-      location: {
-        lat: form.get('lat') ? Number(form.get('lat')) : undefined,
-        lng: form.get('lng') ? Number(form.get('lng')) : undefined,
-      },
     });
     e.currentTarget.reset();
     if (selectedDate) setManualTimestamp(`${selectedDate}T09:00`);
@@ -555,191 +578,169 @@ export function TimesPage() {
               <div className="card p-4 space-y-3">
                 <div className="flex items-center justify-between">
                   <h3 className="text-lg font-semibold">Zeitnachtrag</h3>
-                  <button
-                    className="text-sm text-sky-700 underline"
-                    type="button"
-                    onClick={() => setShowTimeForm((v) => !v)}
-                  >
-                    {showTimeForm ? 'Einklappen' : 'Aufklappen'}
-                  </button>
                 </div>
-                {showTimeForm && (
-                  <form className="space-y-2" onSubmit={onManualTime}>
-                    <label className="block text-sm text-slate-600">Zeitpunkt</label>
-                    <input
-                      name="timestamp"
-                      type="datetime-local"
-                      required
-                      className="input w-full"
-                      value={manualTimestamp}
-                      onChange={(e) => setManualTimestamp(e.target.value)}
-                    />
-                    <label className="block text-sm text-slate-600">Typ</label>
-                    <select name="type" className="input w-full">
-                      <option value="CLOCK_IN">Kommen</option>
-                      <option value="CLOCK_OUT">Gehen</option>
-                    </select>
-                    <div className="grid grid-cols-2 gap-2">
-                      <input name="lat" className="input" placeholder="Lat (optional)" />
-                      <input name="lng" className="input" placeholder="Lng (optional)" />
-                    </div>
-                    <button className="btn-primary" type="submit" disabled={manualTime.isPending}>
-                      Speichern
-                    </button>
-                  </form>
-                )}
+                <form className="space-y-2" onSubmit={onManualTime}>
+                  <label className="block text-sm text-slate-600">Zeitpunkt</label>
+                  <input
+                    name="timestamp"
+                    type="datetime-local"
+                    required
+                    className="input w-full"
+                    value={manualTimestamp}
+                    onChange={(e) => setManualTimestamp(e.target.value)}
+                  />
+                  <label className="block text-sm text-slate-600">Typ</label>
+                  <select name="type" className="input w-full">
+                    <option value="CLOCK_IN">Kommen</option>
+                    <option value="CLOCK_OUT">Gehen</option>
+                  </select>
+                  <button className="btn-primary" type="submit" disabled={manualTime.isPending}>
+                    Speichern
+                  </button>
+                </form>
               </div>
 
               <div className="card p-4 space-y-3">
                 <div className="flex items-center justify-between">
                   <h3 className="text-lg font-semibold">Abwesenheit eintragen</h3>
-                  <button
-                    className="text-sm text-sky-700 underline"
-                    type="button"
-                    onClick={() => setShowAbsenceForm((v) => !v)}
-                  >
-                    {showAbsenceForm ? 'Einklappen' : 'Aufklappen'}
-                  </button>
                 </div>
-                {showAbsenceForm && (
-                  <>
-                    <form
-                      className={`space-y-2 ${absenceFormDisabled ? 'opacity-60 pointer-events-none' : ''}`}
-                      onSubmit={onManualAbsence}
+                <>
+                  <form
+                    className={`space-y-2 ${absenceFormDisabled ? 'opacity-60 pointer-events-none' : ''}`}
+                    onSubmit={onManualAbsence}
+                  >
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="text-sm text-slate-600">Von</label>
+                        <input
+                          name="start_date"
+                          type="date"
+                          className="input"
+                          required
+                          value={absenceStart}
+                          onChange={(e) => setAbsenceStart(e.target.value)}
+                        />
+                      </div>
+                      <div>
+                        <label className="text-sm text-slate-600">Bis</label>
+                        <input
+                          name="end_date"
+                          type="date"
+                          className="input"
+                          required
+                          value={absenceEnd}
+                          onChange={(e) => setAbsenceEnd(e.target.value)}
+                        />
+                      </div>
+                    </div>
+                    <label className="block text-sm text-slate-600">Art</label>
+                    <select
+                      name="type"
+                      className="input w-full"
+                      value={absenceType}
+                      onChange={(e) => setAbsenceType(e.target.value)}
                     >
-                      <div className="grid grid-cols-2 gap-2">
-                        <div>
-                          <label className="text-sm text-slate-600">Von</label>
-                          <input
-                            name="start_date"
-                            type="date"
-                            className="input"
-                            required
-                            value={absenceStart}
-                            onChange={(e) => setAbsenceStart(e.target.value)}
-                          />
-                        </div>
-                        <div>
-                          <label className="text-sm text-slate-600">Bis</label>
-                          <input
-                            name="end_date"
-                            type="date"
-                            className="input"
-                            required
-                            value={absenceEnd}
-                            onChange={(e) => setAbsenceEnd(e.target.value)}
-                          />
-                        </div>
-                      </div>
-                      <label className="block text-sm text-slate-600">Art</label>
-                      <select
-                        name="type"
-                        className="input w-full"
-                        value={absenceType}
-                        onChange={(e) => setAbsenceType(e.target.value)}
-                      >
-                        {absenceOptions.map((kind) => (
-                          <option key={kind.code} value={kind.code}>
-                            {kind.label}
-                          </option>
-                        ))}
-                      </select>
-                      <div className="flex gap-3 items-center text-sm">
-                        <label className="text-slate-600">Umfang</label>
+                      {absenceOptions.map((kind) => (
+                        <option key={kind.code} value={kind.code}>
+                          {kind.label}
+                        </option>
+                      ))}
+                    </select>
+                    <div className="flex gap-3 items-center text-sm">
+                      <label className="text-slate-600">Umfang</label>
+                      <label className="flex items-center gap-1 text-slate-700">
+                        <input
+                          type="radio"
+                          name="duration"
+                          value="full"
+                          checked={absenceDuration === 'full'}
+                          disabled={absenceFormDisabled || requestHalfDay || (selectedKind ? selectedKind.allow_full === false : false)}
+                          onChange={() => setAbsenceDuration('full')}
+                        />{' '}
+                        Ganzer Tag
+                      </label>
+                      <label className="flex items-center gap-1 text-slate-700">
+                        <input
+                          type="radio"
+                          name="duration"
+                          value="half"
+                          checked={absenceDuration === 'half'}
+                          disabled={absenceFormDisabled || (selectedKind ? selectedKind.allow_half === false : false)}
+                          onChange={() => setAbsenceDuration('half')}
+                        />{' '}
+                        Halber Tag
+                      </label>
+                      {selectedKind?.allow_hourly && (
                         <label className="flex items-center gap-1 text-slate-700">
                           <input
                             type="radio"
                             name="duration"
-                            value="full"
-                            checked={absenceDuration === 'full'}
-                            disabled={absenceFormDisabled || requestHalfDay || (selectedKind ? selectedKind.allow_full === false : false)}
-                            onChange={() => setAbsenceDuration('full')}
+                            value="hours"
+                            checked={absenceDuration === 'hours'}
+                            disabled={absenceFormDisabled || requestHalfDay}
+                            onChange={() => setAbsenceDuration('hours')}
                           />{' '}
-                          Ganzer Tag
+                          Stundenweise
                         </label>
-                        <label className="flex items-center gap-1 text-slate-700">
-                          <input
-                            type="radio"
-                            name="duration"
-                            value="half"
-                            checked={absenceDuration === 'half'}
-                            disabled={absenceFormDisabled || (selectedKind ? selectedKind.allow_half === false : false)}
-                            onChange={() => setAbsenceDuration('half')}
-                          />{' '}
-                          Halber Tag
-                        </label>
-                        {selectedKind?.allow_hourly && (
-                          <label className="flex items-center gap-1 text-slate-700">
-                            <input
-                              type="radio"
-                              name="duration"
-                              value="hours"
-                              checked={absenceDuration === 'hours'}
-                              disabled={absenceFormDisabled || requestHalfDay}
-                              onChange={() => setAbsenceDuration('hours')}
-                            />{' '}
-                            Stundenweise
-                          </label>
-                        )}
-                      </div>
-                      {absenceDuration === 'hours' && (
-                        <div className="grid grid-cols-2 gap-2">
-                          <input
-                            name="start_time"
-                            type="time"
-                            required
-                            className="input"
-                            value={absenceStartTime}
-                            onChange={(e) => setAbsenceStartTime(e.target.value)}
-                          />
-                          <input
-                            name="end_time"
-                            type="time"
-                            required
-                            className="input"
-                            value={absenceEndTime}
-                            onChange={(e) => setAbsenceEndTime(e.target.value)}
-                          />
-                        </div>
                       )}
-                      <button className="btn-primary" type="submit" disabled={manualAbsence.isPending || absenceFormDisabled}>
-                        Eintragen
-                      </button>
-                    </form>
-                    {requestAbsence && requestBlocksAbsence && (
-                      <p className="text-xs text-slate-600">
-                        Dieser Tag ist über einen Antrag gebucht. Bitte nutzen Sie einen Stornierungsantrag, um Änderungen
-                        vorzunehmen.
-                      </p>
-                    )}
-                    {requestAbsence && requestHalfDay && (
-                      <p className="text-xs text-slate-600">
-                        Es ist bereits ein halber Tag über einen Antrag gebucht. Für den zweiten Halbtag können Sie nur
-                        Halbtags-Einträge ergänzen.
-                      </p>
-                    )}
-                    {days[selectedDate ?? '']?.absences?.length ? (
-                      <div className="space-y-1">
-                        <button
-                          className="text-sm text-rose-700 border border-rose-200 bg-rose-50 rounded-md px-3 py-2 font-semibold disabled:opacity-60"
-                          type="button"
-                          onClick={() => {
-                            if (!selectedDate || !selectedUserId) return;
-                            deleteAbsence.mutate({ start_date: selectedDate, end_date: selectedDate });
-                          }}
-                          disabled={deleteAbsence.isPending || !hasManualAbsence}
-                        >
-                          Abwesenheit am ausgewählten Tag löschen
-                        </button>
-                        {requestAbsence && (
-                          <p className="text-xs text-slate-600">
-                            Antrag-basierte Einträge bleiben bestehen; nur manuelle Abwesenheiten werden entfernt.
-                          </p>
-                        )}
+                    </div>
+                    {absenceDuration === 'hours' && (
+                      <div className="grid grid-cols-2 gap-2">
+                        <input
+                          name="start_time"
+                          type="time"
+                          required
+                          className="input"
+                          value={absenceStartTime}
+                          onChange={(e) => setAbsenceStartTime(e.target.value)}
+                        />
+                        <input
+                          name="end_time"
+                          type="time"
+                          required
+                          className="input"
+                          value={absenceEndTime}
+                          onChange={(e) => setAbsenceEndTime(e.target.value)}
+                        />
                       </div>
-                    ) : null}
-                  </>
-                )}
+                    )}
+                    <button className="btn-primary" type="submit" disabled={manualAbsence.isPending || absenceFormDisabled}>
+                      Eintragen
+                    </button>
+                  </form>
+                  {requestAbsence && requestBlocksAbsence && (
+                    <p className="text-xs text-slate-600">
+                      Dieser Tag ist über einen Antrag gebucht. Bitte nutzen Sie einen Stornierungsantrag, um Änderungen
+                      vorzunehmen.
+                    </p>
+                  )}
+                  {requestAbsence && requestHalfDay && (
+                    <p className="text-xs text-slate-600">
+                      Es ist bereits ein halber Tag über einen Antrag gebucht. Für den zweiten Halbtag können Sie nur
+                      Halbtags-Einträge ergänzen.
+                    </p>
+                  )}
+                  {days[selectedDate ?? '']?.absences?.length ? (
+                    <div className="space-y-1">
+                      <button
+                        className="text-sm text-rose-700 border border-rose-200 bg-rose-50 rounded-md px-3 py-2 font-semibold disabled:opacity-60"
+                        type="button"
+                        onClick={() => {
+                          if (!selectedDate || !selectedUserId) return;
+                          deleteAbsence.mutate({ start_date: selectedDate, end_date: selectedDate });
+                        }}
+                        disabled={deleteAbsence.isPending || !hasManualAbsence}
+                      >
+                        Abwesenheit am ausgewählten Tag löschen
+                      </button>
+                      {requestAbsence && (
+                        <p className="text-xs text-slate-600">
+                          Antrag-basierte Einträge bleiben bestehen; nur manuelle Abwesenheiten werden entfernt.
+                        </p>
+                      )}
+                    </div>
+                  ) : null}
+                </>
               </div>
             </div>
           )}
@@ -796,6 +797,85 @@ export function TimesPage() {
               <p className="text-sm text-slate-500">Noch keine Urlaubsdaten verfügbar.</p>
             )}
           </div>
+
+          {hasRole('admin') && selectedUserId && (
+            <div className="card p-4 space-y-4">
+              <div>
+                <h3 className="text-lg font-semibold">Gleitzeit anpassen</h3>
+                <p className="text-sm text-slate-500">Nur Administratoren können Gleitzeitwerte manuell ändern.</p>
+              </div>
+              <form
+                className="space-y-2"
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  if (!selectedUserId) return;
+                  const delta = Number(flexAdjustmentHours);
+                  if (Number.isNaN(delta)) return;
+                  const current = flexInfo.data?.adjustment ?? 0;
+                  const enabled = flexInfo.data?.enabled ?? true;
+                  adjustFlexMutation.mutate({
+                    userId: selectedUserId,
+                    adjustmentMinutes: current + Math.round(delta * 60),
+                    enabled,
+                  });
+                  setFlexAdjustmentHours('');
+                }}
+              >
+                <div className="text-sm text-slate-600">
+                  Aktueller Stand: {formatHours(flexInfo.data?.balanceMinutes ?? 0)}
+                </div>
+                <label className="text-sm text-slate-600">Stunden hinzufügen/abziehen</label>
+                <input
+                  type="number"
+                  step="0.25"
+                  className="input"
+                  placeholder="z. B. 1,5 oder -0,5"
+                  value={flexAdjustmentHours}
+                  onChange={(e) => setFlexAdjustmentHours(e.target.value)}
+                />
+                <button className="btn-primary" type="submit" disabled={adjustFlexMutation.isPending}>
+                  Gleitzeit anpassen
+                </button>
+              </form>
+            </div>
+          )}
+
+          {hasRole('admin') && selectedUserId && (
+            <div className="card p-4 space-y-4">
+              <div>
+                <h3 className="text-lg font-semibold">Urlaubstage anpassen</h3>
+                <p className="text-sm text-slate-500">Änderungen wirken auf das Jahreskontingent.</p>
+              </div>
+              <form
+                className="space-y-2"
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  if (!selectedUserId) return;
+                  const delta = Number(vacationAdjustmentDays);
+                  if (Number.isNaN(delta)) return;
+                  const current = selectedEmployee?.vacationAllowance ?? 30;
+                  adjustVacationMutation.mutate({ userId: selectedUserId, allowance: current + delta });
+                  setVacationAdjustmentDays('');
+                }}
+              >
+                <div className="text-sm text-slate-600">
+                  Aktuelles Kontingent: {(selectedEmployee?.vacationAllowance ?? 30).toFixed(2)} Tage
+                </div>
+                <label className="text-sm text-slate-600">Tage hinzufügen/abziehen</label>
+                <input
+                  type="number"
+                  step="0.5"
+                  className="input"
+                  placeholder="z. B. 2 oder -1"
+                  value={vacationAdjustmentDays}
+                  onChange={(e) => setVacationAdjustmentDays(e.target.value)}
+                />
+                <button className="btn-primary" type="submit" disabled={adjustVacationMutation.isPending}>
+                  Urlaubstage anpassen
+                </button>
+              </form>
+            </div>
+          )}
         </div>
       </div>
     </div>

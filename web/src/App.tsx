@@ -20,6 +20,8 @@ import { useIsMobile } from './hooks/useIsMobile';
 import { ApprovalListPage } from './pages/ApprovalListPage';
 import { LoggingPage } from './pages/LoggingPage';
 
+const appVersion = __APP_VERSION__ || 'dev';
+
 function Protected({ children }: { children: React.ReactNode }) {
   const { user, ready } = useAuth();
   if (!ready) return null;
@@ -96,7 +98,7 @@ function Shell({ children }: { children: React.ReactNode }) {
           {auth.hasRole('admin') && <NavItem to="/abwesenheiten" label="Abwesenheiten" />}
           {auth.hasRole('lead', 'hr', 'admin') && <NavItem to="/inkonsistenzen" label="Inkonsistenzen" />}
           {auth.hasRole('hr', 'admin') && <NavItem to="/planung" label="Stundenplanung" />}
-          {auth.hasRole('hr', 'admin') && <NavItem to="/mitarbeitende" label="Team" />}
+          {auth.hasRole('hr', 'admin') && <NavItem to="/mitarbeitende" label="Personalverwaltung" />}
           {auth.hasRole('hr', 'admin') && <NavItem to="/berichte" label="Berichte" />}
           {auth.hasRole('admin', 'hr') && <NavItem to="/logging" label="Logging" />}
         </nav>
@@ -120,6 +122,9 @@ function Shell({ children }: { children: React.ReactNode }) {
         </div>
       </aside>
       <div className="flex-1 flex flex-col min-h-screen">
+        <div className="fixed bottom-2 left-2 text-[11px] text-slate-400 z-30 pointer-events-none">
+          Version {appVersion}
+        </div>
         <header className="border-b bg-white/80 backdrop-blur sticky top-0 z-10 shadow-sm">
           <div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
             <div>
@@ -157,6 +162,9 @@ function MobileShell({ children }: { children: React.ReactNode }) {
   };
   return (
     <div className="min-h-screen bg-surface text-slate-900">
+      <div className="fixed bottom-16 left-2 text-[11px] text-slate-400 z-30 pointer-events-none">
+        Version {appVersion}
+      </div>
       <header className="bg-white/90 backdrop-blur border-b border-slate-200 px-4 py-3 flex items-center justify-between sticky top-0 z-20 shadow-sm">
         <div>
           <p className="text-xs uppercase tracking-wide text-slate-500">ZeitPilot</p>

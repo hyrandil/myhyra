@@ -180,6 +180,7 @@ const toUserPayload = (
     flex_enabled?: number;
     location?: string | null;
     department?: string | null;
+    require_location?: number | null;
     tracking_start_date?: string | null;
     start_date?: string | null;
     end_date?: string | null;
@@ -200,6 +201,7 @@ const toUserPayload = (
   flexEnabled: Boolean(user.flex_enabled ?? 0),
   location: user.location ?? undefined,
   department: user.department ?? undefined,
+  requireLocation: Boolean(user.require_location ?? 1),
   trackingStartDate: user.tracking_start_date ?? undefined,
   startDate: user.start_date ?? undefined,
   endDate: user.end_date ?? undefined,
@@ -479,7 +481,7 @@ router.get('/me/flex', (req: AuthRequest, res) => {
 });
 
 const baseUserSelect = `SELECT u.id, u.name, u.first_name, u.last_name, u.email, u.role, u.created_at, u.active, IFNULL(us.vacation_allowance, 0) as vacation_allowance
-       , IFNULL(us.flex_enabled, 0) as flex_enabled, up.personnel_number, up.location, up.department, up.tracking_start_date, up.start_date, up.end_date, up.work_model_id, up.holiday_profile_id
+       , IFNULL(us.flex_enabled, 0) as flex_enabled, up.personnel_number, up.location, up.department, up.require_location, up.tracking_start_date, up.start_date, up.end_date, up.work_model_id, up.holiday_profile_id
        FROM users u
        LEFT JOIN user_settings us ON us.user_id = u.id
        LEFT JOIN user_profiles up ON up.user_id = u.id`;
@@ -551,6 +553,7 @@ const userSchema = z.object({
   postal_code: z.string().max(30).optional().or(z.literal('')).transform((value) => value || undefined),
   location: z.string().max(120).optional().or(z.literal('')).transform((value) => value || undefined),
   department: z.string().max(120).optional().or(z.literal('')).transform((value) => value || undefined),
+  require_location: z.boolean().optional(),
   work_model_id: z.number().int().optional(),
   holiday_profile_id: z.number().int().optional(),
   holiday_profile_valid_from: z
@@ -608,7 +611,7 @@ router.post('/', (req, res) => {
     db.prepare(
       `UPDATE user_profiles
        SET birth_date = ?, personnel_number = ?, phone = ?, address = ?, city = ?, postal_code = ?, note = ?,
-           location = ?, department = ?, tracking_start_date = ?, start_date = ?, end_date = ?, work_model_id = COALESCE(?, work_model_id),
+           location = ?, department = ?, require_location = COALESCE(?, require_location), tracking_start_date = ?, start_date = ?, end_date = ?, work_model_id = COALESCE(?, work_model_id),
            holiday_profile_id = COALESCE(?, holiday_profile_id)
        WHERE user_id = ?`
     ).run(
@@ -621,6 +624,7 @@ router.post('/', (req, res) => {
       profile.note ?? null,
       profile.location ?? null,
       profile.department ?? null,
+      profile.require_location === undefined ? null : profile.require_location ? 1 : 0,
       profile.tracking_start_date ?? null,
       profile.start_date ?? null,
       profile.end_date ?? null,
@@ -633,7 +637,7 @@ router.post('/', (req, res) => {
   const created = db
     .prepare(
       `SELECT u.id, u.name, u.first_name, u.last_name, u.email, u.role, u.created_at, u.active, IFNULL(us.vacation_allowance, 0) as vacation_allowance
-       , IFNULL(us.flex_enabled, 0) as flex_enabled, up.personnel_number, up.location, up.department, up.tracking_start_date, up.start_date, up.end_date, up.work_model_id, up.holiday_profile_id
+       , IFNULL(us.flex_enabled, 0) as flex_enabled, up.personnel_number, up.location, up.department, up.require_location, up.tracking_start_date, up.start_date, up.end_date, up.work_model_id, up.holiday_profile_id
        FROM users u
        LEFT JOIN user_settings us ON us.user_id = u.id
        LEFT JOIN user_profiles up ON up.user_id = u.id
@@ -686,7 +690,7 @@ router.patch('/:id/status', (req, res) => {
   const updated = db
     .prepare(
       `SELECT u.id, u.name, u.first_name, u.last_name, u.email, u.role, u.created_at, u.active, IFNULL(us.vacation_allowance, 0) as vacation_allowance
-       , IFNULL(us.flex_enabled, 0) as flex_enabled, up.personnel_number, up.location, up.department, up.start_date, up.end_date, up.work_model_id, up.holiday_profile_id
+       , IFNULL(us.flex_enabled, 0) as flex_enabled, up.personnel_number, up.location, up.department, up.require_location, up.start_date, up.end_date, up.work_model_id, up.holiday_profile_id
        FROM users u
        LEFT JOIN user_settings us ON us.user_id = u.id
        LEFT JOIN user_profiles up ON up.user_id = u.id
@@ -708,6 +712,7 @@ const userUpdateSchema = z.object({
   personnel_number: z.string().max(80).optional().or(z.literal('')).transform((value) => value || undefined),
   location: z.string().max(120).optional().or(z.literal('')).transform((value) => value || undefined),
   department: z.string().max(120).optional().or(z.literal('')).transform((value) => value || undefined),
+  require_location: z.boolean().optional(),
   tracking_start_date: z
     .string()
     .regex(dateRegex, 'Datum muss YYYY-MM-DD sein')
@@ -779,6 +784,7 @@ router.patch('/:id', (req, res) => {
      SET personnel_number = COALESCE(?, personnel_number),
          location = COALESCE(?, location),
          department = COALESCE(?, department),
+         require_location = COALESCE(?, require_location),
          tracking_start_date = COALESCE(?, tracking_start_date),
          start_date = COALESCE(?, start_date),
          end_date = COALESCE(?, end_date),
@@ -789,6 +795,7 @@ router.patch('/:id', (req, res) => {
     parsed.data.personnel_number ?? null,
     parsed.data.location ?? null,
     parsed.data.department ?? null,
+    parsed.data.require_location === undefined ? null : parsed.data.require_location ? 1 : 0,
     parsed.data.tracking_start_date ?? null,
     parsed.data.start_date ?? null,
     parsed.data.end_date ?? null,
@@ -802,7 +809,7 @@ router.patch('/:id', (req, res) => {
   const updated = db
     .prepare(
       `SELECT u.id, u.name, u.first_name, u.last_name, u.email, u.role, u.created_at, u.active, IFNULL(us.vacation_allowance, 0) as vacation_allowance
-       , IFNULL(us.flex_enabled, 0) as flex_enabled, up.personnel_number, up.location, up.department, up.tracking_start_date, up.start_date, up.end_date, up.work_model_id, up.holiday_profile_id
+       , IFNULL(us.flex_enabled, 0) as flex_enabled, up.personnel_number, up.location, up.department, up.require_location, up.tracking_start_date, up.start_date, up.end_date, up.work_model_id, up.holiday_profile_id
        FROM users u
        LEFT JOIN user_settings us ON us.user_id = u.id
        LEFT JOIN user_profiles up ON up.user_id = u.id

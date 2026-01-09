@@ -98,12 +98,18 @@ export function DashboardPage() {
   const queryClient = useQueryClient();
   const { data } = useQuery({ queryKey: ['entries'], queryFn: fetchEntries });
   const { user } = useAuth();
+  const requireLocation = user?.requireLocation ?? true;
   const [location, setLocation] = useState<{ lat: number; lng: number } | null>(null);
   const [locationError, setLocationError] = useState<string | null>(null);
   const canViewLocation = user ? ['lead', 'hr', 'admin'].includes(user.role) : false;
   const [now, setNow] = useState<Date>(new Date());
 
   useEffect(() => {
+    if (!requireLocation) {
+      setLocation(null);
+      setLocationError(null);
+      return;
+    }
     if (!navigator.geolocation) {
       setLocationError('Standortbestimmung wird von diesem Browser nicht unterstützt.');
       return;
@@ -136,7 +142,7 @@ export function DashboardPage() {
       navigator.geolocation.clearWatch(watchId);
       window.clearInterval(interval);
     };
-  }, []);
+  }, [requireLocation]);
 
   useEffect(() => {
     const interval = window.setInterval(() => setNow(new Date()), 1000);
@@ -154,10 +160,13 @@ export function DashboardPage() {
   const mainAction: TimeEntry['type'] = !last || last.type === 'CLOCK_OUT' ? 'CLOCK_IN' : 'CLOCK_OUT';
 
   const todayKey = useMemo(() => new Date().toISOString().slice(0, 10), []);
+  const todaysEntries = useMemo(
+    () => (data ?? []).filter((entry) => entry.timestamp.startsWith(todayKey)),
+    [data, todayKey]
+  );
   const workedToday = useMemo(() => {
-    const todaysEntries = (data ?? []).filter((entry) => entry.timestamp.startsWith(todayKey));
     return computeWorkedSoFar(todaysEntries, now);
-  }, [data, now, todayKey]);
+  }, [now, todayKey, todaysEntries]);
   const clockString = useMemo(
     () => now.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' }),
     [now]
@@ -185,12 +194,14 @@ export function DashboardPage() {
               } disabled:opacity-60`}
               disabled={
                 mutate.isPending ||
-                ((mainAction === 'CLOCK_IN' || mainAction === 'CLOCK_OUT') && (!location || !!locationError))
+                ((mainAction === 'CLOCK_IN' || mainAction === 'CLOCK_OUT') &&
+                  requireLocation &&
+                  (!location || !!locationError))
               }
               onClick={() =>
                 mutate.mutate({
                   type: mainAction,
-                  location: location ?? undefined,
+                  location: requireLocation ? location ?? undefined : undefined,
                 })
               }
             >
@@ -211,7 +222,7 @@ export function DashboardPage() {
           </p>
         )}
           <div className="divide-y">
-            {(data ?? []).map((entry) => (
+            {todaysEntries.map((entry) => (
               <div key={entry.id} className="py-3 flex items-center justify-between text-sm">
                 <div>
                   <p className="font-semibold">{labels[entry.type]}</p>
@@ -230,7 +241,7 @@ export function DashboardPage() {
               </div>
             </div>
           ))}
-          {(data ?? []).length === 0 && <p className="text-sm text-slate-500">Noch keine Buchungen vorhanden.</p>}
+          {todaysEntries.length === 0 && <p className="text-sm text-slate-500">Heute noch keine Buchungen.</p>}
         </div>
       </div>
     </div>

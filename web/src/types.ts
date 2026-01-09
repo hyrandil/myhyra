@@ -8,6 +8,7 @@ export interface UserInfo {
   email: string;
   role: Role;
   department?: string;
+  requireLocation?: boolean;
 }
 
 export interface Employee extends UserInfo {
@@ -15,6 +16,8 @@ export interface Employee extends UserInfo {
   personnelNumber?: string;
   location?: string;
   department?: string;
+  requireLocation?: boolean;
+  vacationAllowance?: number;
   trackingStartDate?: string;
   startDate?: string;
   endDate?: string;
@@ -201,4 +204,3 @@ export interface AuditLogEntry {
   detail?: string | null;
   created_at: string;
 }
-

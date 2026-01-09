@@ -76,6 +76,59 @@ const workingDatesBetween = (userId: number, start: string, end: string, holiday
   return results;
 };
 
+const clampRange = (start: string, end: string, min: string, max: string) => {
+  const boundedStart = start < min ? min : start;
+  const boundedEnd = end > max ? max : end;
+  if (boundedStart > boundedEnd) return null;
+  return { start: boundedStart, end: boundedEnd };
+};
+
+const buildVacationPortions = (
+  userId: number,
+  absences: {
+    start_date: string;
+    end_date: string;
+    duration: 'full' | 'half';
+    minutes_override?: number | null;
+    start_time?: string | null;
+    end_time?: string | null;
+  }[],
+  rangeStart: string,
+  rangeEnd: string,
+  todayCutoff: string
+) => {
+  const usedByDay = new Map<string, number>();
+  const plannedByDay = new Map<string, number>();
+  absences.forEach((row) => {
+    const range = clampRange(row.start_date, row.end_date, rangeStart, rangeEnd);
+    if (!range) return;
+    const holidaySetForRange = holidayDatesBetween(userId, range.start, range.end);
+    const workingDays = workingDatesBetween(userId, range.start, range.end, holidaySetForRange);
+    const perDaySeen = new Set<string>();
+    workingDays.forEach((key) => {
+      const plannedMinutes = plannedMinutesForDate(userId, key);
+      if (plannedMinutes <= 0 || holidaySetForRange.has(key)) return;
+      const dedupeKey = `${key}|${row.start_date}|${row.end_date}|${row.duration}|${row.minutes_override ?? ''}|${row.start_time ?? ''}|${row.end_time ?? ''}`;
+      if (perDaySeen.has(dedupeKey)) return;
+      perDaySeen.add(dedupeKey);
+      let minutes = row.minutes_override ?? null;
+      if (minutes === null) {
+        minutes = row.duration === 'half' ? Math.round(plannedMinutes / 2) : plannedMinutes;
+      }
+      const effective = minutes ?? plannedMinutes;
+      const portion = plannedMinutes ? Math.min(effective / plannedMinutes, 1) : 0;
+      if (key <= todayCutoff) {
+        const current = usedByDay.get(key) ?? 0;
+        usedByDay.set(key, Math.min(current + portion, 1));
+      } else {
+        const current = plannedByDay.get(key) ?? 0;
+        plannedByDay.set(key, Math.min(current + portion, 1));
+      }
+    });
+  });
+  return { usedByDay, plannedByDay };
+};
+
 const buildAttendance = (monthParam?: string) => {
   const today = new Date();
   const fallbackMonth = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
@@ -123,8 +176,6 @@ const buildAttendance = (monthParam?: string) => {
   const presenceMap = new Map<number, Set<string>>();
 
   const absenceUsage = new Map<number, Map<string, Map<string, number>>>();
-  const absenceDays = new Map<number, Set<string>>();
-
   const holidayCache = new Map<number, Set<string>>();
 
   const addAbsence = (userId: number, type: string, duration: 'full' | 'half', start: string, end: string) => {
@@ -148,19 +199,7 @@ const buildAttendance = (monthParam?: string) => {
 
   absences.forEach((row) => addAbsence(row.user_id, row.type, row.duration, row.start_date, row.end_date));
 
-  absences.forEach((row) => {
-    if (!holidayCache.has(row.user_id)) {
-      holidayCache.set(row.user_id, holidayDatesBetween(row.user_id, monthStart, monthEnd));
-    }
-    const holidays = holidayCache.get(row.user_id)!;
-    const days = workingDatesBetween(row.user_id, row.start_date, row.end_date, holidays);
-    if (!absenceDays.has(row.user_id)) absenceDays.set(row.user_id, new Set());
-    days.forEach((day) => absenceDays.get(row.user_id)!.add(day));
-  });
-
   bookings.forEach((row) => {
-    const blocked = absenceDays.get(row.user_id);
-    if (blocked && blocked.has(row.work_day)) return;
     if (!presenceMap.has(row.user_id)) {
       presenceMap.set(row.user_id, new Set());
     }
@@ -195,6 +234,11 @@ const buildAttendance = (monthParam?: string) => {
 };
 
 const buildVacationOverview = (userIds: number[], today: string) => {
+  const currentYear = Number(today.slice(0, 4));
+  const yearStart = `${currentYear}-01-01`;
+  const yearEnd = `${currentYear}-12-31`;
+  const prevYearStart = `${currentYear - 1}-01-01`;
+  const prevYearEnd = `${currentYear - 1}-12-31`;
   const users = db
     .prepare('SELECT id, name, email FROM users WHERE id IN (' + userIds.map(() => '?').join(',') + ')')
     .all(...userIds) as { id: number; name: string; email: string }[];
@@ -204,8 +248,7 @@ const buildVacationOverview = (userIds: number[], today: string) => {
   const allowanceMap = new Map(settings.map((s) => [s.user_id, s.vacation_allowance]));
 
   const results = users.map((user) => {
-    const allowance = allowanceMap.get(user.id) ?? 30;
-    const holidaySet = holidayDatesBetween(user.id, '1970-01-01', today);
+    const baseAllowance = allowanceMap.get(user.id) ?? 30;
     const absences = db
       .prepare(
         "SELECT start_date, end_date, duration, minutes_override, start_time, end_time FROM absences WHERE user_id = ? AND type = 'vacation' AND canceled != 1"
@@ -218,37 +261,13 @@ const buildVacationOverview = (userIds: number[], today: string) => {
         start_time?: string | null;
         end_time?: string | null;
       }[];
-    const usedByDay = new Map<string, number>();
-    const plannedByDay = new Map<string, number>();
-    absences.forEach((row) => {
-      const holidaySetForRange = holidayDatesBetween(user.id, row.start_date, row.end_date);
-      const workingDays = workingDatesBetween(user.id, row.start_date, row.end_date, holidaySetForRange);
-      const perDaySeen = new Set<string>();
-      workingDays.forEach((key) => {
-        const plannedMinutes = plannedMinutesForDate(user.id, key);
-        if (plannedMinutes <= 0 || holidaySet.has(key)) return;
-        const dedupeKey = `${key}|${row.start_date}|${row.end_date}|${row.duration}|${row.minutes_override ?? ''}|${
-          row.start_time ?? ''
-        }|${row.end_time ?? ''}`;
-        if (perDaySeen.has(dedupeKey)) return;
-        perDaySeen.add(dedupeKey);
-        let minutes = row.minutes_override ?? null;
-        if (minutes === null) {
-          minutes = row.duration === 'half' ? Math.round(plannedMinutes / 2) : plannedMinutes;
-        }
-        const effective = minutes ?? plannedMinutes;
-        const portion = plannedMinutes ? Math.min(effective / plannedMinutes, 1) : 0;
-        if (key <= today) {
-          const current = usedByDay.get(key) ?? 0;
-          usedByDay.set(key, Math.min(current + portion, 1));
-        } else {
-          const current = plannedByDay.get(key) ?? 0;
-          plannedByDay.set(key, Math.min(current + portion, 1));
-        }
-      });
-    });
-    const used = Array.from(usedByDay.values()).reduce((sum, value) => sum + value, 0);
-    const planned = Array.from(plannedByDay.values()).reduce((sum, value) => sum + value, 0);
+    const previous = buildVacationPortions(user.id, absences, prevYearStart, prevYearEnd, prevYearEnd);
+    const prevUsed = Array.from(previous.usedByDay.values()).reduce((sum, value) => sum + value, 0);
+    const carryOver = Math.max(baseAllowance - prevUsed, 0);
+    const allowance = baseAllowance + carryOver;
+    const current = buildVacationPortions(user.id, absences, yearStart, yearEnd, today);
+    const used = Array.from(current.usedByDay.values()).reduce((sum, value) => sum + value, 0);
+    const planned = Array.from(current.plannedByDay.values()).reduce((sum, value) => sum + value, 0);
     const remaining = Math.max(allowance - used - planned, 0);
     return {
       userId: user.id,

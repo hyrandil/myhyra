@@ -132,6 +132,7 @@ CREATE TABLE IF NOT EXISTS user_profiles (
   user_id INTEGER PRIMARY KEY,
   location TEXT,
   department TEXT,
+  require_location INTEGER NOT NULL DEFAULT 1,
   work_model_id INTEGER,
   holiday_profile_id INTEGER,
   tracking_start_date TEXT,
@@ -370,6 +371,7 @@ db.exec(`INSERT OR IGNORE INTO user_settings (user_id) SELECT id FROM users;`);
   ensureTableColumn('absences', 'minutes_override', 'minutes_override INTEGER');
 ensureTableColumn('user_profiles', 'location', 'location TEXT');
 ensureTableColumn('user_profiles', 'department', 'department TEXT');
+ensureTableColumn('user_profiles', 'require_location', 'require_location INTEGER NOT NULL DEFAULT 1');
 ensureTableColumn('user_profiles', 'work_model_id', 'work_model_id INTEGER');
 // Ensure legacy databases receive holiday profile support even if they were created
 // before the column existed. The helper already adds the column when missing, and the

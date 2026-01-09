@@ -3,11 +3,13 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   addCustomHoliday,
   createHolidayProfile,
+  deleteHolidayProfile,
   fetchEmployees,
   fetchHolidayProfiles,
   fetchProfileHolidays,
   fetchSchedule,
   importHolidayProfile,
+  updateHolidayProfile,
   deleteLatestScheduleVersion,
   updateSchedule,
 } from '../api';
@@ -15,6 +17,24 @@ import { Employee, HolidayEntry, HolidayProfile } from '../types';
 import { useAuth } from '../AuthProvider';
 
 const weekdayLabels = ['Montag', 'Dienstag', 'Mittwoch', 'Donnerstag', 'Freitag', 'Samstag', 'Sonntag'];
+const stateLabels: Record<string, string> = {
+  BW: 'Baden-Württemberg',
+  BY: 'Bayern',
+  BE: 'Berlin',
+  BB: 'Brandenburg',
+  HB: 'Bremen',
+  HH: 'Hamburg',
+  HE: 'Hessen',
+  MV: 'Mecklenburg-Vorpommern',
+  NI: 'Niedersachsen',
+  NW: 'Nordrhein-Westfalen',
+  RP: 'Rheinland-Pfalz',
+  SL: 'Saarland',
+  SN: 'Sachsen',
+  ST: 'Sachsen-Anhalt',
+  SH: 'Schleswig-Holstein',
+  TH: 'Thüringen',
+};
 
 export function PlanningPage() {
   const auth = useAuth();
@@ -24,8 +44,10 @@ export function PlanningPage() {
   const [validFrom, setValidFrom] = useState<string>('');
   const [selectedProfile, setSelectedProfile] = useState<number | null>(null);
   const [holidayYear, setHolidayYear] = useState<number>(new Date().getFullYear());
-  const [holidayStart, setHolidayStart] = useState<number | ''>('');
-  const [holidayEnd, setHolidayEnd] = useState<number | ''>('');
+  const [ruleStartYear, setRuleStartYear] = useState<number | ''>('');
+  const [ruleEndYear, setRuleEndYear] = useState<number | ''>('');
+  const [profileName, setProfileName] = useState('');
+  const [profileState, setProfileState] = useState('');
 
   const { data: employees } = useQuery({
     queryKey: ['employees', 'planning'],
@@ -82,6 +104,20 @@ export function PlanningPage() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['holiday-profile'] }),
   });
 
+  const profileUpdateMutation = useMutation({
+    mutationFn: ({ id, payload }: { id: number; payload: { name: string; state: string } }) => updateHolidayProfile(id, payload),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['holiday-profiles'] }),
+  });
+
+  const profileDeleteMutation = useMutation({
+    mutationFn: (id: number) => deleteHolidayProfile(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['holiday-profiles'] });
+      queryClient.invalidateQueries({ queryKey: ['holiday-profile'] });
+      setSelectedProfile(null);
+    },
+  });
+
   const addHolidayMutation = useMutation({
     mutationFn: ({ id, payload }: { id: number; payload: { date: string; name: string; duration: 'full' | 'half' } }) =>
       addCustomHoliday(id, payload),
@@ -97,6 +133,15 @@ export function PlanningPage() {
   useEffect(() => {
     if (!selectedProfile && profiles.data && profiles.data.length > 0) {
       setSelectedProfile(profiles.data[0].id);
+    }
+  }, [selectedProfile, profiles.data]);
+
+  useEffect(() => {
+    if (!selectedProfile || !profiles.data) return;
+    const profile = profiles.data.find((p: HolidayProfile) => p.id === selectedProfile);
+    if (profile) {
+      setProfileName(profile.name);
+      setProfileState(profile.state);
     }
   }, [selectedProfile, profiles.data]);
 
@@ -238,14 +283,10 @@ export function PlanningPage() {
               e.preventDefault();
               const form = new FormData(e.currentTarget);
               const yearValue = Number(form.get('year') || '') || undefined;
-              const startYearValue = Number(form.get('startYear') || '') || undefined;
-              const endYearValue = Number(form.get('endYear') || '') || undefined;
               profileCreateMutation.mutate({
                 name: String(form.get('profileName') || ''),
                 state: String(form.get('state') || ''),
                 year: yearValue,
-                startYear: startYearValue,
-                endYear: endYearValue,
               });
               e.currentTarget.reset();
             }}
@@ -254,32 +295,13 @@ export function PlanningPage() {
               <input name="profileName" placeholder="Profilname" className="input" required />
               <select name="state" className="input" required defaultValue="">
                 <option value="">Bundesland</option>
-                {[
-                  ['BW', 'Baden-Württemberg'],
-                  ['BY', 'Bayern'],
-                  ['BE', 'Berlin'],
-                  ['BB', 'Brandenburg'],
-                  ['HB', 'Bremen'],
-                  ['HH', 'Hamburg'],
-                  ['HE', 'Hessen'],
-                  ['MV', 'Mecklenburg-Vorpommern'],
-                  ['NI', 'Niedersachsen'],
-                  ['NW', 'Nordrhein-Westfalen'],
-                  ['RP', 'Rheinland-Pfalz'],
-                  ['SL', 'Saarland'],
-                  ['SN', 'Sachsen'],
-                  ['ST', 'Sachsen-Anhalt'],
-                  ['SH', 'Schleswig-Holstein'],
-                  ['TH', 'Thüringen'],
-                ].map(([code, name]) => (
+                {Object.entries(stateLabels).map(([code, name]) => (
                   <option key={code} value={code}>
                     {name}
                   </option>
                 ))}
               </select>
               <input name="year" type="number" min="2020" max="2100" placeholder="Jahr (optional)" className="input" />
-              <input name="startYear" type="number" min="2020" max="2100" placeholder="Startjahr (optional)" className="input" />
-              <input name="endYear" type="number" min="2020" max="2100" placeholder="Endjahr (optional)" className="input" />
             </div>
             <button className="btn-primary self-start" type="submit" disabled={profileCreateMutation.isPending}>
               Profil anlegen & Feiertage importieren
@@ -295,7 +317,7 @@ export function PlanningPage() {
               >
                 {(profiles.data as HolidayProfile[] | undefined)?.map((profile) => (
                   <option key={profile.id} value={profile.id}>
-                    {profile.name} ({profile.state})
+                    {profile.name} · {stateLabels[profile.state] ?? profile.state}
                   </option>
                 ))}
               </select>
@@ -304,20 +326,6 @@ export function PlanningPage() {
                 className="input w-24"
                 value={holidayYear}
                 onChange={(e) => setHolidayYear(Number(e.target.value) || holidayYear)}
-              />
-              <input
-                type="number"
-                className="input w-24"
-                placeholder="Start"
-                value={holidayStart}
-                onChange={(e) => setHolidayStart(e.target.value === '' ? '' : Number(e.target.value))}
-              />
-              <input
-                type="number"
-                className="input w-24"
-                placeholder="Ende"
-                value={holidayEnd}
-                onChange={(e) => setHolidayEnd(e.target.value === '' ? '' : Number(e.target.value))}
               />
               <button
                 className="btn-ghost"
@@ -329,8 +337,6 @@ export function PlanningPage() {
                     id: selectedProfile,
                     payload: {
                       year: holidayYear,
-                      startYear: holidayStart || undefined,
-                      endYear: holidayEnd || undefined,
                     },
                   })
                 }
@@ -338,6 +344,97 @@ export function PlanningPage() {
                 Jahr neu laden
               </button>
             </div>
+            {selectedProfile && (
+              <p className="text-xs text-slate-500">
+                Aktuelles Profil: {(profiles.data as HolidayProfile[] | undefined)?.find((p) => p.id === selectedProfile)?.name}{' '}
+                ({stateLabels[(profiles.data as HolidayProfile[] | undefined)?.find((p) => p.id === selectedProfile)?.state ?? ''] ??
+                  (profiles.data as HolidayProfile[] | undefined)?.find((p) => p.id === selectedProfile)?.state ??
+                  ''})
+              </p>
+            )}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+              <div className="md:col-span-3 text-xs uppercase text-slate-500">Regelfeiertage (mehrere Jahre)</div>
+              <input
+                type="number"
+                className="input"
+                placeholder="Startjahr"
+                value={ruleStartYear}
+                onChange={(e) => setRuleStartYear(e.target.value === '' ? '' : Number(e.target.value))}
+              />
+              <input
+                type="number"
+                className="input"
+                placeholder="Endjahr"
+                value={ruleEndYear}
+                onChange={(e) => setRuleEndYear(e.target.value === '' ? '' : Number(e.target.value))}
+              />
+              <button
+                className="btn-secondary"
+                type="button"
+                disabled={!selectedProfile || profileImportMutation.isPending || !ruleStartYear || !ruleEndYear}
+                onClick={() =>
+                  selectedProfile &&
+                  profileImportMutation.mutate({
+                    id: selectedProfile,
+                    payload: {
+                      startYear: typeof ruleStartYear === 'number' ? ruleStartYear : undefined,
+                      endYear: typeof ruleEndYear === 'number' ? ruleEndYear : undefined,
+                    },
+                  })
+                }
+              >
+                Regelfeiertage laden
+              </button>
+            </div>
+            <form
+              className="grid grid-cols-1 md:grid-cols-3 gap-2 border-t border-slate-200 pt-3"
+              onSubmit={(e) => {
+                e.preventDefault();
+                if (!selectedProfile) return;
+                profileUpdateMutation.mutate({
+                  id: selectedProfile,
+                  payload: { name: profileName, state: profileState },
+                });
+              }}
+            >
+              <div className="md:col-span-3 text-xs uppercase text-slate-500">Profil bearbeiten</div>
+              <input
+                className="input"
+                value={profileName}
+                onChange={(e) => setProfileName(e.target.value)}
+                placeholder="Profilname"
+              />
+              <select
+                className="input"
+                value={profileState}
+                onChange={(e) => setProfileState(e.target.value)}
+              >
+                <option value="">Bundesland</option>
+                {Object.entries(stateLabels).map(([code, name]) => (
+                  <option key={code} value={code}>
+                    {name}
+                  </option>
+                ))}
+              </select>
+              <div className="flex gap-2">
+                <button className="btn-primary" type="submit" disabled={!selectedProfile || profileUpdateMutation.isPending}>
+                  Speichern
+                </button>
+                <button
+                  className="btn-ghost border border-rose-200 text-rose-700"
+                  type="button"
+                  disabled={!selectedProfile || profileDeleteMutation.isPending}
+                  onClick={() => {
+                    if (!selectedProfile) return;
+                    if (window.confirm('Feiertagsprofil wirklich löschen?')) {
+                      profileDeleteMutation.mutate(selectedProfile);
+                    }
+                  }}
+                >
+                  Löschen
+                </button>
+              </div>
+            </form>
             <form
               className="grid grid-cols-1 md:grid-cols-3 gap-2"
               onSubmit={(e) => {

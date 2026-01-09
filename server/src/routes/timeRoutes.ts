@@ -78,6 +78,26 @@ function plannedMinutesForDate(userId: number, dateKey: string) {
   return minutesByWeekday[weekday] ?? 0;
 }
 
+function parseDate(value: string) {
+  const [yearStr, monthStr, dayStr] = value.split('-');
+  return new Date(Date.UTC(Number(yearStr), Number(monthStr) - 1, Number(dayStr)));
+}
+
+function workingDatesBetween(userId: number, start: string, end: string, holidaySet: Set<string>) {
+  const results: string[] = [];
+  let cursor = parseDate(start);
+  const endDate = parseDate(end);
+  while (cursor.getTime() <= endDate.getTime()) {
+    const key = cursor.toISOString().slice(0, 10);
+    const minutes = plannedMinutesForDate(userId, key);
+    if (minutes > 0 && !holidaySet.has(key)) {
+      results.push(key);
+    }
+    cursor = new Date(cursor.getTime() + 24 * 60 * 60 * 1000);
+  }
+  return results;
+}
+
 function getHolidayProfileId(userId: number, dateKey?: string): number | null {
   try {
     const targetDate = dateKey ?? new Date().toISOString().slice(0, 10);
@@ -105,10 +125,75 @@ function getHolidays(userId: number, startDate: string, endDate: string): Holida
     .all(profileId, startDate, endDate) as Holiday[];
 }
 
+function clampRange(start: string, end: string, min: string, max: string) {
+  const boundedStart = start < min ? min : start;
+  const boundedEnd = end > max ? max : end;
+  if (boundedStart > boundedEnd) return null;
+  return { start: boundedStart, end: boundedEnd };
+}
+
+function buildVacationPortions(
+  userId: number,
+  absences: {
+    start_date: string;
+    end_date: string;
+    duration: 'full' | 'half';
+    minutes_override?: number | null;
+    start_time?: string | null;
+    end_time?: string | null;
+  }[],
+  rangeStart: string,
+  rangeEnd: string,
+  todayCutoff: string
+) {
+  const usedByDay = new Map<string, number>();
+  const plannedByDay = new Map<string, number>();
+  absences.forEach((row) => {
+    const range = clampRange(row.start_date, row.end_date, rangeStart, rangeEnd);
+    if (!range) return;
+    const holidaySet = new Set(getHolidays(userId, range.start, range.end).map((h) => h.date));
+    const workingDays = workingDatesBetween(userId, range.start, range.end, holidaySet);
+    const perDaySeen = new Set<string>();
+    workingDays.forEach((key) => {
+      const plannedMinutes = plannedMinutesForDate(userId, key);
+      if (plannedMinutes <= 0 || holidaySet.has(key)) return;
+      const dedupeKey = `${key}|${row.start_date}|${row.end_date}|${row.duration}|${row.minutes_override ?? ''}|${row.start_time ?? ''}|${row.end_time ?? ''}`;
+      if (perDaySeen.has(dedupeKey)) return;
+      perDaySeen.add(dedupeKey);
+      let minutes = row.minutes_override ?? null;
+      if (minutes === null && row.start_time && row.end_time) {
+        const startTs = new Date(`${key}T${row.start_time}:00Z`).getTime();
+        const endTs = new Date(`${key}T${row.end_time}:00Z`).getTime();
+        minutes = Math.max(Math.round((endTs - startTs) / 60000), 0);
+      }
+      if (minutes === null) {
+        minutes = row.duration === 'half' ? Math.round(plannedMinutes / 2) : plannedMinutes;
+      }
+      const effective = minutes ?? plannedMinutes;
+      const portion = plannedMinutes ? Math.min(effective / plannedMinutes, 1) : 0;
+      if (key <= todayCutoff) {
+        const current = usedByDay.get(key) ?? 0;
+        usedByDay.set(key, Math.min(current + portion, 1));
+      } else {
+        const current = plannedByDay.get(key) ?? 0;
+        plannedByDay.set(key, Math.min(current + portion, 1));
+      }
+    });
+  });
+  return { usedByDay, plannedByDay };
+}
+
 function lastEntry(userId: number): TimeEntry | undefined {
   return db
     .prepare('SELECT * FROM time_entries WHERE user_id = ? ORDER BY timestamp DESC, id DESC LIMIT 1')
     .get(userId) as TimeEntry | undefined;
+}
+
+function requiresLocation(userId: number) {
+  const row = db
+    .prepare('SELECT require_location FROM user_profiles WHERE user_id = ?')
+    .get(userId) as { require_location?: number | null } | undefined;
+  return row?.require_location !== 0;
 }
 
 function formatBerlinTimestamp(date: Date) {
@@ -237,22 +322,36 @@ function buildMonthlyReport(userId: number, monthValue?: string) {
     const planned = plannedMinutesForDate(userId, key);
     const dayEntries = grouped.get(key) ?? [];
     const workStats = computeDayWorkStats(dayEntries);
-    const absencesForDay = absenceMap.get(key) ?? [];
+    const rawAbsences = absenceMap.get(key) ?? [];
+    const seenAbsenceKeys = new Set<string>();
+    const absencesForDay = rawAbsences.filter((a) => {
+      const dedupeKey = `${a.type}|${a.duration ?? 'full'}|${a.start_time ?? ''}|${a.end_time ?? ''}|${a.minutes_override ?? ''}`;
+      if (seenAbsenceKeys.has(dedupeKey)) return false;
+      seenAbsenceKeys.add(dedupeKey);
+      return true;
+    });
+
     let creditVacation = 0;
     let creditHoliday = 0;
     let topUpOther = 0;
+    const baseWorked = workStats.workedMinutes;
+    let remainingAbsenceCredit = Math.max(planned - baseWorked, 0);
     absencesForDay.forEach((absence) => {
       const factor = absence.duration === 'half' ? 0.5 : 1;
       const target = Math.round(absence.minutes_override ?? planned * factor);
+      const creditCap = Math.max(Math.min(target, remainingAbsenceCredit), 0);
       const kind = kindMap.get(absence.type);
       if ((absence as any).type === 'holiday') {
-        creditHoliday += target;
+        creditHoliday += creditCap;
+        remainingAbsenceCredit -= creditCap;
       } else if (absence.type === 'vacation') {
-        creditVacation += target;
+        creditVacation += creditCap;
+        remainingAbsenceCredit -= creditCap;
       } else if (kind?.counts_as_work) {
-        const covered = workStats.workedMinutes + creditVacation + creditHoliday + topUpOther;
-        const topUp = Math.max(target - covered, 0);
+        const covered = baseWorked + creditVacation + creditHoliday + topUpOther;
+        const topUp = Math.min(Math.max(target - covered, 0), remainingAbsenceCredit);
         topUpOther += topUp;
+        remainingAbsenceCredit -= topUp;
       }
     });
     const hasPending = pendingRequests.some((item) => item.start_date <= key && item.end_date >= key);
@@ -303,36 +402,32 @@ function buildMonthlyReport(userId: number, monthValue?: string) {
       }
     | undefined;
   const displayName = [userRow?.first_name, userRow?.last_name].filter(Boolean).join(' ') || userRow?.name || '';
-  let usedVacationDays = 0;
-  days.forEach((day) => {
-    const planned = day.planned || 0;
-    if (!planned) return;
-    let dayPortion = 0;
-    const countedKeys = new Set<string>();
-    day.absences.forEach((absence: Absence) => {
-      if (absence.type !== 'vacation') return;
-      const key = `${absence.start_date ?? day.date}|${absence.end_date ?? day.date}|${absence.duration ?? 'full'}|${
-        absence.minutes_override ?? ''
-      }|${absence.start_time ?? ''}|${absence.end_time ?? ''}|${absence.id ?? ''}`;
-      if (countedKeys.has(key)) return;
-      countedKeys.add(key);
-      let minutes = absence.minutes_override ?? null;
-      if (minutes === null && absence.start_time && absence.end_time) {
-        const startTs = new Date(`${day.date}T${absence.start_time}:00Z`).getTime();
-        const endTs = new Date(`${day.date}T${absence.end_time}:00Z`).getTime();
-        minutes = Math.max(Math.round((endTs - startTs) / 60000), 0);
-      }
-      if (minutes === null) {
-        minutes = absence.duration === 'half' ? Math.round(planned / 2) : planned;
-      }
-      minutes = minutes ?? 0;
-      const portion = planned ? Math.min(minutes / planned, 1) : 0;
-      dayPortion = Math.min(dayPortion + portion, 1);
-    });
-    usedVacationDays += dayPortion;
-  });
-  const allowance = userRow?.vacation_allowance ?? 0;
-  const remaining = Math.max(allowance - usedVacationDays, 0);
+  const baseAllowance = userRow?.vacation_allowance ?? 0;
+  const year = Number(baseMonth.slice(0, 4));
+  const today = new Date().toISOString().slice(0, 10);
+  const prevYearStart = `${year - 1}-01-01`;
+  const prevYearEnd = `${year - 1}-12-31`;
+  const currentYearStart = `${year}-01-01`;
+  const currentYearEnd = `${year}-12-31`;
+  const vacationAbsences = db
+    .prepare(
+      "SELECT start_date, end_date, duration, minutes_override, start_time, end_time FROM absences WHERE user_id = ? AND type = 'vacation' AND canceled != 1"
+    )
+    .all(userId) as {
+      start_date: string;
+      end_date: string;
+      duration: 'full' | 'half';
+      minutes_override?: number | null;
+      start_time?: string | null;
+      end_time?: string | null;
+    }[];
+  const prevUsage = buildVacationPortions(userId, vacationAbsences, prevYearStart, prevYearEnd, prevYearEnd);
+  const prevUsed = Array.from(prevUsage.usedByDay.values()).reduce((sum, value) => sum + value, 0);
+  const carryOver = Math.max(baseAllowance - prevUsed, 0);
+  const allowance = baseAllowance + carryOver;
+  const currentUsage = buildVacationPortions(userId, vacationAbsences, currentYearStart, currentYearEnd, today);
+  const currentUsed = Array.from(currentUsage.usedByDay.values()).reduce((sum, value) => sum + value, 0);
+  const remaining = Math.max(allowance - currentUsed, 0);
   const dailySnapshot = buildDailySummary(userId, baseMonth);
 
   return {
@@ -341,7 +436,7 @@ function buildMonthlyReport(userId: number, monthValue?: string) {
     meta: {
       name: displayName,
       personnelNumber: userRow?.personnel_number || '',
-      vacation: { allowance, used: usedVacationDays, remaining },
+      vacation: { allowance, used: currentUsed, remaining },
       flexBalance: dailySnapshot.flexBalance ?? 0,
     },
   };
@@ -636,7 +731,7 @@ router.post('/clock-in', (req: AuthRequest, res) => {
   const parsedLocation = locationSchema.safeParse(req.body?.location ?? {});
   const source = sourceEnum.parse(req.body?.source ?? 'WEB');
   if (!parsedLocation.success) return res.status(400).json({ errors: parsedLocation.error.format() });
-  if (parsedLocation.data.lat === undefined || parsedLocation.data.lng === undefined) {
+  if (requiresLocation(req.user!.id) && (parsedLocation.data.lat === undefined || parsedLocation.data.lng === undefined)) {
     return res.status(400).json({ message: 'Standort erforderlich' });
   }
   const last = lastEntry(req.user!.id);
@@ -652,7 +747,7 @@ router.post('/clock-out', (req: AuthRequest, res) => {
   const parsedLocation = locationSchema.safeParse(req.body?.location ?? {});
   const source = sourceEnum.parse(req.body?.source ?? 'WEB');
   if (!parsedLocation.success) return res.status(400).json({ errors: parsedLocation.error.format() });
-  if (parsedLocation.data.lat === undefined || parsedLocation.data.lng === undefined) {
+  if (requiresLocation(req.user!.id) && (parsedLocation.data.lat === undefined || parsedLocation.data.lng === undefined)) {
     return res.status(400).json({ message: 'Standort erforderlich' });
   }
   const last = lastEntry(req.user!.id);
@@ -1293,4 +1388,3 @@ router.patch('/corrections/:id/status', authorize(['admin', 'hr', 'lead']), (req
 });
 
 export default router;
-
