@@ -310,8 +310,7 @@ const upgradeCorrectionStatusConstraint = () => {
   const row = db
     .prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'time_correction_requests'")
     .get() as { sql?: string } | undefined;
-  if (!row?.sql) return;
-  const sql = row.sql;
+  const sql = row?.sql || '';
   if (/status[^)]*'canceled'/i.test(sql)) return;
 
   db.exec(`
