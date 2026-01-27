@@ -228,6 +228,12 @@ CREATE TABLE IF NOT EXISTS absence_requests (
 
 type TableColumn = { name: string };
 const ensureTableColumn = (table: string, name: string, definition: string) => {
+  const tableExists = db
+    .prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?")
+    .get(table);
+  if (!tableExists) {
+    return false;
+  }
   const columns = db.prepare(`PRAGMA table_info('${table}')`).all() as TableColumn[];
   const exists = columns.some((column) => column.name === name);
   if (!exists) {
