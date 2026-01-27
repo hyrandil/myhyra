@@ -59,8 +59,9 @@ router.post('/login', (req: AuthRequest, res) => {
   if (!valid) {
     return res.status(401).json({ message: 'Ungültige Zugangsdaten' });
   }
-  req.session.userId = user.id;
-  req.session.role = user.role;
+  const session = req.session as typeof req.session & { userId?: number; role?: string };
+  session.userId = user.id;
+  session.role = user.role;
   const fullName = `${user.first_name ?? ''} ${user.last_name ?? ''}`.trim() || user.name;
   const profile = db
     .prepare('SELECT require_location FROM user_profiles WHERE user_id = ?')

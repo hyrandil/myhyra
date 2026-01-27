@@ -15,7 +15,8 @@ function applyNoCacheHeaders(res: Response) {
 }
 
 export function requireAuth(req: AuthRequest, res: Response, next: NextFunction) {
-  const userId = req.session.userId;
+  const session = req.session as typeof req.session & { userId?: number; role?: Role };
+  const userId = session.userId;
   if (!userId) {
     return res.redirect('/login');
   }
