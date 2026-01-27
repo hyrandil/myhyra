@@ -1,50 +1,42 @@
 import { Request, Response, NextFunction } from 'express';
-import type { Session } from 'express-session';
 import db from './db';
-import type { User, Role } from './types';
-
-type AuthSession = Session & {
-  userId?: number;
-  role?: Role;
-};
-
+import { Role } from './types';
 export interface AuthRequest extends Request {
-  session: AuthSession;
-  user?: User;
+  user?: {
+    id: number;
+    role: Role;
+  };
 }
 
-export const requireAuth = (req: AuthRequest, res: Response, next: NextFunction) => {
-  const session = req.session as AuthSession;
+function applyNoCacheHeaders(res: Response) {
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Expires', '0');
+}
 
-  if (!session.userId) {
-    return res.status(401).json({ message: 'Nicht eingeloggt' });
+export function requireAuth(req: AuthRequest, res: Response, next: NextFunction) {
+  const userId = req.session.userId;
+  if (!userId) {
+    return res.redirect('/login');
   }
-
   const user = db
-    .prepare('SELECT * FROM users WHERE id = ?')
-    .get(session.userId) as User | undefined;
-
-  if (!user) {
-    return res.status(401).json({ message: 'Benutzer nicht gefunden' });
+    .prepare('SELECT id, role, active FROM users WHERE id = ?')
+    .get(userId) as { id: number; role: Role; active: number } | undefined;
+  if (!user || !user.active) {
+    req.session.destroy(() => undefined);
+    res.clearCookie('sid');
+    return res.redirect('/login');
   }
-
-  if (!user.active) {
-    return res.status(403).json({ message: 'Dieser Zugang wurde deaktiviert' });
-  }
-
-  req.user = user;
+  req.user = { id: user.id, role: user.role };
+  applyNoCacheHeaders(res);
   next();
-};
+}
 
-export const authorize = (roles: Role[]) => {
+export function authorize(roles: Role[]) {
   return (req: AuthRequest, res: Response, next: NextFunction) => {
-    const session = req.session as AuthSession;
-    const role = session.role ?? req.user?.role;
-
-    if (!role || !roles.includes(role)) {
+    if (!req.user || !roles.includes(req.user.role)) {
       return res.status(403).json({ message: 'Keine Berechtigung' });
     }
-
     next();
   };
-};
+}
