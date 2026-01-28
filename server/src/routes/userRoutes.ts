@@ -1050,7 +1050,7 @@ router.get('/:id/flex', (req, res) => {
   res.json({ balanceMinutes, plannedMinutes: plannedTotal, workedMinutes: workedTotal, adjustment, enabled });
 });
 
-router.patch('/:id/flex', (req, res) => {
+router.patch('/:id/flex', (req: AuthRequest, res: Response) => {
   const userId = Number(req.params.id);
   if (Number.isNaN(userId)) {
     return res.status(400).json({ message: 'Ungültige Nutzer-ID' });
