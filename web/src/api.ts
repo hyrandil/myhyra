@@ -66,6 +66,11 @@ export async function updateUserFlex(id: number, payload: { enabled: boolean; ad
   return res.data as { balanceMinutes: number; adjustment: number; enabled: boolean };
 }
 
+export async function updateUserVacationAdjustment(id: number, payload: { delta: number }) {
+  const res = await api.patch(`/users/${id}/vacation-adjust`, payload);
+  return res.data as { adjustment: number };
+}
+
 export async function fetchHolidayProfiles() {
   const res = await api.get<HolidayProfile[]>('/holidays/profiles');
   return res.data;
