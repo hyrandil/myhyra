@@ -159,11 +159,11 @@ export function PlanningPage() {
   }, [schedules.data, selectedUser]);
 
   return (
-    <div className="space-y-4">
-      <div className="card p-4 flex items-center justify-between">
+    <div className="space-y-6">
+      <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
         <div>
-          <p className="text-xs uppercase text-slate-500">Arbeitszeiten</p>
-          <h2 className="text-2xl font-semibold">Stundenplanung</h2>
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Arbeitszeiten</p>
+          <h2 className="text-2xl font-semibold text-slate-900">Stundenplanung</h2>
           <p className="text-sm text-slate-500">Sollzeiten pro Wochentag je Mitarbeiter festlegen.</p>
         </div>
       </div>

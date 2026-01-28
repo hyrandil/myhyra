@@ -395,21 +395,32 @@ export function TimesPage() {
   };
 
   return (
-    <div className="space-y-4">
-      <div className="card p-4 flex items-center justify-between">
+    <div className="space-y-6">
+      <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Zeiterfassung</p>
+            <h2 className="text-2xl font-semibold text-slate-900">Kalender & Zeiten</h2>
+            <p className="text-sm text-slate-500">Plane, prüfe und korrigiere Tagesbuchungen zentral.</p>
+          </div>
+          <div className="flex gap-2">
+            <button className="btn-ghost" onClick={() => goto(-1)}>← Vorheriger</button>
+            <button className="btn-ghost" onClick={() => goto(1)}>Nächster →</button>
+          </div>
+        </div>
+      </div>
+
+      <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm flex items-center justify-between">
         <div>
           <p className="text-xs uppercase text-slate-500">Monat</p>
           <h2 className="text-2xl font-semibold">{monthLabel}</h2>
           <p className="text-sm text-slate-500">Kompakte Kalenderansicht mit Statusfarben</p>
         </div>
-        <div className="flex gap-2">
-          <button className="btn-ghost" onClick={() => goto(-1)}>← Vorheriger</button>
-          <button className="btn-ghost" onClick={() => goto(1)}>Nächster →</button>
-        </div>
+        <div className="text-sm text-slate-500">Ausgewählter Zeitraum</div>
       </div>
 
       {enableManagement && (
-        <div className="card p-4 space-y-2">
+        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm space-y-2">
           <div className="flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
             <div>
               <p className="text-xs uppercase text-slate-500">Ziel</p>
