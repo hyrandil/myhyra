@@ -230,8 +230,8 @@ function insertEntry(
 }
 
 function buildMonthlyReport(userId: number, monthValue?: string) {
-  const today = new Date();
-  const baseMonth = monthValue || `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
+  const nowDate = new Date();
+  const baseMonth = monthValue || `${nowDate.getFullYear()}-${String(nowDate.getMonth() + 1).padStart(2, '0')}`;
   const baseDate = new Date(`${baseMonth}-01T00:00:00Z`);
   const start = new Date(Date.UTC(baseDate.getUTCFullYear(), baseDate.getUTCMonth(), 1));
   const end = new Date(Date.UTC(baseDate.getUTCFullYear(), baseDate.getUTCMonth() + 1, 0));
@@ -404,7 +404,7 @@ function buildMonthlyReport(userId: number, monthValue?: string) {
   const displayName = [userRow?.first_name, userRow?.last_name].filter(Boolean).join(' ') || userRow?.name || '';
   const baseAllowance = userRow?.vacation_allowance ?? 0;
   const year = Number(baseMonth.slice(0, 4));
-  const today = new Date().toISOString().slice(0, 10);
+  const todayIso = new Date().toISOString().slice(0, 10);
   const prevYearStart = `${year - 1}-01-01`;
   const prevYearEnd = `${year - 1}-12-31`;
   const currentYearStart = `${year}-01-01`;
@@ -425,7 +425,7 @@ function buildMonthlyReport(userId: number, monthValue?: string) {
   const prevUsed = Array.from(prevUsage.usedByDay.values()).reduce((sum, value) => sum + value, 0);
   const carryOver = Math.max(baseAllowance - prevUsed, 0);
   const allowance = baseAllowance + carryOver;
-  const currentUsage = buildVacationPortions(userId, vacationAbsences, currentYearStart, currentYearEnd, today);
+  const currentUsage = buildVacationPortions(userId, vacationAbsences, currentYearStart, currentYearEnd, todayIso);
   const currentUsed = Array.from(currentUsage.usedByDay.values()).reduce((sum, value) => sum + value, 0);
   const remaining = Math.max(allowance - currentUsed, 0);
   const dailySnapshot = buildDailySummary(userId, baseMonth);
