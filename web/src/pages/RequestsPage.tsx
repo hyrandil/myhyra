@@ -184,10 +184,10 @@ export function RequestsPage({ view = 'hub' }: { view?: RequestView }) {
   }
 
   const header = (
-    <div className="card p-4 flex items-center justify-between">
+    <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
       <div>
-        <p className="text-xs uppercase text-slate-500">Anträge</p>
-        <h2 className="text-2xl font-semibold">
+        <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Anträge</p>
+        <h2 className="text-2xl font-semibold text-slate-900">
           {view === 'absence'
             ? 'Abwesenheitsanträge'
             : view === 'correction'
@@ -201,7 +201,7 @@ export function RequestsPage({ view = 'hub' }: { view?: RequestView }) {
   );
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-6">
       {header}
 
       {view === 'absence' && (

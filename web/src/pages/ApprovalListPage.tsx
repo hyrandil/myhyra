@@ -51,16 +51,18 @@ export function ApprovalListPage() {
   });
 
   return (
-    <div className="space-y-4">
-      <div className="card p-4 flex items-center justify-between">
-        <div>
-          <p className="text-xs uppercase text-slate-500">Genehmigungen</p>
-          <h2 className="text-2xl font-semibold">Offene Anträge</h2>
-          <p className="text-sm text-slate-500">Abwesenheiten und Korrekturen gebündelt bearbeiten.</p>
+    <div className="space-y-6">
+      <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Genehmigungen</p>
+            <h2 className="text-2xl font-semibold text-slate-900">Offene Anträge</h2>
+            <p className="text-sm text-slate-500">Abwesenheiten und Korrekturen gebündelt bearbeiten.</p>
+          </div>
+          <Link to="/antraege" className="btn-ghost border border-slate-200">
+            Zurück zu Anträge
+          </Link>
         </div>
-        <Link to="/antraege" className="btn-ghost border border-slate-200">
-          Zurück zu Anträge
-        </Link>
       </div>
 
       <div className="grid gap-4 lg:grid-cols-2">
