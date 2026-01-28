@@ -230,8 +230,8 @@ function insertEntry(
 }
 
 function buildMonthlyReport(userId: number, monthValue?: string) {
-  const today = new Date();
-  const baseMonth = monthValue || `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
+  const nowDate = new Date();
+  const baseMonth = monthValue || `${nowDate.getFullYear()}-${String(nowDate.getMonth() + 1).padStart(2, '0')}`;
   const baseDate = new Date(`${baseMonth}-01T00:00:00Z`);
   const start = new Date(Date.UTC(baseDate.getUTCFullYear(), baseDate.getUTCMonth(), 1));
   const end = new Date(Date.UTC(baseDate.getUTCFullYear(), baseDate.getUTCMonth() + 1, 0));
@@ -386,6 +386,7 @@ function buildMonthlyReport(userId: number, monthValue?: string) {
   const userRow = db
     .prepare(
       `SELECT u.first_name, u.last_name, u.name, u.email, up.personnel_number, us.vacation_allowance
+       , us.vacation_adjust_days, up.tracking_start_date, up.start_date
        FROM users u
        LEFT JOIN user_profiles up ON up.user_id = u.id
        LEFT JOIN user_settings us ON us.user_id = u.id
@@ -399,12 +400,18 @@ function buildMonthlyReport(userId: number, monthValue?: string) {
         email?: string | null;
         personnel_number?: string | null;
         vacation_allowance?: number | null;
+        vacation_adjust_days?: number | null;
+        tracking_start_date?: string | null;
+        start_date?: string | null;
       }
     | undefined;
   const displayName = [userRow?.first_name, userRow?.last_name].filter(Boolean).join(' ') || userRow?.name || '';
   const baseAllowance = userRow?.vacation_allowance ?? 0;
+  const adjustmentDays = userRow?.vacation_adjust_days ?? 0;
+  const trackingStartValue = userRow?.tracking_start_date || userRow?.start_date || null;
+  const trackingStartDate = trackingStartValue ? new Date(`${trackingStartValue}T00:00:00Z`) : null;
   const year = Number(baseMonth.slice(0, 4));
-  const today = new Date().toISOString().slice(0, 10);
+  const todayIso = new Date().toISOString().slice(0, 10);
   const prevYearStart = `${year - 1}-01-01`;
   const prevYearEnd = `${year - 1}-12-31`;
   const currentYearStart = `${year}-01-01`;
@@ -423,11 +430,16 @@ function buildMonthlyReport(userId: number, monthValue?: string) {
     }[];
   const prevUsage = buildVacationPortions(userId, vacationAbsences, prevYearStart, prevYearEnd, prevYearEnd);
   const prevUsed = Array.from(prevUsage.usedByDay.values()).reduce((sum, value) => sum + value, 0);
-  const carryOver = Math.max(baseAllowance - prevUsed, 0);
-  const allowance = baseAllowance + carryOver;
-  const currentUsage = buildVacationPortions(userId, vacationAbsences, currentYearStart, currentYearEnd, today);
+  const prevYearEndDate = new Date(`${prevYearEnd}T00:00:00Z`);
+  const currentYearEndDate = new Date(`${currentYearEnd}T00:00:00Z`);
+  const isActiveForYear = !trackingStartDate || trackingStartDate.getTime() <= currentYearEndDate.getTime();
+  const baseAllowanceForYear = isActiveForYear ? baseAllowance : 0;
+  const allowCarryOver = !trackingStartDate || trackingStartDate.getTime() <= prevYearEndDate.getTime();
+  const carryOver = allowCarryOver ? Math.max(baseAllowanceForYear - prevUsed, 0) : 0;
+  const allowance = baseAllowanceForYear + carryOver;
+  const currentUsage = buildVacationPortions(userId, vacationAbsences, currentYearStart, currentYearEnd, todayIso);
   const currentUsed = Array.from(currentUsage.usedByDay.values()).reduce((sum, value) => sum + value, 0);
-  const remaining = Math.max(allowance - currentUsed, 0);
+  const remaining = allowance - currentUsed + adjustmentDays;
   const dailySnapshot = buildDailySummary(userId, baseMonth);
 
   return {
@@ -711,10 +723,15 @@ function buildDailySummary(userId: number, month?: string, maskAbsences = false)
     cursor.setUTCDate(cursor.getUTCDate() + 1);
   }
 
+  const flexAdjustment =
+    (db.prepare('SELECT flex_adjust_minutes FROM user_settings WHERE user_id = ?').get(userId) as
+      | { flex_adjust_minutes?: number }
+      | undefined)?.flex_adjust_minutes ?? 0;
+
   return {
     month: `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, '0')}`,
     days,
-    flexBalance: flexCarry,
+    flexBalance: flexCarry + flexAdjustment,
   };
 }
 

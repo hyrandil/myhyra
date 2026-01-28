@@ -2,14 +2,10 @@ import { useEffect, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   addCustomHoliday,
-  createHolidayProfile,
-  deleteHolidayProfile,
   fetchEmployees,
   fetchHolidayProfiles,
   fetchProfileHolidays,
   fetchSchedule,
-  importHolidayProfile,
-  updateHolidayProfile,
   deleteLatestScheduleVersion,
   updateSchedule,
 } from '../api';
@@ -44,10 +40,6 @@ export function PlanningPage() {
   const [validFrom, setValidFrom] = useState<string>('');
   const [selectedProfile, setSelectedProfile] = useState<number | null>(null);
   const [holidayYear, setHolidayYear] = useState<number>(new Date().getFullYear());
-  const [ruleStartYear, setRuleStartYear] = useState<number | ''>('');
-  const [ruleEndYear, setRuleEndYear] = useState<number | ''>('');
-  const [profileName, setProfileName] = useState('');
-  const [profileState, setProfileState] = useState('');
 
   const { data: employees } = useQuery({
     queryKey: ['employees', 'planning'],
@@ -90,34 +82,6 @@ export function PlanningPage() {
     },
   });
 
-  const profileCreateMutation = useMutation({
-    mutationFn: (payload: { name: string; state: string; year?: number; years?: number[]; startYear?: number; endYear?: number }) =>
-      createHolidayProfile(payload),
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ['holiday-profiles'] });
-    },
-  });
-
-  const profileImportMutation = useMutation({
-    mutationFn: ({ id, payload }: { id: number; payload: { year?: number; years?: number[]; startYear?: number; endYear?: number } }) =>
-      importHolidayProfile(id, payload),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['holiday-profile'] }),
-  });
-
-  const profileUpdateMutation = useMutation({
-    mutationFn: ({ id, payload }: { id: number; payload: { name: string; state: string } }) => updateHolidayProfile(id, payload),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['holiday-profiles'] }),
-  });
-
-  const profileDeleteMutation = useMutation({
-    mutationFn: (id: number) => deleteHolidayProfile(id),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['holiday-profiles'] });
-      queryClient.invalidateQueries({ queryKey: ['holiday-profile'] });
-      setSelectedProfile(null);
-    },
-  });
-
   const addHolidayMutation = useMutation({
     mutationFn: ({ id, payload }: { id: number; payload: { date: string; name: string; duration: 'full' | 'half' } }) =>
       addCustomHoliday(id, payload),
@@ -137,15 +101,6 @@ export function PlanningPage() {
   }, [selectedProfile, profiles.data]);
 
   useEffect(() => {
-    if (!selectedProfile || !profiles.data) return;
-    const profile = profiles.data.find((p: HolidayProfile) => p.id === selectedProfile);
-    if (profile) {
-      setProfileName(profile.name);
-      setProfileState(profile.state);
-    }
-  }, [selectedProfile, profiles.data]);
-
-  useEffect(() => {
     const base = new Map<number, number>();
     if (schedules.data?.days) {
       schedules.data.days.forEach((d) => base.set(d.weekday, d.minutes));
@@ -159,33 +114,39 @@ export function PlanningPage() {
   }, [schedules.data, selectedUser]);
 
   return (
-    <div className="space-y-4">
-      <div className="card p-4 flex items-center justify-between">
+    <div className="space-y-6">
+      <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
         <div>
-          <p className="text-xs uppercase text-slate-500">Arbeitszeiten</p>
-          <h2 className="text-2xl font-semibold">Stundenplanung</h2>
-          <p className="text-sm text-slate-500">Sollzeiten pro Wochentag je Mitarbeiter festlegen.</p>
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Arbeitszeiten</p>
+          <h2 className="text-2xl font-semibold text-slate-900">Stundenplanung</h2>
+          <p className="text-sm text-slate-500">Sollzeiten, Gültigkeit und Profile im Überblick.</p>
         </div>
       </div>
 
-      <div className="card p-4 space-y-3">
-        <div className="flex flex-col md:flex-row md:items-center gap-3">
-          <label className="text-sm text-slate-600">Mitarbeiter</label>
-          <select
-            className="input"
-            value={selectedUser ?? ''}
-            onChange={(e) => setSelectedUser(Number(e.target.value))}
-          >
-            {(employees as Employee[] | undefined)?.map((emp) => (
-              <option key={emp.id} value={emp.id}>
-                {emp.name} ({emp.personnelNumber || emp.email})
-              </option>
-            ))}
-          </select>
+      <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+          <div>
+            <h3 className="text-lg font-semibold text-slate-900">Sollzeitprofil</h3>
+            <p className="text-sm text-slate-500">Arbeitszeiten pro Wochentag für Mitarbeitende.</p>
+          </div>
+          <div className="flex flex-col gap-2 md:flex-row md:items-center">
+            <label className="text-sm text-slate-600">Mitarbeiter</label>
+            <select
+              className="input"
+              value={selectedUser ?? ''}
+              onChange={(e) => setSelectedUser(Number(e.target.value))}
+            >
+              {(employees as Employee[] | undefined)?.map((emp) => (
+                <option key={emp.id} value={emp.id}>
+                  {emp.name} ({emp.personnelNumber || emp.email})
+                </option>
+              ))}
+            </select>
+          </div>
         </div>
 
         <form
-          className="grid md:grid-cols-2 gap-3"
+          className="mt-4 grid gap-4 lg:grid-cols-[1.4fr,1fr]"
           onSubmit={(e) => {
             e.preventDefault();
             if (!selectedUser) return;
@@ -197,58 +158,74 @@ export function PlanningPage() {
             updateMutation.mutate({ userId: selectedUser, days: payload, validFrom: validFrom || undefined });
           }}
         >
-          {weekdayLabels.map((label, idx) => (
-            <label key={label} className="text-sm text-slate-700 flex flex-col">
-              {label}
-              <div className="flex items-center gap-2 mt-1">
-                <input
-                  name={`day-${idx}`}
-                  type="number"
-                  step="0.25"
-                  min="0"
-                  value={(dayMinutes[idx] ?? 0) / 60}
-                  onChange={(e) => {
-                    const clone = [...dayMinutes];
-                    clone[idx] = Number(e.target.value) * 60;
-                    setDayMinutes(clone);
-                  }}
-                  className="input flex-1"
-                />
-                <span className="text-xs text-slate-500">Stunden</span>
-              </div>
-            </label>
-          ))}
-          <div className="md:col-span-2 flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-            <div className="flex items-center gap-2">
-              <label className="text-sm text-slate-600">Änderung gültig ab</label>
-              <input
-                type="date"
-                className="input"
-                value={validFrom}
-                onChange={(e) => setValidFrom(e.target.value)}
-                required
-              />
+          <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+            <p className="text-xs font-semibold uppercase text-slate-400">Wochentage</p>
+            <div className="mt-3 grid gap-3 sm:grid-cols-2">
+              {weekdayLabels.map((label, idx) => (
+                <label key={label} className="text-sm text-slate-700 flex flex-col">
+                  {label}
+                  <div className="flex items-center gap-2 mt-1">
+                    <input
+                      name={`day-${idx}`}
+                      type="number"
+                      step="0.25"
+                      min="0"
+                      value={(dayMinutes[idx] ?? 0) / 60}
+                      onChange={(e) => {
+                        const clone = [...dayMinutes];
+                        clone[idx] = Number(e.target.value) * 60;
+                        setDayMinutes(clone);
+                      }}
+                      className="input flex-1"
+                    />
+                    <span className="text-xs text-slate-500">h</span>
+                  </div>
+                </label>
+              ))}
             </div>
-            <div className="flex items-center gap-2">
+          </div>
+          <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 space-y-4">
+            <div>
+              <p className="text-xs font-semibold uppercase text-slate-400">Gültigkeit</p>
+              <div className="mt-2 flex items-center gap-2">
+                <label className="text-sm text-slate-600">Änderung gültig ab</label>
+                <input
+                  type="date"
+                  className="input"
+                  value={validFrom}
+                  onChange={(e) => setValidFrom(e.target.value)}
+                  required
+                />
+              </div>
+            </div>
+            <div className="rounded-lg border border-dashed border-slate-300 bg-white p-3 text-xs text-slate-500">
+              Änderungen greifen ab dem gewählten Datum und überschreiben ältere Sollzeiten.
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
               <button
                 type="button"
-                className="btn-secondary"
+                className="btn-ghost border border-slate-200"
                 disabled={deleteVersionMutation.isPending || !selectedUser}
                 onClick={() => selectedUser && deleteVersionMutation.mutate(selectedUser)}
               >
                 Letzte Version löschen
               </button>
               <button className="btn-primary" type="submit" disabled={updateMutation.isPending}>
-                Speichern
+                Sollzeiten speichern
               </button>
+              {schedules.data?.history?.length ? (
+                <span className="text-xs text-slate-500">
+                  Letzte Änderung: {schedules.data.history.at(-1)?.validFrom}
+                </span>
+              ) : null}
             </div>
           </div>
         </form>
       </div>
 
       {schedules.data?.history && schedules.data.history.length > 0 && (
-        <div className="card p-4 space-y-2">
-          <p className="text-xs uppercase text-slate-500">Historie</p>
+        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm space-y-2">
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Historie</p>
           <div className="space-y-2">
             {schedules.data.history.map((entry) => (
               <div key={entry.id} className="border rounded p-3 flex flex-col md:flex-row md:items-center md:justify-between">
@@ -268,210 +245,116 @@ export function PlanningPage() {
         </div>
       )}
 
-      <div className="card p-4 space-y-3">
+      <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm space-y-4">
         <div className="flex flex-col md:flex-row md:items-center gap-3">
           <div>
-            <p className="text-xs uppercase text-slate-500">Feiertage</p>
-            <h3 className="text-lg font-semibold">Unternehmensweite Feiertagsprofile</h3>
-            <p className="text-sm text-slate-500">Profile anlegen, Bundesland importieren, eigene Tage ergänzen.</p>
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Feiertage</p>
+            <h3 className="text-lg font-semibold text-slate-900">Feiertage pro Bundesland</h3>
+            <p className="text-sm text-slate-500">Vorbelegte Profile bis 2099, individuell anpassbar.</p>
           </div>
         </div>
-        <div className="grid md:grid-cols-2 gap-3">
-          <form
-            className="flex flex-col gap-2"
-            onSubmit={(e) => {
-              e.preventDefault();
-              const form = new FormData(e.currentTarget);
-              const yearValue = Number(form.get('year') || '') || undefined;
-              profileCreateMutation.mutate({
-                name: String(form.get('profileName') || ''),
-                state: String(form.get('state') || ''),
-                year: yearValue,
-              });
-              e.currentTarget.reset();
-            }}
-          >
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
-              <input name="profileName" placeholder="Profilname" className="input" required />
-              <select name="state" className="input" required defaultValue="">
-                <option value="">Bundesland</option>
-                {Object.entries(stateLabels).map(([code, name]) => (
-                  <option key={code} value={code}>
-                    {name}
-                  </option>
-                ))}
-              </select>
-              <input name="year" type="number" min="2020" max="2100" placeholder="Jahr (optional)" className="input" />
-            </div>
-            <button className="btn-primary self-start" type="submit" disabled={profileCreateMutation.isPending}>
-              Profil anlegen & Feiertage importieren
-            </button>
-          </form>
-
-          <div className="border rounded-lg p-3 space-y-2">
-            <div className="flex gap-2 items-center">
+        <div className="grid gap-4 lg:grid-cols-[1fr,1.4fr]">
+          <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 space-y-4">
+            <div className="space-y-2">
+              <label className="text-xs text-slate-500">Bundesland</label>
               <select
-                className="input flex-1"
+                className="input"
                 value={selectedProfile ?? ''}
                 onChange={(e) => setSelectedProfile(Number(e.target.value))}
               >
                 {(profiles.data as HolidayProfile[] | undefined)?.map((profile) => (
                   <option key={profile.id} value={profile.id}>
-                    {profile.name} · {stateLabels[profile.state] ?? profile.state}
+                    {stateLabels[profile.state] ?? profile.state}
                   </option>
                 ))}
               </select>
+            </div>
+            <div className="space-y-2">
+              <label className="text-xs text-slate-500">Jahr</label>
               <input
                 type="number"
-                className="input w-24"
+                min="2020"
+                max="2099"
+                className="input"
                 value={holidayYear}
                 onChange={(e) => setHolidayYear(Number(e.target.value) || holidayYear)}
               />
-              <button
-                className="btn-ghost"
-                type="button"
-                disabled={!selectedProfile || profileImportMutation.isPending}
-                onClick={() =>
-                  selectedProfile &&
-                  profileImportMutation.mutate({
+            </div>
+            <div className="rounded-lg border border-dashed border-slate-300 bg-white p-3 text-xs text-slate-500">
+              Alle Feiertage sind bereits bis 2099 eingetragen. Änderungen wirken nur für das gewählte Jahr.
+            </div>
+            <div className="border-t border-slate-200 pt-3 space-y-2">
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Neuen Feiertag hinzufügen</p>
+              <form
+                className="grid grid-cols-1 md:grid-cols-3 gap-2"
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  if (!selectedProfile) return;
+                  const form = new FormData(e.currentTarget);
+                  addHolidayMutation.mutate({
                     id: selectedProfile,
                     payload: {
-                      year: holidayYear,
+                      date: String(form.get('holidayDate') || ''),
+                      name: String(form.get('holidayName') || ''),
+                      duration: (form.get('holidayDuration') as 'full' | 'half') ?? 'full',
                     },
-                  })
-                }
+                  });
+                  e.currentTarget.reset();
+                }}
               >
-                Jahr neu laden
-              </button>
-            </div>
-            {selectedProfile && (
-              <p className="text-xs text-slate-500">
-                Aktuelles Profil: {(profiles.data as HolidayProfile[] | undefined)?.find((p) => p.id === selectedProfile)?.name}{' '}
-                ({stateLabels[(profiles.data as HolidayProfile[] | undefined)?.find((p) => p.id === selectedProfile)?.state ?? ''] ??
-                  (profiles.data as HolidayProfile[] | undefined)?.find((p) => p.id === selectedProfile)?.state ??
-                  ''})
-              </p>
-            )}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
-              <div className="md:col-span-3 text-xs uppercase text-slate-500">Regelfeiertage (mehrere Jahre)</div>
-              <input
-                type="number"
-                className="input"
-                placeholder="Startjahr"
-                value={ruleStartYear}
-                onChange={(e) => setRuleStartYear(e.target.value === '' ? '' : Number(e.target.value))}
-              />
-              <input
-                type="number"
-                className="input"
-                placeholder="Endjahr"
-                value={ruleEndYear}
-                onChange={(e) => setRuleEndYear(e.target.value === '' ? '' : Number(e.target.value))}
-              />
-              <button
-                className="btn-secondary"
-                type="button"
-                disabled={!selectedProfile || profileImportMutation.isPending || !ruleStartYear || !ruleEndYear}
-                onClick={() =>
-                  selectedProfile &&
-                  profileImportMutation.mutate({
-                    id: selectedProfile,
-                    payload: {
-                      startYear: typeof ruleStartYear === 'number' ? ruleStartYear : undefined,
-                      endYear: typeof ruleEndYear === 'number' ? ruleEndYear : undefined,
-                    },
-                  })
-                }
-              >
-                Regelfeiertage laden
-              </button>
-            </div>
-            <form
-              className="grid grid-cols-1 md:grid-cols-3 gap-2 border-t border-slate-200 pt-3"
-              onSubmit={(e) => {
-                e.preventDefault();
-                if (!selectedProfile) return;
-                profileUpdateMutation.mutate({
-                  id: selectedProfile,
-                  payload: { name: profileName, state: profileState },
-                });
-              }}
-            >
-              <div className="md:col-span-3 text-xs uppercase text-slate-500">Profil bearbeiten</div>
-              <input
-                className="input"
-                value={profileName}
-                onChange={(e) => setProfileName(e.target.value)}
-                placeholder="Profilname"
-              />
-              <select
-                className="input"
-                value={profileState}
-                onChange={(e) => setProfileState(e.target.value)}
-              >
-                <option value="">Bundesland</option>
-                {Object.entries(stateLabels).map(([code, name]) => (
-                  <option key={code} value={code}>
-                    {name}
-                  </option>
-                ))}
-              </select>
-              <div className="flex gap-2">
-                <button className="btn-primary" type="submit" disabled={!selectedProfile || profileUpdateMutation.isPending}>
-                  Speichern
-                </button>
-                <button
-                  className="btn-ghost border border-rose-200 text-rose-700"
-                  type="button"
-                  disabled={!selectedProfile || profileDeleteMutation.isPending}
-                  onClick={() => {
-                    if (!selectedProfile) return;
-                    if (window.confirm('Feiertagsprofil wirklich löschen?')) {
-                      profileDeleteMutation.mutate(selectedProfile);
-                    }
-                  }}
-                >
-                  Löschen
-                </button>
-              </div>
-            </form>
-            <form
-              className="grid grid-cols-1 md:grid-cols-3 gap-2"
-              onSubmit={(e) => {
-                e.preventDefault();
-                if (!selectedProfile) return;
-                const form = new FormData(e.currentTarget);
-                addHolidayMutation.mutate({
-                  id: selectedProfile,
-                  payload: {
-                    date: String(form.get('holidayDate') || ''),
-                    name: String(form.get('holidayName') || ''),
-                    duration: (form.get('holidayDuration') as 'full' | 'half') ?? 'full',
-                  },
-                });
-              }}
-            >
-              <input name="holidayDate" type="date" required className="input" />
-              <input name="holidayName" required placeholder="Name" className="input" />
-              <select name="holidayDuration" className="input" defaultValue="full">
-                <option value="full">Ganzer Feiertag</option>
-                <option value="half">Halber Feiertag</option>
-              </select>
-              <div className="md:col-span-3 flex justify-end">
-                <button className="btn-primary" type="submit" disabled={addHolidayMutation.isPending || !selectedProfile}>
-                  Individuellen Tag speichern
-                </button>
-              </div>
-            </form>
-            <div className="max-h-48 overflow-auto divide-y">
-              {(profileHolidays.data as HolidayEntry[] | undefined)?.map((holiday) => (
-                <div key={`${holiday.date}-${holiday.name}`} className="py-1 flex justify-between text-sm">
-                  <span>
-                    {holiday.date}: {holiday.name}
-                  </span>
-                  <span className="text-slate-500">{holiday.duration === 'half' ? '0,5' : '1,0'} Tag</span>
+                <input name="holidayDate" type="date" required className="input" />
+                <input name="holidayName" required placeholder="Name" className="input" />
+                <select name="holidayDuration" className="input" defaultValue="full">
+                  <option value="full">Ganzer Feiertag</option>
+                  <option value="half">Halber Feiertag</option>
+                </select>
+                <div className="md:col-span-3 flex justify-end">
+                  <button className="btn-primary" type="submit" disabled={addHolidayMutation.isPending || !selectedProfile}>
+                    Feiertag speichern
+                  </button>
                 </div>
-              )) || <p className="text-sm text-slate-500">Keine Feiertage geladen.</p>}
+              </form>
+            </div>
+          </div>
+          <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 space-y-3">
+            <div className="flex items-center justify-between">
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Feiertage bearbeiten</p>
+              <span className="text-xs text-slate-500">{holidayYear}</span>
+            </div>
+            <div className="max-h-[420px] overflow-auto divide-y">
+              {(profileHolidays.data as HolidayEntry[] | undefined)?.length ? (
+                (profileHolidays.data as HolidayEntry[]).map((holiday) => (
+                  <form
+                    key={`${holiday.date}-${holiday.name}`}
+                    className="py-3 grid grid-cols-1 gap-2 md:grid-cols-[1fr,1.4fr,0.8fr,auto]"
+                    onSubmit={(e) => {
+                      e.preventDefault();
+                      if (!selectedProfile) return;
+                      const form = new FormData(e.currentTarget);
+                      addHolidayMutation.mutate({
+                        id: selectedProfile,
+                        payload: {
+                          date: holiday.date,
+                          name: String(form.get('name') || holiday.name),
+                          duration: (form.get('duration') as 'full' | 'half') ?? holiday.duration,
+                        },
+                      });
+                    }}
+                  >
+                    <input className="input" value={holiday.date} readOnly />
+                    <input className="input" name="name" defaultValue={holiday.name} />
+                    <select className="input" name="duration" defaultValue={holiday.duration}>
+                      <option value="full">Ganzer Tag</option>
+                      <option value="half">Halber Tag</option>
+                    </select>
+                    <button className="btn-ghost border border-slate-200" type="submit">
+                      Speichern
+                    </button>
+                  </form>
+                ))
+              ) : (
+                <p className="text-sm text-slate-500">Keine Feiertage geladen.</p>
+              )}
             </div>
           </div>
         </div>
