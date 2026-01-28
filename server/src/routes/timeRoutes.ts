@@ -711,10 +711,15 @@ function buildDailySummary(userId: number, month?: string, maskAbsences = false)
     cursor.setUTCDate(cursor.getUTCDate() + 1);
   }
 
+  const flexAdjustment =
+    (db.prepare('SELECT flex_adjust_minutes FROM user_settings WHERE user_id = ?').get(userId) as
+      | { flex_adjust_minutes?: number }
+      | undefined)?.flex_adjust_minutes ?? 0;
+
   return {
     month: `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, '0')}`,
     days,
-    flexBalance: flexCarry,
+    flexBalance: flexCarry + flexAdjustment,
   };
 }
 
