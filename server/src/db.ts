@@ -88,6 +88,7 @@ CREATE TABLE IF NOT EXISTS user_settings (
   flex_enabled INTEGER NOT NULL DEFAULT 0,
   flex_adjust_minutes INTEGER NOT NULL DEFAULT 0,
   vacation_allowance REAL NOT NULL DEFAULT 30,
+  vacation_adjust_days REAL NOT NULL DEFAULT 0,
   FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
 );
 
@@ -362,10 +363,12 @@ ensureTableColumn('user_settings', 'week_start', "week_start TEXT NOT NULL DEFAU
 ensureTableColumn('user_settings', 'time_format', "time_format TEXT NOT NULL DEFAULT '24h'");
 ensureTableColumn('user_settings', 'flex_enabled', 'flex_enabled INTEGER NOT NULL DEFAULT 0');
 ensureTableColumn('user_settings', 'flex_adjust_minutes', 'flex_adjust_minutes INTEGER NOT NULL DEFAULT 0');
+ensureTableColumn('user_settings', 'vacation_adjust_days', 'vacation_adjust_days REAL NOT NULL DEFAULT 0');
 db.prepare("UPDATE user_settings SET week_start = 'monday' WHERE week_start IS NULL").run();
 db.prepare("UPDATE user_settings SET time_format = '24h' WHERE time_format IS NULL").run();
 db.prepare('UPDATE user_settings SET flex_enabled = 0 WHERE flex_enabled IS NULL').run();
 db.prepare('UPDATE user_settings SET flex_adjust_minutes = 0 WHERE flex_adjust_minutes IS NULL').run();
+db.prepare('UPDATE user_settings SET vacation_adjust_days = 0 WHERE vacation_adjust_days IS NULL').run();
 db.exec(`INSERT OR IGNORE INTO user_settings (user_id) SELECT id FROM users;`);
   ensureTableColumn('absences', 'start_date', 'start_date TEXT');
   ensureTableColumn('absences', 'end_date', 'end_date TEXT');
