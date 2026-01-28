@@ -64,6 +64,7 @@ export function PlanningPage() {
     queryFn: () => fetchProfileHolidays(selectedProfile!, holidayYear),
     enabled: Boolean(selectedProfile),
   });
+  const holidays = (profileHolidays.data as HolidayEntry[] | undefined) ?? [];
 
   const updateMutation = useMutation({
     mutationFn: (payload: { userId: number; days: { weekday: number; minutes: number }[]; validFrom?: string }) =>
@@ -322,8 +323,8 @@ export function PlanningPage() {
               <span className="text-xs text-slate-500">{holidayYear}</span>
             </div>
             <div className="max-h-[420px] overflow-auto divide-y">
-              {(profileHolidays.data as HolidayEntry[] | undefined)?.length ? (
-                (profileHolidays.data as HolidayEntry[]).map((holiday) => (
+              {holidays.length ? (
+                holidays.map((holiday) => (
                   <form
                     key={`${holiday.date}-${holiday.name}`}
                     className="py-3 grid grid-cols-1 gap-2 md:grid-cols-[1fr,1.4fr,0.8fr,auto]"
@@ -355,7 +356,6 @@ export function PlanningPage() {
               ) : (
                 <p className="text-sm text-slate-500">Keine Feiertage geladen.</p>
               )}
-            </div>
             </div>
           </div>
         </div>
