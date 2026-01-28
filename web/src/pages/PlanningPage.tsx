@@ -290,7 +290,7 @@ export function PlanningPage() {
         </div>
       )}
 
-      <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm space-y-3">
+      <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm space-y-4">
         <div className="flex flex-col md:flex-row md:items-center gap-3">
           <div>
             <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Feiertage</p>
@@ -298,7 +298,7 @@ export function PlanningPage() {
             <p className="text-sm text-slate-500">Profile anlegen, Bundesland importieren, eigene Tage ergänzen.</p>
           </div>
         </div>
-        <div className="grid gap-4 lg:grid-cols-[1.1fr,1fr]">
+        <div className="grid gap-4 lg:grid-cols-[1.1fr,1fr,1.2fr]">
           <form
             className="rounded-xl border border-slate-200 bg-slate-50 p-4 flex flex-col gap-3"
             onSubmit={(e) => {
@@ -331,9 +331,11 @@ export function PlanningPage() {
             </button>
           </form>
 
-          <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 space-y-2">
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Profilverwaltung</p>
-            <div className="flex gap-2 items-center">
+          <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 space-y-3">
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Import & Regeln</p>
+            <div className="flex flex-col gap-2">
+              <label className="text-xs text-slate-500">Profil auswählen</label>
+              <div className="flex gap-2 items-center">
               <select
                 className="input flex-1"
                 value={selectedProfile ?? ''}
@@ -351,6 +353,7 @@ export function PlanningPage() {
                 value={holidayYear}
                 onChange={(e) => setHolidayYear(Number(e.target.value) || holidayYear)}
               />
+              </div>
               <button
                 className="btn-ghost border border-slate-200"
                 type="button"
@@ -365,7 +368,7 @@ export function PlanningPage() {
                   })
                 }
               >
-                Jahr neu laden
+                Feiertage für Jahr importieren
               </button>
             </div>
             {selectedProfile && (
@@ -410,8 +413,12 @@ export function PlanningPage() {
                 Regelfeiertage laden
               </button>
             </div>
+          </div>
+
+          <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 space-y-3">
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Profil & Extras</p>
             <form
-              className="grid grid-cols-1 md:grid-cols-3 gap-2 border-t border-slate-200 pt-3"
+              className="grid grid-cols-1 md:grid-cols-3 gap-2"
               onSubmit={(e) => {
                 e.preventDefault();
                 if (!selectedProfile) return;
@@ -421,7 +428,6 @@ export function PlanningPage() {
                 });
               }}
             >
-              <div className="md:col-span-3 text-xs uppercase text-slate-500">Profil bearbeiten</div>
               <input
                 className="input"
                 value={profileName}
@@ -459,6 +465,8 @@ export function PlanningPage() {
                 </button>
               </div>
             </form>
+            <div className="border-t border-slate-200 pt-3 space-y-2">
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Individuelle Feiertage</p>
             <form
               className="grid grid-cols-1 md:grid-cols-3 gap-2"
               onSubmit={(e) => {
@@ -496,6 +504,7 @@ export function PlanningPage() {
                   <span className="text-slate-500">{holiday.duration === 'half' ? '0,5' : '1,0'} Tag</span>
                 </div>
               )) || <p className="text-sm text-slate-500">Keine Feiertage geladen.</p>}
+            </div>
             </div>
           </div>
         </div>
