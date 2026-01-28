@@ -243,12 +243,29 @@ const buildVacationOverview = (userIds: number[], today: string) => {
     .prepare('SELECT id, name, email FROM users WHERE id IN (' + userIds.map(() => '?').join(',') + ')')
     .all(...userIds) as { id: number; name: string; email: string }[];
   const settings = db
-    .prepare('SELECT user_id, vacation_allowance FROM user_settings WHERE user_id IN (' + userIds.map(() => '?').join(',') + ')')
-    .all(...userIds) as { user_id: number; vacation_allowance: number }[];
+    .prepare(
+      'SELECT user_id, vacation_allowance, vacation_adjust_days FROM user_settings WHERE user_id IN (' +
+        userIds.map(() => '?').join(',') +
+        ')'
+    )
+    .all(...userIds) as { user_id: number; vacation_allowance: number; vacation_adjust_days?: number }[];
   const allowanceMap = new Map(settings.map((s) => [s.user_id, s.vacation_allowance]));
+  const adjustmentMap = new Map(settings.map((s) => [s.user_id, s.vacation_adjust_days ?? 0]));
+  const profileRows = db
+    .prepare(
+      'SELECT user_id, tracking_start_date, start_date FROM user_profiles WHERE user_id IN (' +
+        userIds.map(() => '?').join(',') +
+        ')'
+    )
+    .all(...userIds) as { user_id: number; tracking_start_date?: string | null; start_date?: string | null }[];
+  const profileMap = new Map(profileRows.map((row) => [row.user_id, row]));
 
   const results = users.map((user) => {
     const baseAllowance = allowanceMap.get(user.id) ?? 30;
+    const adjustmentDays = adjustmentMap.get(user.id) ?? 0;
+    const profile = profileMap.get(user.id);
+    const trackingStartValue = profile?.tracking_start_date || profile?.start_date || null;
+    const trackingStartDate = trackingStartValue ? new Date(`${trackingStartValue}T00:00:00Z`) : null;
     const absences = db
       .prepare(
         "SELECT start_date, end_date, duration, minutes_override, start_time, end_time FROM absences WHERE user_id = ? AND type = 'vacation' AND canceled != 1"
@@ -263,12 +280,17 @@ const buildVacationOverview = (userIds: number[], today: string) => {
       }[];
     const previous = buildVacationPortions(user.id, absences, prevYearStart, prevYearEnd, prevYearEnd);
     const prevUsed = Array.from(previous.usedByDay.values()).reduce((sum, value) => sum + value, 0);
-    const carryOver = Math.max(baseAllowance - prevUsed, 0);
-    const allowance = baseAllowance + carryOver;
+    const prevYearEndDate = new Date(`${prevYearEnd}T00:00:00Z`);
+    const currentYearEndDate = new Date(`${yearEnd}T00:00:00Z`);
+    const isActiveForYear = !trackingStartDate || trackingStartDate.getTime() <= currentYearEndDate.getTime();
+    const baseAllowanceForYear = isActiveForYear ? baseAllowance : 0;
+    const allowCarryOver = !trackingStartDate || trackingStartDate.getTime() <= prevYearEndDate.getTime();
+    const carryOver = allowCarryOver ? Math.max(baseAllowanceForYear - prevUsed, 0) : 0;
+    const allowance = baseAllowanceForYear + carryOver;
     const current = buildVacationPortions(user.id, absences, yearStart, yearEnd, today);
     const used = Array.from(current.usedByDay.values()).reduce((sum, value) => sum + value, 0);
     const planned = Array.from(current.plannedByDay.values()).reduce((sum, value) => sum + value, 0);
-    const remaining = Math.max(allowance - used - planned, 0);
+    const remaining = allowance - used - planned + adjustmentDays;
     return {
       userId: user.id,
       name: user.name,

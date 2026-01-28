@@ -15,7 +15,8 @@ import {
   updateTimeEntry,
   deleteTimeEntry,
   updateUserFlex,
-  updateEmployeeSettings,
+  updateUserVacationAdjustment,
+  fetchAuditLogs,
 } from '../api';
 import { useAuth } from '../AuthProvider';
 import { AbsenceKind, DailySummary, DayDetail, Employee, TimeEntry, VacationOverviewItem } from '../types';
@@ -90,6 +91,15 @@ export function TimesPage() {
     return date.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit', hour12: false });
   };
 
+  const parseLogDetail = (detail?: string | null) => {
+    if (!detail) return null;
+    try {
+      return JSON.parse(detail) as Record<string, unknown>;
+    } catch {
+      return null;
+    }
+  };
+
   const { data: employees } = useQuery({
     queryKey: ['employees', 'all'],
     queryFn: () => fetchEmployees(),
@@ -152,14 +162,21 @@ export function TimesPage() {
     enabled: enableManagement && Boolean(selectedUserId && selectedDate),
   });
 
-  const selectedEmployee = useMemo(
-    () => (employees ?? []).find((emp) => emp.id === selectedUserId),
-    [employees, selectedUserId]
-  );
-
   const flexInfo = useQuery({
     queryKey: ['flex', selectedUserId],
     queryFn: () => fetchUserFlex(selectedUserId!),
+    enabled: Boolean(selectedUserId && hasRole('admin')),
+  });
+
+  const flexHistory = useQuery({
+    queryKey: ['flex-history', selectedUserId],
+    queryFn: () => fetchAuditLogs({ userId: selectedUserId!, q: 'flex.adjust' }),
+    enabled: Boolean(selectedUserId && hasRole('admin')),
+  });
+
+  const vacationHistory = useQuery({
+    queryKey: ['vacation-history', selectedUserId],
+    queryFn: () => fetchAuditLogs({ userId: selectedUserId!, q: 'vacation.adjust' }),
     enabled: Boolean(selectedUserId && hasRole('admin')),
   });
 
@@ -176,9 +193,12 @@ export function TimesPage() {
   });
 
   const adjustVacationMutation = useMutation({
-    mutationFn: (payload: { userId: number; allowance: number }) =>
-      updateEmployeeSettings(payload.userId, { vacation_allowance: payload.allowance }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['vacation-overview'] }),
+    mutationFn: (payload: { userId: number; delta: number }) =>
+      updateUserVacationAdjustment(payload.userId, { delta: payload.delta }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['vacation-overview'] });
+      queryClient.invalidateQueries({ queryKey: ['vacation-history', selectedUserId] });
+    },
   });
 
   const requestAbsence = useMemo(() => {
@@ -375,21 +395,32 @@ export function TimesPage() {
   };
 
   return (
-    <div className="space-y-4">
-      <div className="card p-4 flex items-center justify-between">
+    <div className="space-y-6">
+      <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Zeiterfassung</p>
+            <h2 className="text-2xl font-semibold text-slate-900">Kalender & Zeiten</h2>
+            <p className="text-sm text-slate-500">Plane, prüfe und korrigiere Tagesbuchungen zentral.</p>
+          </div>
+          <div className="flex gap-2">
+            <button className="btn-ghost" onClick={() => goto(-1)}>← Vorheriger</button>
+            <button className="btn-ghost" onClick={() => goto(1)}>Nächster →</button>
+          </div>
+        </div>
+      </div>
+
+      <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm flex items-center justify-between">
         <div>
           <p className="text-xs uppercase text-slate-500">Monat</p>
           <h2 className="text-2xl font-semibold">{monthLabel}</h2>
           <p className="text-sm text-slate-500">Kompakte Kalenderansicht mit Statusfarben</p>
         </div>
-        <div className="flex gap-2">
-          <button className="btn-ghost" onClick={() => goto(-1)}>← Vorheriger</button>
-          <button className="btn-ghost" onClick={() => goto(1)}>Nächster →</button>
-        </div>
+        <div className="text-sm text-slate-500">Ausgewählter Zeitraum</div>
       </div>
 
       {enableManagement && (
-        <div className="card p-4 space-y-2">
+        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm space-y-2">
           <div className="flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
             <div>
               <p className="text-xs uppercase text-slate-500">Ziel</p>
@@ -837,6 +868,40 @@ export function TimesPage() {
                   Gleitzeit anpassen
                 </button>
               </form>
+              <details className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2">
+                <summary className="cursor-pointer text-sm font-semibold text-slate-700">
+                  Historie anzeigen
+                </summary>
+                <div className="mt-2 space-y-2 text-sm text-slate-600">
+                  {(flexHistory.data ?? []).length === 0 && <p>Keine Einträge vorhanden.</p>}
+                  {(flexHistory.data ?? []).map((entry) => {
+                    const detail = parseLogDetail(entry.detail);
+                    const previous = typeof detail?.previous === 'number' ? detail.previous : null;
+                    const next = typeof detail?.next === 'number' ? detail.next : null;
+                    const enabled = typeof detail?.enabled === 'boolean' ? detail.enabled : null;
+                    return (
+                      <div key={entry.id} className="flex flex-col gap-1 rounded-md bg-white p-2">
+                        <div className="flex items-center justify-between text-xs text-slate-500">
+                          <span>{new Date(entry.created_at).toLocaleString('de-DE')}</span>
+                          <span>{entry.actor_name ?? 'System'}</span>
+                        </div>
+                        <div className="text-sm text-slate-700">
+                          {previous !== null && next !== null && (
+                            <span>
+                              Anpassung: {formatHours(previous)} → {formatHours(next)}
+                            </span>
+                          )}
+                          {enabled !== null && (
+                            <span className="ml-2 text-xs text-slate-500">
+                              ({enabled ? 'aktiviert' : 'deaktiviert'})
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </details>
             </div>
           )}
 
@@ -844,7 +909,9 @@ export function TimesPage() {
             <div className="card p-4 space-y-4">
               <div>
                 <h3 className="text-lg font-semibold">Urlaubstage anpassen</h3>
-                <p className="text-sm text-slate-500">Änderungen wirken auf das Jahreskontingent.</p>
+                <p className="text-sm text-slate-500">
+                  Änderungen wirken auf den verfügbaren Resturlaub (inkl. Übertrag aus dem Vorjahr).
+                </p>
               </div>
               <form
                 className="space-y-2"
@@ -853,13 +920,12 @@ export function TimesPage() {
                   if (!selectedUserId) return;
                   const delta = Number(vacationAdjustmentDays);
                   if (Number.isNaN(delta)) return;
-                  const current = selectedEmployee?.vacationAllowance ?? 30;
-                  adjustVacationMutation.mutate({ userId: selectedUserId, allowance: current + delta });
+                  adjustVacationMutation.mutate({ userId: selectedUserId, delta });
                   setVacationAdjustmentDays('');
                 }}
               >
                 <div className="text-sm text-slate-600">
-                  Aktuelles Kontingent: {(selectedEmployee?.vacationAllowance ?? 30).toFixed(2)} Tage
+                  Aktueller Stand: {selectedVacation ? selectedVacation.remaining.toFixed(2) : '0.00'} Tage
                 </div>
                 <label className="text-sm text-slate-600">Tage hinzufügen/abziehen</label>
                 <input
@@ -874,6 +940,41 @@ export function TimesPage() {
                   Urlaubstage anpassen
                 </button>
               </form>
+              <details className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2">
+                <summary className="cursor-pointer text-sm font-semibold text-slate-700">
+                  Historie anzeigen
+                </summary>
+                <div className="mt-2 space-y-2 text-sm text-slate-600">
+                  {(vacationHistory.data ?? []).length === 0 && <p>Keine Einträge vorhanden.</p>}
+                  {(vacationHistory.data ?? []).map((entry) => {
+                    const detail = parseLogDetail(entry.detail);
+                    const previous = typeof detail?.previous === 'number' ? detail.previous : null;
+                    const delta = typeof detail?.delta === 'number' ? detail.delta : null;
+                    const next = typeof detail?.next === 'number' ? detail.next : null;
+                    return (
+                      <div key={entry.id} className="flex flex-col gap-1 rounded-md bg-white p-2">
+                        <div className="flex items-center justify-between text-xs text-slate-500">
+                          <span>{new Date(entry.created_at).toLocaleString('de-DE')}</span>
+                          <span>{entry.actor_name ?? 'System'}</span>
+                        </div>
+                        <div className="text-sm text-slate-700">
+                          {previous !== null && next !== null && (
+                            <span>
+                              Anpassung: {previous.toFixed(2)} → {next.toFixed(2)} Tage
+                            </span>
+                          )}
+                          {delta !== null && (
+                            <span className="ml-2 text-xs text-slate-500">
+                              (Δ {delta >= 0 ? '+' : ''}
+                              {delta.toFixed(2)} Tage)
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </details>
             </div>
           )}
         </div>
