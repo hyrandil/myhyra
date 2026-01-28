@@ -356,6 +356,7 @@ export function PlanningPage() {
                 <p className="text-sm text-slate-500">Keine Feiertage geladen.</p>
               )}
             </div>
+            </div>
           </div>
         </div>
       </div>
