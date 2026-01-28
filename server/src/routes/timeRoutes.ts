@@ -386,6 +386,7 @@ function buildMonthlyReport(userId: number, monthValue?: string) {
   const userRow = db
     .prepare(
       `SELECT u.first_name, u.last_name, u.name, u.email, up.personnel_number, us.vacation_allowance
+       , us.vacation_adjust_days, up.tracking_start_date, up.start_date
        FROM users u
        LEFT JOIN user_profiles up ON up.user_id = u.id
        LEFT JOIN user_settings us ON us.user_id = u.id
@@ -399,10 +400,16 @@ function buildMonthlyReport(userId: number, monthValue?: string) {
         email?: string | null;
         personnel_number?: string | null;
         vacation_allowance?: number | null;
+        vacation_adjust_days?: number | null;
+        tracking_start_date?: string | null;
+        start_date?: string | null;
       }
     | undefined;
   const displayName = [userRow?.first_name, userRow?.last_name].filter(Boolean).join(' ') || userRow?.name || '';
   const baseAllowance = userRow?.vacation_allowance ?? 0;
+  const adjustmentDays = userRow?.vacation_adjust_days ?? 0;
+  const trackingStartValue = userRow?.tracking_start_date || userRow?.start_date || null;
+  const trackingStartDate = trackingStartValue ? new Date(`${trackingStartValue}T00:00:00Z`) : null;
   const year = Number(baseMonth.slice(0, 4));
   const todayIso = new Date().toISOString().slice(0, 10);
   const prevYearStart = `${year - 1}-01-01`;
@@ -423,11 +430,16 @@ function buildMonthlyReport(userId: number, monthValue?: string) {
     }[];
   const prevUsage = buildVacationPortions(userId, vacationAbsences, prevYearStart, prevYearEnd, prevYearEnd);
   const prevUsed = Array.from(prevUsage.usedByDay.values()).reduce((sum, value) => sum + value, 0);
-  const carryOver = Math.max(baseAllowance - prevUsed, 0);
-  const allowance = baseAllowance + carryOver;
+  const prevYearEndDate = new Date(`${prevYearEnd}T00:00:00Z`);
+  const currentYearEndDate = new Date(`${currentYearEnd}T00:00:00Z`);
+  const isActiveForYear = !trackingStartDate || trackingStartDate.getTime() <= currentYearEndDate.getTime();
+  const baseAllowanceForYear = isActiveForYear ? baseAllowance : 0;
+  const allowCarryOver = !trackingStartDate || trackingStartDate.getTime() <= prevYearEndDate.getTime();
+  const carryOver = allowCarryOver ? Math.max(baseAllowanceForYear - prevUsed, 0) : 0;
+  const allowance = baseAllowanceForYear + carryOver;
   const currentUsage = buildVacationPortions(userId, vacationAbsences, currentYearStart, currentYearEnd, todayIso);
   const currentUsed = Array.from(currentUsage.usedByDay.values()).reduce((sum, value) => sum + value, 0);
-  const remaining = Math.max(allowance - currentUsed, 0);
+  const remaining = allowance - currentUsed + adjustmentDays;
   const dailySnapshot = buildDailySummary(userId, baseMonth);
 
   return {
