@@ -2,14 +2,10 @@ import { useEffect, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   addCustomHoliday,
-  createHolidayProfile,
-  deleteHolidayProfile,
   fetchEmployees,
   fetchHolidayProfiles,
   fetchProfileHolidays,
   fetchSchedule,
-  importHolidayProfile,
-  updateHolidayProfile,
   deleteLatestScheduleVersion,
   updateSchedule,
 } from '../api';
@@ -44,10 +40,6 @@ export function PlanningPage() {
   const [validFrom, setValidFrom] = useState<string>('');
   const [selectedProfile, setSelectedProfile] = useState<number | null>(null);
   const [holidayYear, setHolidayYear] = useState<number>(new Date().getFullYear());
-  const [ruleStartYear, setRuleStartYear] = useState<number | ''>('');
-  const [ruleEndYear, setRuleEndYear] = useState<number | ''>('');
-  const [profileName, setProfileName] = useState('');
-  const [profileState, setProfileState] = useState('');
 
   const { data: employees } = useQuery({
     queryKey: ['employees', 'planning'],
@@ -90,34 +82,6 @@ export function PlanningPage() {
     },
   });
 
-  const profileCreateMutation = useMutation({
-    mutationFn: (payload: { name: string; state: string; year?: number; years?: number[]; startYear?: number; endYear?: number }) =>
-      createHolidayProfile(payload),
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ['holiday-profiles'] });
-    },
-  });
-
-  const profileImportMutation = useMutation({
-    mutationFn: ({ id, payload }: { id: number; payload: { year?: number; years?: number[]; startYear?: number; endYear?: number } }) =>
-      importHolidayProfile(id, payload),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['holiday-profile'] }),
-  });
-
-  const profileUpdateMutation = useMutation({
-    mutationFn: ({ id, payload }: { id: number; payload: { name: string; state: string } }) => updateHolidayProfile(id, payload),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['holiday-profiles'] }),
-  });
-
-  const profileDeleteMutation = useMutation({
-    mutationFn: (id: number) => deleteHolidayProfile(id),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['holiday-profiles'] });
-      queryClient.invalidateQueries({ queryKey: ['holiday-profile'] });
-      setSelectedProfile(null);
-    },
-  });
-
   const addHolidayMutation = useMutation({
     mutationFn: ({ id, payload }: { id: number; payload: { date: string; name: string; duration: 'full' | 'half' } }) =>
       addCustomHoliday(id, payload),
@@ -133,15 +97,6 @@ export function PlanningPage() {
   useEffect(() => {
     if (!selectedProfile && profiles.data && profiles.data.length > 0) {
       setSelectedProfile(profiles.data[0].id);
-    }
-  }, [selectedProfile, profiles.data]);
-
-  useEffect(() => {
-    if (!selectedProfile || !profiles.data) return;
-    const profile = profiles.data.find((p: HolidayProfile) => p.id === selectedProfile);
-    if (profile) {
-      setProfileName(profile.name);
-      setProfileState(profile.state);
     }
   }, [selectedProfile, profiles.data]);
 
@@ -294,215 +249,107 @@ export function PlanningPage() {
         <div className="flex flex-col md:flex-row md:items-center gap-3">
           <div>
             <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Feiertage</p>
-            <h3 className="text-lg font-semibold text-slate-900">Unternehmensweite Feiertagsprofile</h3>
-            <p className="text-sm text-slate-500">Profile anlegen, Bundesland importieren, eigene Tage ergänzen.</p>
+            <h3 className="text-lg font-semibold text-slate-900">Feiertage pro Bundesland</h3>
+            <p className="text-sm text-slate-500">Vorbelegte Profile bis 2099, individuell anpassbar.</p>
           </div>
         </div>
-        <div className="grid gap-4 lg:grid-cols-[1.1fr,1fr,1.2fr]">
-          <form
-            className="rounded-xl border border-slate-200 bg-slate-50 p-4 flex flex-col gap-3"
-            onSubmit={(e) => {
-              e.preventDefault();
-              const form = new FormData(e.currentTarget);
-              const yearValue = Number(form.get('year') || '') || undefined;
-              profileCreateMutation.mutate({
-                name: String(form.get('profileName') || ''),
-                state: String(form.get('state') || ''),
-                year: yearValue,
-              });
-              e.currentTarget.reset();
-            }}
-          >
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Neues Profil</p>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
-              <input name="profileName" placeholder="Profilname" className="input" required />
-              <select name="state" className="input" required defaultValue="">
-                <option value="">Bundesland</option>
-                {Object.entries(stateLabels).map(([code, name]) => (
-                  <option key={code} value={code}>
-                    {name}
-                  </option>
-                ))}
-              </select>
-              <input name="year" type="number" min="2020" max="2100" placeholder="Jahr (optional)" className="input" />
-            </div>
-            <button className="btn-primary self-start" type="submit" disabled={profileCreateMutation.isPending}>
-              Profil anlegen & Feiertage importieren
-            </button>
-          </form>
-
-          <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 space-y-3">
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Import & Regeln</p>
-            <div className="flex flex-col gap-2">
-              <label className="text-xs text-slate-500">Profil auswählen</label>
-              <div className="flex gap-2 items-center">
+        <div className="grid gap-4 lg:grid-cols-[1fr,1.4fr]">
+          <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 space-y-4">
+            <div className="space-y-2">
+              <label className="text-xs text-slate-500">Bundesland</label>
               <select
-                className="input flex-1"
+                className="input"
                 value={selectedProfile ?? ''}
                 onChange={(e) => setSelectedProfile(Number(e.target.value))}
               >
                 {(profiles.data as HolidayProfile[] | undefined)?.map((profile) => (
                   <option key={profile.id} value={profile.id}>
-                    {profile.name} · {stateLabels[profile.state] ?? profile.state}
+                    {stateLabels[profile.state] ?? profile.state}
                   </option>
                 ))}
               </select>
+            </div>
+            <div className="space-y-2">
+              <label className="text-xs text-slate-500">Jahr</label>
               <input
                 type="number"
-                className="input w-24"
+                min="2020"
+                max="2099"
+                className="input"
                 value={holidayYear}
                 onChange={(e) => setHolidayYear(Number(e.target.value) || holidayYear)}
               />
-              </div>
-              <button
-                className="btn-ghost border border-slate-200"
-                type="button"
-                disabled={!selectedProfile || profileImportMutation.isPending}
-                onClick={() =>
-                  selectedProfile &&
-                  profileImportMutation.mutate({
-                    id: selectedProfile,
-                    payload: {
-                      year: holidayYear,
-                    },
-                  })
-                }
-              >
-                Feiertage für Jahr importieren
-              </button>
             </div>
-            {selectedProfile && (
-              <p className="text-xs text-slate-500">
-                Aktuelles Profil: {(profiles.data as HolidayProfile[] | undefined)?.find((p) => p.id === selectedProfile)?.name}{' '}
-                ({stateLabels[(profiles.data as HolidayProfile[] | undefined)?.find((p) => p.id === selectedProfile)?.state ?? ''] ??
-                  (profiles.data as HolidayProfile[] | undefined)?.find((p) => p.id === selectedProfile)?.state ??
-                  ''})
-              </p>
-            )}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
-              <div className="md:col-span-3 text-xs uppercase text-slate-500">Regelfeiertage (mehrere Jahre)</div>
-              <input
-                type="number"
-                className="input"
-                placeholder="Startjahr"
-                value={ruleStartYear}
-                onChange={(e) => setRuleStartYear(e.target.value === '' ? '' : Number(e.target.value))}
-              />
-              <input
-                type="number"
-                className="input"
-                placeholder="Endjahr"
-                value={ruleEndYear}
-                onChange={(e) => setRuleEndYear(e.target.value === '' ? '' : Number(e.target.value))}
-              />
-              <button
-                className="btn-ghost border border-slate-200"
-                type="button"
-                disabled={!selectedProfile || profileImportMutation.isPending || !ruleStartYear || !ruleEndYear}
-                onClick={() =>
-                  selectedProfile &&
-                  profileImportMutation.mutate({
+            <div className="rounded-lg border border-dashed border-slate-300 bg-white p-3 text-xs text-slate-500">
+              Alle Feiertage sind bereits bis 2099 eingetragen. Änderungen wirken nur für das gewählte Jahr.
+            </div>
+            <div className="border-t border-slate-200 pt-3 space-y-2">
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Neuen Feiertag hinzufügen</p>
+              <form
+                className="grid grid-cols-1 md:grid-cols-3 gap-2"
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  if (!selectedProfile) return;
+                  const form = new FormData(e.currentTarget);
+                  addHolidayMutation.mutate({
                     id: selectedProfile,
                     payload: {
-                      startYear: typeof ruleStartYear === 'number' ? ruleStartYear : undefined,
-                      endYear: typeof ruleEndYear === 'number' ? ruleEndYear : undefined,
+                      date: String(form.get('holidayDate') || ''),
+                      name: String(form.get('holidayName') || ''),
+                      duration: (form.get('holidayDuration') as 'full' | 'half') ?? 'full',
                     },
-                  })
-                }
+                  });
+                  e.currentTarget.reset();
+                }}
               >
-                Regelfeiertage laden
-              </button>
+                <input name="holidayDate" type="date" required className="input" />
+                <input name="holidayName" required placeholder="Name" className="input" />
+                <select name="holidayDuration" className="input" defaultValue="full">
+                  <option value="full">Ganzer Feiertag</option>
+                  <option value="half">Halber Feiertag</option>
+                </select>
+                <div className="md:col-span-3 flex justify-end">
+                  <button className="btn-primary" type="submit" disabled={addHolidayMutation.isPending || !selectedProfile}>
+                    Feiertag speichern
+                  </button>
+                </div>
+              </form>
             </div>
           </div>
-
           <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 space-y-3">
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Profil & Extras</p>
-            <form
-              className="grid grid-cols-1 md:grid-cols-3 gap-2"
-              onSubmit={(e) => {
-                e.preventDefault();
-                if (!selectedProfile) return;
-                profileUpdateMutation.mutate({
-                  id: selectedProfile,
-                  payload: { name: profileName, state: profileState },
-                });
-              }}
-            >
-              <input
-                className="input"
-                value={profileName}
-                onChange={(e) => setProfileName(e.target.value)}
-                placeholder="Profilname"
-              />
-              <select
-                className="input"
-                value={profileState}
-                onChange={(e) => setProfileState(e.target.value)}
-              >
-                <option value="">Bundesland</option>
-                {Object.entries(stateLabels).map(([code, name]) => (
-                  <option key={code} value={code}>
-                    {name}
-                  </option>
-                ))}
-              </select>
-              <div className="flex gap-2">
-                <button className="btn-primary" type="submit" disabled={!selectedProfile || profileUpdateMutation.isPending}>
-                  Speichern
-                </button>
-                <button
-                  className="btn-ghost border border-rose-200 text-rose-700"
-                  type="button"
-                  disabled={!selectedProfile || profileDeleteMutation.isPending}
-                  onClick={() => {
+            <div className="flex items-center justify-between">
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Feiertage bearbeiten</p>
+              <span className="text-xs text-slate-500">{holidayYear}</span>
+            </div>
+            <div className="max-h-[420px] overflow-auto divide-y">
+              {(profileHolidays.data as HolidayEntry[] | undefined)?.map((holiday) => (
+                <form
+                  key={`${holiday.date}-${holiday.name}`}
+                  className="py-3 grid grid-cols-1 gap-2 md:grid-cols-[1fr,1.4fr,0.8fr,auto]"
+                  onSubmit={(e) => {
+                    e.preventDefault();
                     if (!selectedProfile) return;
-                    if (window.confirm('Feiertagsprofil wirklich löschen?')) {
-                      profileDeleteMutation.mutate(selectedProfile);
-                    }
+                    const form = new FormData(e.currentTarget);
+                    addHolidayMutation.mutate({
+                      id: selectedProfile,
+                      payload: {
+                        date: holiday.date,
+                        name: String(form.get('name') || holiday.name),
+                        duration: (form.get('duration') as 'full' | 'half') ?? holiday.duration,
+                      },
+                    });
                   }}
                 >
-                  Löschen
-                </button>
-              </div>
-            </form>
-            <div className="border-t border-slate-200 pt-3 space-y-2">
-              <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Individuelle Feiertage</p>
-            <form
-              className="grid grid-cols-1 md:grid-cols-3 gap-2"
-              onSubmit={(e) => {
-                e.preventDefault();
-                if (!selectedProfile) return;
-                const form = new FormData(e.currentTarget);
-                addHolidayMutation.mutate({
-                  id: selectedProfile,
-                  payload: {
-                    date: String(form.get('holidayDate') || ''),
-                    name: String(form.get('holidayName') || ''),
-                    duration: (form.get('holidayDuration') as 'full' | 'half') ?? 'full',
-                  },
-                });
-              }}
-            >
-              <input name="holidayDate" type="date" required className="input" />
-              <input name="holidayName" required placeholder="Name" className="input" />
-              <select name="holidayDuration" className="input" defaultValue="full">
-                <option value="full">Ganzer Feiertag</option>
-                <option value="half">Halber Feiertag</option>
-              </select>
-              <div className="md:col-span-3 flex justify-end">
-                <button className="btn-primary" type="submit" disabled={addHolidayMutation.isPending || !selectedProfile}>
-                  Individuellen Tag speichern
-                </button>
-              </div>
-            </form>
-            <div className="max-h-48 overflow-auto divide-y">
-              {(profileHolidays.data as HolidayEntry[] | undefined)?.map((holiday) => (
-                <div key={`${holiday.date}-${holiday.name}`} className="py-1 flex justify-between text-sm">
-                  <span>
-                    {holiday.date}: {holiday.name}
-                  </span>
-                  <span className="text-slate-500">{holiday.duration === 'half' ? '0,5' : '1,0'} Tag</span>
-                </div>
+                  <input className="input" value={holiday.date} readOnly />
+                  <input className="input" name="name" defaultValue={holiday.name} />
+                  <select className="input" name="duration" defaultValue={holiday.duration}>
+                    <option value="full">Ganzer Tag</option>
+                    <option value="half">Halber Tag</option>
+                  </select>
+                  <button className="btn-ghost border border-slate-200" type="submit">
+                    Speichern
+                  </button>
+                </form>
               )) || <p className="text-sm text-slate-500">Keine Feiertage geladen.</p>}
             </div>
             </div>

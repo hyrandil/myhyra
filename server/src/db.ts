@@ -3,6 +3,7 @@ import bcrypt from 'bcryptjs';
 import fs from 'fs';
 import path from 'path';
 import { ADMIN_EMAIL, ADMIN_PASSWORD, DATABASE_FILE } from './config';
+import { buildHolidayList } from './utils/holidays';
 
 const dbDir = path.dirname(DATABASE_FILE);
 fs.mkdirSync(dbDir, { recursive: true });
@@ -370,6 +371,60 @@ db.prepare('UPDATE user_settings SET flex_enabled = 0 WHERE flex_enabled IS NULL
 db.prepare('UPDATE user_settings SET flex_adjust_minutes = 0 WHERE flex_adjust_minutes IS NULL').run();
 db.prepare('UPDATE user_settings SET vacation_adjust_days = 0 WHERE vacation_adjust_days IS NULL').run();
 db.exec(`INSERT OR IGNORE INTO user_settings (user_id) SELECT id FROM users;`);
+
+const holidayStates: Record<string, string> = {
+  BW: 'Baden-Württemberg',
+  BY: 'Bayern',
+  BE: 'Berlin',
+  BB: 'Brandenburg',
+  HB: 'Bremen',
+  HH: 'Hamburg',
+  HE: 'Hessen',
+  MV: 'Mecklenburg-Vorpommern',
+  NI: 'Niedersachsen',
+  NW: 'Nordrhein-Westfalen',
+  RP: 'Rheinland-Pfalz',
+  SL: 'Saarland',
+  SN: 'Sachsen',
+  ST: 'Sachsen-Anhalt',
+  SH: 'Schleswig-Holstein',
+  TH: 'Thüringen',
+};
+
+const seedHolidayProfiles = () => {
+  const insertProfile = db.prepare('INSERT INTO holiday_profiles (name, state) VALUES (?, ?)');
+  const findProfile = db.prepare('SELECT id FROM holiday_profiles WHERE state = ?');
+  const insertHoliday = db.prepare(
+    'INSERT OR IGNORE INTO holidays (profile_id, date, name, duration, source) VALUES (?, ?, ?, ?, ?)'
+  );
+  const existingYearsStmt = db.prepare(
+    "SELECT DISTINCT strftime('%Y', date) as year FROM holidays WHERE profile_id = ?"
+  );
+
+  const startYear = 2020;
+  const endYear = 2099;
+
+  Object.entries(holidayStates).forEach(([state, label]) => {
+    const existing = findProfile.get(state) as { id: number } | undefined;
+    const profileId = existing?.id ?? Number(insertProfile.run(`Feiertage ${label}`, state).lastInsertRowid);
+
+    const existingYears = new Set(
+      (existingYearsStmt.all(profileId) as { year: string }[])
+        .map((row) => Number(row.year))
+        .filter((year) => Number.isFinite(year))
+    );
+
+    for (let year = startYear; year <= endYear; year += 1) {
+      if (existingYears.has(year)) continue;
+      const holidays = buildHolidayList(state, year);
+      holidays.forEach((holiday) => {
+        insertHoliday.run(profileId, holiday.date, holiday.name, holiday.duration, 'imported');
+      });
+    }
+  });
+};
+
+seedHolidayProfiles();
   ensureTableColumn('absences', 'start_date', 'start_date TEXT');
   ensureTableColumn('absences', 'end_date', 'end_date TEXT');
   ensureTableColumn('absences', 'canceled', 'canceled INTEGER NOT NULL DEFAULT 0');
