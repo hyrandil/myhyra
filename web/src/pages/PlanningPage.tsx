@@ -322,35 +322,39 @@ export function PlanningPage() {
               <span className="text-xs text-slate-500">{holidayYear}</span>
             </div>
             <div className="max-h-[420px] overflow-auto divide-y">
-              {(profileHolidays.data as HolidayEntry[] | undefined)?.map((holiday) => (
-                <form
-                  key={`${holiday.date}-${holiday.name}`}
-                  className="py-3 grid grid-cols-1 gap-2 md:grid-cols-[1fr,1.4fr,0.8fr,auto]"
-                  onSubmit={(e) => {
-                    e.preventDefault();
-                    if (!selectedProfile) return;
-                    const form = new FormData(e.currentTarget);
-                    addHolidayMutation.mutate({
-                      id: selectedProfile,
-                      payload: {
-                        date: holiday.date,
-                        name: String(form.get('name') || holiday.name),
-                        duration: (form.get('duration') as 'full' | 'half') ?? holiday.duration,
-                      },
-                    });
-                  }}
-                >
-                  <input className="input" value={holiday.date} readOnly />
-                  <input className="input" name="name" defaultValue={holiday.name} />
-                  <select className="input" name="duration" defaultValue={holiday.duration}>
-                    <option value="full">Ganzer Tag</option>
-                    <option value="half">Halber Tag</option>
-                  </select>
-                  <button className="btn-ghost border border-slate-200" type="submit">
-                    Speichern
-                  </button>
-                </form>
-              )) || <p className="text-sm text-slate-500">Keine Feiertage geladen.</p>}
+              {(profileHolidays.data as HolidayEntry[] | undefined)?.length ? (
+                (profileHolidays.data as HolidayEntry[]).map((holiday) => (
+                  <form
+                    key={`${holiday.date}-${holiday.name}`}
+                    className="py-3 grid grid-cols-1 gap-2 md:grid-cols-[1fr,1.4fr,0.8fr,auto]"
+                    onSubmit={(e) => {
+                      e.preventDefault();
+                      if (!selectedProfile) return;
+                      const form = new FormData(e.currentTarget);
+                      addHolidayMutation.mutate({
+                        id: selectedProfile,
+                        payload: {
+                          date: holiday.date,
+                          name: String(form.get('name') || holiday.name),
+                          duration: (form.get('duration') as 'full' | 'half') ?? holiday.duration,
+                        },
+                      });
+                    }}
+                  >
+                    <input className="input" value={holiday.date} readOnly />
+                    <input className="input" name="name" defaultValue={holiday.name} />
+                    <select className="input" name="duration" defaultValue={holiday.duration}>
+                      <option value="full">Ganzer Tag</option>
+                      <option value="half">Halber Tag</option>
+                    </select>
+                    <button className="btn-ghost border border-slate-200" type="submit">
+                      Speichern
+                    </button>
+                  </form>
+                ))
+              ) : (
+                <p className="text-sm text-slate-500">Keine Feiertage geladen.</p>
+              )}
             </div>
             </div>
           </div>
