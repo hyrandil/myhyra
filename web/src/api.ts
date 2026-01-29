@@ -66,6 +66,11 @@ export async function updateUserFlex(id: number, payload: { enabled: boolean; ad
   return res.data as { balanceMinutes: number; adjustment: number; enabled: boolean };
 }
 
+export async function updateUserVacationAdjustment(id: number, payload: { delta: number }) {
+  const res = await api.patch(`/users/${id}/vacation-adjust`, payload);
+  return res.data as { adjustment: number };
+}
+
 export async function fetchHolidayProfiles() {
   const res = await api.get<HolidayProfile[]>('/holidays/profiles');
   return res.data;
@@ -132,6 +137,7 @@ export async function createEmployee(payload: Partial<Employee> & { email: strin
     role: payload.role,
     vacationAllowance: payload.vacationAllowance,
     personnel_number: payload.personnelNumber,
+    rfid_code: payload.rfidCode,
     department: payload.department,
     location: payload.location,
     require_location: payload.requireLocation,
@@ -156,6 +162,7 @@ export async function updateEmployee(id: number, payload: Partial<Employee> & { 
     end_date: payload.endDate,
     active: payload.active,
     personnel_number: payload.personnelNumber,
+    rfid_code: payload.rfidCode,
     holiday_profile_id: payload.holidayProfileId,
     holiday_profile_valid_from: payload.holidayProfileValidFrom,
   });
@@ -199,7 +206,7 @@ export async function updateDepartment(id: number, payload: { name: string; desc
 
 export async function upsertDepartmentMember(
   departmentId: number,
-  payload: { userId: number; role?: 'member' | 'lead' | 'hr' }
+  payload: { userId: number; role?: 'member' | 'lead' }
 ) {
   const res = await api.post(`/departments/${departmentId}/members`, payload);
   return res.data;
@@ -208,7 +215,7 @@ export async function upsertDepartmentMember(
 export async function updateDepartmentMemberRole(
   departmentId: number,
   userId: number,
-  role: 'member' | 'lead' | 'hr'
+  role: 'member' | 'lead'
 ) {
   const res = await api.patch(`/departments/${departmentId}/members/${userId}`, { role });
   return res.data;
@@ -221,6 +228,29 @@ export async function removeDepartmentMember(departmentId: number, userId: numbe
 
 export async function deleteDepartment(id: number) {
   const res = await api.delete(`/departments/${id}`);
+  return res.data;
+}
+
+export async function updateMyPassword(payload: { currentPassword: string; nextPassword: string }) {
+  const res = await api.patch('/users/me/password', {
+    current_password: payload.currentPassword,
+    next_password: payload.nextPassword,
+  });
+  return res.data as { ok: boolean };
+}
+
+export async function fetchTerminals() {
+  const res = await api.get('/terminals');
+  return res.data as { terminals: any[] };
+}
+
+export async function createTerminal(payload: { name: string }) {
+  const res = await api.post('/terminals', payload);
+  return res.data;
+}
+
+export async function updateTerminal(id: number, payload: { active: boolean }) {
+  const res = await api.patch(`/terminals/${id}`, payload);
   return res.data;
 }
 
