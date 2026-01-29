@@ -66,6 +66,21 @@ export function EmployeesPage() {
 
   const creationStrength = useMemo(() => getStrength(newPassword), [newPassword]);
   const resetStrength = useMemo(() => getStrength(resetPasswordValue), [resetPasswordValue]);
+  const buildEmployeePayload = (emp: Employee, overrides: Partial<Employee> = {}) => ({
+    role: (overrides.role ?? emp.role) as Employee['role'],
+    active: overrides.active ?? emp.active,
+    firstName: overrides.firstName ?? emp.firstName ?? emp.name.split(' ')[0] ?? '',
+    lastName: overrides.lastName ?? emp.lastName ?? emp.name.split(' ').slice(1).join(' '),
+    email: overrides.email ?? emp.email,
+    location: overrides.location ?? emp.location,
+    department: overrides.department ?? emp.department,
+    requireLocation: overrides.requireLocation ?? emp.requireLocation,
+    trackingStartDate: overrides.trackingStartDate ?? emp.trackingStartDate,
+    personnelNumber: overrides.personnelNumber ?? emp.personnelNumber,
+    holidayProfileId: overrides.holidayProfileId ?? emp.holidayProfileId,
+    holidayProfileValidFrom: overrides.holidayProfileValidFrom ?? emp.holidayProfileValidFrom,
+    endDate: overrides.endDate ?? emp.endDate,
+  });
 
   const memberMutation = useMutation({
     mutationFn: ({ departmentId, userId, role }: { departmentId: number; userId: number; role?: 'member' | 'lead' | 'hr' }) =>
@@ -205,17 +220,19 @@ export function EmployeesPage() {
         </div>
       </div>
 
-      <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-        <div className="mb-5 flex items-center justify-between">
-          <div>
-            <h3 className="text-lg font-semibold text-slate-900">Neuen Mitarbeitenden anlegen</h3>
-            <p className="text-sm text-slate-500">Schnelles Onboarding mit Rollen, Urlaub und Standortregel.</p>
+      <details className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+        <summary className="cursor-pointer list-none">
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="text-lg font-semibold text-slate-900">Neuen Mitarbeitenden anlegen</h3>
+              <p className="text-sm text-slate-500">Schnelles Onboarding mit Rollen, Urlaub und Standortregel.</p>
+            </div>
+            <span className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">
+              Schnellanlage
+            </span>
           </div>
-          <span className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">
-            Schnellanlage
-          </span>
-        </div>
-        <form className="grid grid-cols-1 gap-4 lg:grid-cols-3" onSubmit={onCreate}>
+        </summary>
+        <form className="mt-5 grid grid-cols-1 gap-4 lg:grid-cols-3" onSubmit={onCreate}>
           <div className="space-y-3 rounded-xl border border-slate-200 bg-slate-50 p-4 lg:col-span-2">
             <p className="text-xs font-semibold uppercase text-slate-400">Basisdaten</p>
             <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
@@ -282,7 +299,7 @@ export function EmployeesPage() {
             Mitarbeiter anlegen
           </button>
         </form>
-      </div>
+      </details>
 
       <div className="space-y-6">
         <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
@@ -338,18 +355,7 @@ export function EmployeesPage() {
                         onClick={() =>
                           updateMutation.mutate({
                             id: emp.id,
-                            payload: {
-                              role: emp.role,
-                              active: !emp.active,
-                              firstName: emp.firstName ?? emp.name.split(' ')[0] ?? '',
-                              lastName: emp.lastName ?? emp.name.split(' ').slice(1).join(' '),
-                              email: emp.email,
-                              location: emp.location,
-                              department: emp.department,
-                              requireLocation: emp.requireLocation,
-                              trackingStartDate: emp.trackingStartDate,
-                              personnelNumber: emp.personnelNumber,
-                            },
+                            payload: buildEmployeePayload(emp, { active: !emp.active }),
                           })
                         }
                       >
@@ -366,19 +372,10 @@ export function EmployeesPage() {
                           onClick={() =>
                             updateMutation.mutate({
                               id: emp.id,
-                              payload: {
-                                role: emp.role,
+                              payload: buildEmployeePayload(emp, {
                                 active: false,
                                 endDate: new Date().toISOString().slice(0, 10),
-                                firstName: emp.firstName ?? emp.name.split(' ')[0] ?? '',
-                                lastName: emp.lastName ?? emp.name.split(' ').slice(1).join(' '),
-                                email: emp.email,
-                                location: emp.location,
-                                department: emp.department,
-                                requireLocation: emp.requireLocation,
-                                trackingStartDate: emp.trackingStartDate,
-                                personnelNumber: emp.personnelNumber,
-                              },
+                              }),
                             })
                           }
                         >
@@ -395,12 +392,14 @@ export function EmployeesPage() {
         </div>
 
         {separatedEmployees.length > 0 && (
-          <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-            <div className="mb-4 flex items-center justify-between">
-              <h3 className="text-lg font-semibold text-slate-900">Ausgeschiedene Mitarbeitende</h3>
-              <span className="text-xs text-slate-500">{separatedEmployees.length}</span>
-            </div>
-            <div className="overflow-hidden rounded-xl border border-slate-200">
+          <details className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+            <summary className="cursor-pointer list-none">
+              <div className="flex items-center justify-between">
+                <h3 className="text-lg font-semibold text-slate-900">Ausgeschiedene Mitarbeitende</h3>
+                <span className="text-xs text-slate-500">{separatedEmployees.length}</span>
+              </div>
+            </summary>
+            <div className="mt-4 overflow-hidden rounded-xl border border-slate-200">
               <table className="w-full text-sm">
                 <thead className="bg-slate-50 text-left text-xs uppercase text-slate-500">
                   <tr>
@@ -408,6 +407,7 @@ export function EmployeesPage() {
                     <th className="px-4 py-3">E-Mail</th>
                     <th className="px-4 py-3">Abteilung</th>
                     <th className="px-4 py-3">Austritt</th>
+                    <th className="px-4 py-3 text-right">Aktionen</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
@@ -419,12 +419,26 @@ export function EmployeesPage() {
                       <td className="px-4 py-3 text-slate-600">{emp.email}</td>
                       <td className="px-4 py-3">{emp.department ?? '—'}</td>
                       <td className="px-4 py-3">{emp.endDate ?? '—'}</td>
+                      <td className="px-4 py-3 text-right">
+                        <button
+                          className="btn-ghost text-xs"
+                          type="button"
+                          onClick={() =>
+                            updateMutation.mutate({
+                              id: emp.id,
+                              payload: buildEmployeePayload(emp, { active: true, endDate: '' }),
+                            })
+                          }
+                        >
+                          Reaktivieren
+                        </button>
+                      </td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
-          </div>
+          </details>
         )}
 
         <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
@@ -446,21 +460,7 @@ export function EmployeesPage() {
                 e.preventDefault();
                 updateMutation.mutate({
                   id: selected.id,
-                  payload: {
-                    role: selected.role,
-                    active: selected.active,
-                    firstName: selected.firstName ?? selected.name.split(' ')[0] ?? '',
-                    lastName: selected.lastName ?? selected.name.split(' ').slice(1).join(' '),
-                    email: selected.email,
-                    location: selected.location,
-                    department: selected.department,
-                    requireLocation: selected.requireLocation,
-                    trackingStartDate: selected.trackingStartDate,
-                    personnelNumber: selected.personnelNumber,
-                    holidayProfileId: selected.holidayProfileId,
-                    holidayProfileValidFrom: selected.holidayProfileValidFrom,
-                    endDate: selected.endDate,
-                  },
+                  payload: buildEmployeePayload(selected),
                 });
                 if (selected.vacationAllowance !== undefined) {
                   settingsMutation.mutate({ id: selected.id, vacationAllowance: selected.vacationAllowance });

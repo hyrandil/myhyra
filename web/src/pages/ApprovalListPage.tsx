@@ -28,6 +28,13 @@ export function ApprovalListPage() {
 
   const absenceInbox = useQuery({ queryKey: ['absence', 'inbox'], queryFn: fetchAbsenceInbox });
   const correctionInbox = useQuery({ queryKey: ['corrections', 'inbox'], queryFn: fetchCorrectionInbox });
+  const isLeadOnly = auth.user?.role === 'lead';
+  const filteredAbsenceInbox = (absenceInbox.data ?? []).filter(
+    (req) => !(isLeadOnly && req.user_id === auth.user?.id)
+  );
+  const filteredCorrectionInbox = (correctionInbox.data ?? []).filter(
+    (req) => !(isLeadOnly && req.user_id === auth.user?.id)
+  );
 
   const absenceStatus = useMutation({
     mutationFn: ({ id, status }: { id: number; status: 'approved' | 'rejected' }) => updateAbsenceStatus(id, status),
@@ -72,7 +79,7 @@ export function ApprovalListPage() {
             <span className="text-xs text-slate-500">Pending</span>
           </div>
           <div className="space-y-2">
-            {(absenceInbox.data ?? []).map((req: AbsenceRequest) => (
+            {filteredAbsenceInbox.map((req: AbsenceRequest) => (
               <div key={req.id} className="p-3 rounded-lg border border-slate-200 bg-white space-y-1">
                 <div className="flex items-center justify-between">
                   <div>
@@ -98,7 +105,7 @@ export function ApprovalListPage() {
                 {req.cancel_requested && <p className="text-xs text-amber-600">Stornierung angefragt</p>}
               </div>
             ))}
-            {(absenceInbox.data ?? []).length === 0 && <p className="text-sm text-slate-500">Keine offenen Anträge.</p>}
+            {filteredAbsenceInbox.length === 0 && <p className="text-sm text-slate-500">Keine offenen Anträge.</p>}
           </div>
         </div>
 
@@ -108,7 +115,7 @@ export function ApprovalListPage() {
             <span className="text-xs text-slate-500">Pending</span>
           </div>
           <div className="space-y-2">
-            {(correctionInbox.data ?? []).map((req: TimeCorrectionRequest) => (
+            {filteredCorrectionInbox.map((req: TimeCorrectionRequest) => (
               <div key={req.id} className="p-3 rounded-lg border border-slate-200 bg-white space-y-1">
                 <div className="flex items-center justify-between">
                   <div>
@@ -150,7 +157,9 @@ export function ApprovalListPage() {
                 </div>
               </div>
             ))}
-            {(correctionInbox.data ?? []).length === 0 && <p className="text-sm text-slate-500">Keine offenen Korrekturen.</p>}
+            {filteredCorrectionInbox.length === 0 && (
+              <p className="text-sm text-slate-500">Keine offenen Korrekturen.</p>
+            )}
           </div>
         </div>
       </div>
