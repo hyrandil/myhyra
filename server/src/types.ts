@@ -23,6 +23,7 @@ export interface UserProfile {
   end_date?: string | null;
   birth_date?: string | null;
   personnel_number?: string | null;
+  rfid_code?: string | null;
   phone?: string | null;
   address?: string | null;
   city?: string | null;

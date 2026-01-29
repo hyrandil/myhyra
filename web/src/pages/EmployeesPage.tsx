@@ -155,6 +155,7 @@ export function EmployeesPage() {
       password: String(form.get('password')),
       role: (form.get('role') as Employee['role']) ?? 'employee',
       personnelNumber: String(form.get('personnelNumber') || ''),
+      rfidCode: String(form.get('rfidCode') || ''),
       department: String(form.get('department') || ''),
       location: String(form.get('location') || ''),
       requireLocation: form.get('requireLocation') === 'on',

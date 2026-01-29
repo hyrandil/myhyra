@@ -204,3 +204,13 @@ export interface AuditLogEntry {
   detail?: string | null;
   created_at: string;
 }
+
+export interface TerminalDevice {
+  id: number;
+  name: string;
+  apiKey: string;
+  active: boolean;
+  lastSeenAt?: string | null;
+  createdAt?: string;
+  status?: 'online' | 'offline';
+}

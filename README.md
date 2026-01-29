@@ -110,6 +110,9 @@ WEB_ORIGINS=http://localhost:5173,http://<DEINE-IP>:5173
 - `GET /api/time/me/daily?month=YYYY-MM` – Plan/Ist/Δ und Abwesenheiten je Tag.
 - `POST /api/absences/request` – Abwesenheitsantrag stellen; `GET /api/absences/requests` & `PATCH /api/absences/requests/:id/status` – Genehmigung.
 - `GET /api/reports/attendance?month=YYYY-MM` – Monatsreport je Mitarbeitendem.
+- `GET /api/terminals` – Terminal-Keys & Status.
+- `POST /api/terminals` – neuen Terminal-Key erzeugen.
+- `POST /api/terminals/entry` – Terminal-Buchung via API-Key.
 
 ## Tests
 ```bash

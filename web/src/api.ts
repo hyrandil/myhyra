@@ -137,6 +137,7 @@ export async function createEmployee(payload: Partial<Employee> & { email: strin
     role: payload.role,
     vacationAllowance: payload.vacationAllowance,
     personnel_number: payload.personnelNumber,
+    rfid_code: payload.rfidCode,
     department: payload.department,
     location: payload.location,
     require_location: payload.requireLocation,
@@ -161,6 +162,7 @@ export async function updateEmployee(id: number, payload: Partial<Employee> & { 
     end_date: payload.endDate,
     active: payload.active,
     personnel_number: payload.personnelNumber,
+    rfid_code: payload.rfidCode,
     holiday_profile_id: payload.holidayProfileId,
     holiday_profile_valid_from: payload.holidayProfileValidFrom,
   });
