@@ -4,6 +4,7 @@ import { z } from 'zod';
 import db from '../db';
 import { requireAuth, authorize, AuthRequest } from '../auth';
 import { managedDepartments } from '../utils/permissions';
+import { logAction } from '../utils/logger';
 import type { User, Booking, Absence } from '../types';
 
 const router = Router();
@@ -747,6 +748,10 @@ const flexConfigSchema = z.object({
   adjustment: z.number().int().optional(),
 });
 
+const vacationAdjustmentSchema = z.object({
+  delta: z.number(),
+});
+
 router.patch('/:id', (req, res) => {
   const userId = Number(req.params.id);
   if (Number.isNaN(userId)) {
@@ -1045,7 +1050,7 @@ router.get('/:id/flex', (req, res) => {
   res.json({ balanceMinutes, plannedMinutes: plannedTotal, workedMinutes: workedTotal, adjustment, enabled });
 });
 
-router.patch('/:id/flex', (req, res) => {
+router.patch('/:id/flex', (req: AuthRequest, res: Response) => {
   const userId = Number(req.params.id);
   if (Number.isNaN(userId)) {
     return res.status(400).json({ message: 'Ungültige Nutzer-ID' });
@@ -1056,16 +1061,50 @@ router.patch('/:id/flex', (req, res) => {
     return res.status(400).json({ errors: parsed.error.format() });
   }
   ensureSettingsRow(userId);
-  const adjustment = parsed.data.adjustment ??
-    (db.prepare('SELECT flex_adjust_minutes FROM user_settings WHERE user_id = ?').get(userId) as { flex_adjust_minutes?: number }
-      | undefined)?.flex_adjust_minutes ?? 0;
+  const currentRow = db
+    .prepare('SELECT flex_adjust_minutes FROM user_settings WHERE user_id = ?')
+    .get(userId) as { flex_adjust_minutes?: number } | undefined;
+  const currentAdjustment = currentRow?.flex_adjust_minutes ?? 0;
+  const adjustment = parsed.data.adjustment ?? currentAdjustment;
   db.prepare('UPDATE user_settings SET flex_enabled = ?, flex_adjust_minutes = ? WHERE user_id = ?').run(
     parsed.data.enabled ? 1 : 0,
     adjustment,
     userId
   );
+  if (adjustment !== currentAdjustment || parsed.data.enabled !== undefined) {
+    logAction(req.user?.id ?? null, 'flex.adjust', userId, {
+      previous: currentAdjustment,
+      next: adjustment,
+      enabled: parsed.data.enabled,
+    });
+  }
   const { balanceMinutes, plannedTotal, workedTotal } = computeFlexBalance(userId);
   res.json({ balanceMinutes, plannedMinutes: plannedTotal, workedMinutes: workedTotal, adjustment, enabled: parsed.data.enabled });
+});
+
+router.patch('/:id/vacation-adjust', authorize(['admin']), (req: AuthRequest, res: Response) => {
+  const userId = Number(req.params.id);
+  if (Number.isNaN(userId)) {
+    return res.status(400).json({ message: 'Ungültige Nutzer-ID' });
+  }
+  if (guardMissingUser(userId, res)) return;
+  const parsed = vacationAdjustmentSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ errors: parsed.error.format() });
+  }
+  ensureSettingsRow(userId);
+  const row = db
+    .prepare('SELECT vacation_adjust_days FROM user_settings WHERE user_id = ?')
+    .get(userId) as { vacation_adjust_days?: number } | undefined;
+  const current = row?.vacation_adjust_days ?? 0;
+  const next = current + parsed.data.delta;
+  db.prepare('UPDATE user_settings SET vacation_adjust_days = ? WHERE user_id = ?').run(next, userId);
+  logAction(req.user?.id ?? null, 'vacation.adjust', userId, {
+    previous: current,
+    delta: parsed.data.delta,
+    next,
+  });
+  res.json({ adjustment: next });
 });
 
 export default router;

@@ -27,10 +27,11 @@ export function VacationOverviewPage() {
   const list = hasRole('admin', 'hr', 'lead') ? items : items.filter((i) => i.userId === user?.id);
 
   return (
-    <div className="space-y-4">
-      <div>
-        <p className="text-xl font-bold text-slate-900">{headline}</p>
-        <p className="text-slate-600 text-sm">Verbleibender Urlaub, geplante und genommene Tage im Überblick.</p>
+    <div className="space-y-6">
+      <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+        <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Urlaub</p>
+        <p className="text-2xl font-semibold text-slate-900">{headline}</p>
+        <p className="text-sm text-slate-500">Verbleibender Urlaub, geplante und genommene Tage im Überblick.</p>
       </div>
       <div className="space-y-3">
         {list.map(renderRow)}

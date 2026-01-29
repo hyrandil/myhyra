@@ -177,14 +177,15 @@ export function ReportsPage() {
   };
 
   return (
-    <div className="space-y-4">
-      <div className="card p-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-        <div>
-          <p className="text-xs uppercase text-slate-500">Reports</p>
-          <h2 className="text-2xl font-semibold">Anwesenheits- &amp; Urlaubsstatistik</h2>
-          <p className="text-sm text-slate-500">Zeitraum wählbar, Export als CSV/Excel.</p>
-        </div>
-        <div className="flex flex-wrap gap-2 items-center">
+    <div className="space-y-6">
+      <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Reports</p>
+            <h2 className="text-2xl font-semibold text-slate-900">Anwesenheits- &amp; Urlaubsstatistik</h2>
+            <p className="text-sm text-slate-500">Zeitraum wählen, Reports exportieren und Monatsberichte erzeugen.</p>
+          </div>
+          <div className="flex flex-wrap gap-2 items-center">
           <label className="text-sm text-slate-600">Monat:</label>
           <input
             type="month"
@@ -230,6 +231,7 @@ export function ReportsPage() {
               PDF Querformat
             </button>
           )}
+          </div>
         </div>
       </div>
 
