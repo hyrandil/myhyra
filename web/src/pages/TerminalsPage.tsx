@@ -1,9 +1,12 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useState } from 'react';
 import { createTerminal, fetchTerminals, updateTerminal } from '../api';
 import { TerminalDevice } from '../types';
 
 export function TerminalsPage() {
   const queryClient = useQueryClient();
+  const [createdTerminal, setCreatedTerminal] = useState<{ name: string; apiKey: string } | null>(null);
+  const [createError, setCreateError] = useState<string | null>(null);
   const terminalsQuery = useQuery({
     queryKey: ['terminals'],
     queryFn: fetchTerminals,
@@ -11,7 +14,15 @@ export function TerminalsPage() {
 
   const createMutation = useMutation({
     mutationFn: (payload: { name: string }) => createTerminal(payload),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['terminals'] }),
+    onSuccess: (data: { name: string; apiKey: string }) => {
+      setCreatedTerminal({ name: data.name, apiKey: data.apiKey });
+      setCreateError(null);
+      queryClient.invalidateQueries({ queryKey: ['terminals'] });
+    },
+    onError: () => {
+      setCreatedTerminal(null);
+      setCreateError('Terminal konnte nicht erstellt werden.');
+    },
   });
 
   const updateMutation = useMutation({
@@ -38,7 +49,11 @@ export function TerminalsPage() {
               e.preventDefault();
               const form = new FormData(e.currentTarget);
               const name = String(form.get('name') || '').trim();
-              if (!name) return;
+              if (!name) {
+                setCreateError('Bitte einen Namen eingeben.');
+                setCreatedTerminal(null);
+                return;
+              }
               createMutation.mutate({ name });
               e.currentTarget.reset();
             }}
@@ -49,6 +64,13 @@ export function TerminalsPage() {
             </button>
           </form>
         </div>
+        {createdTerminal && (
+          <div className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800">
+            <p className="font-semibold">Terminal erstellt: {createdTerminal.name}</p>
+            <p className="mt-1 break-all">API-Key: {createdTerminal.apiKey}</p>
+          </div>
+        )}
+        {createError && <p className="mt-3 text-sm text-rose-600">{createError}</p>}
       </div>
 
       <div className="card p-4 space-y-3">

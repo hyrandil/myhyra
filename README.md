@@ -98,19 +98,35 @@ WEB_ORIGINS=http://localhost:5173,http://<DEINE-IP>:5173
 ---
 
 ### 3) Terminal-Client starten (RFID)
-Der Terminal-Client läuft **auf einem separaten Gerät** (z. B. Surface Tablet mit RFID-Reader) und
-spricht den Server über **Server-URL + Port + API-Key** an.
-Das Gerät kann **nicht** den Server selbst hosten, sondern verbindet sich mit dem Server (z. B. Cloud-Instanz).
+Der Terminal-Client läuft **als separate Anwendung** auf einem eigenen Gerät (z. B. Surface Tablet mit RFID-Reader).
+Er kommuniziert per **Server-URL + Port + API-Key** mit dem zentralen Server (z. B. Cloud-Instanz).
 
-**Client-Start (lokale HTML-Seite):**
-1. Öffne die Terminal-Seite **auf dem Client-Gerät** im Browser.  
-   Wenn du den Client über den Server hostest, lautet die URL z. B.:
-   ```
-   https://dein-server.de/terminal
-   ```
-2. Trage die **Server-URL inkl. Port** ein (z. B. `https://dein-server.de`).
-3. Trage den **API-Key** ein.
-4. RFID scannen → **Kommen/Gehen** senden.
+**Pfad der Terminal-App:**
+```
+/path/to/myhyra/src/terminal
+```
+
+**Terminal-App starten:**
+```bash
+cd src/terminal
+cp .env.example .env
+npm install
+npm run dev
+```
+
+**Standard-Port:**  
+Die Terminal-App läuft auf **`http://localhost:5174`**.
+
+**Konfiguration in `.env` (Terminal-App):**
+```
+VITE_SERVER_URL=https://dein-server.de
+VITE_API_KEY=dein-api-key
+```
+
+**Ablauf im Terminal-UI:**
+1. Terminal-App im Browser öffnen (z. B. `http://localhost:5174`).
+2. **Server URL** und **API-Key** prüfen/anpassen (werden aus `.env` geladen).
+3. RFID scannen → **Kommen/Gehen** senden.
 
 **Ablauf Schritt für Schritt:**
 1. Im Web-UI als **Admin** anmelden.
