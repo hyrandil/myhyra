@@ -154,6 +154,25 @@ Content-Type: application/json
 3. Browser öffnen: `http://localhost:5173`
 4. Optional: `http://localhost:3001/terminal`
 
+### 3) Terminal-Client starten (RFID)
+Der Server liefert eine kleine lokale Terminal-Oberfläche unter:
+```
+http://localhost:<PORT>/terminal
+```
+**Ablauf:**
+1. Im Web-UI als Admin unter **Terminals** einen neuen API-Key erzeugen.
+2. In der Terminal-Seite den API-Key eintragen.
+3. RFID-Chipnummer scannen und **Kommen/Gehen** senden.
+
+### 4) Terminal-API konfigurieren (für lokale Clients)
+Der lokale Terminal-Client sendet folgende Anfrage an den Server:
+```
+POST /api/terminals/entry
+Header: x-api-key: <API_KEY>
+Body: { "rfid": "<RFID>", "type": "CLOCK_IN" | "CLOCK_OUT" }
+```
+Stelle sicher, dass der Server erreichbar ist (Portfreigabe/Reverse Proxy) und der API-Key aktiv ist.
+
 ## Wichtige Endpunkte
 - `POST /api/auth/login` – Login, legt Session-Cookie an.
 - `POST /api/auth/register` – Admin legt neue Nutzer an.
