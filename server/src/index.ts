@@ -27,7 +27,7 @@ const corsDelegate: CorsOptionsDelegate = (req, callback) => {
   // Always allow same-origin / server-to-server calls
   if (!origin) return callback(null, { origin: true, credentials: true });
 
-  const requestPath = req.url ?? '';
+  const requestPath = (req as { originalUrl?: string; url?: string }).originalUrl ?? req.url ?? '';
   if (requestPath.startsWith('/api/terminals')) {
     return callback(null, { origin: true, credentials: false });
   }
