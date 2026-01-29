@@ -171,7 +171,7 @@ export function RequestsPage({ view = 'hub' }: { view?: RequestView }) {
             <h3 className="text-lg font-semibold">Stornierungsantrag</h3>
             <p className="text-sm text-slate-600">Genehmigte Abwesenheiten zurückziehen.</p>
           </Link>
-          {auth.hasRole('lead', 'hr', 'admin') && (
+          {auth.hasRole('lead', 'admin') && (
             <Link to="/antraege/genehmigungen" className="card p-4 hover:border-sky-200 hover:shadow">
               <p className="text-xs uppercase text-slate-500">Genehmigung</p>
               <h3 className="text-lg font-semibold">Genehmigungsliste</h3>
@@ -184,10 +184,10 @@ export function RequestsPage({ view = 'hub' }: { view?: RequestView }) {
   }
 
   const header = (
-    <div className="card p-4 flex items-center justify-between">
+    <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
       <div>
-        <p className="text-xs uppercase text-slate-500">Anträge</p>
-        <h2 className="text-2xl font-semibold">
+        <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Anträge</p>
+        <h2 className="text-2xl font-semibold text-slate-900">
           {view === 'absence'
             ? 'Abwesenheitsanträge'
             : view === 'correction'
@@ -201,7 +201,7 @@ export function RequestsPage({ view = 'hub' }: { view?: RequestView }) {
   );
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-6">
       {header}
 
       {view === 'absence' && (
@@ -304,7 +304,7 @@ export function RequestsPage({ view = 'hub' }: { view?: RequestView }) {
               ))}
               {(myRequests.data ?? []).length === 0 && <p className="text-sm text-slate-500">Keine Anträge vorhanden.</p>}
             </div>
-            {auth.hasRole('lead', 'hr', 'admin') && (
+            {auth.hasRole('lead', 'admin') && (
               <p className="text-xs text-slate-500 mt-3">
                 Genehmigungen findest du jetzt gebündelt in der <Link className="text-sky-700 underline" to="/antraege/genehmigungen">Genehmigungsliste</Link>.
               </p>

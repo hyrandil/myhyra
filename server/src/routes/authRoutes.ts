@@ -12,12 +12,12 @@ const registerSchema = z.object({
   last_name: z.string().min(1),
   email: z.string().email(),
   password: z.string().min(6),
-  role: z.enum(['employee', 'lead', 'hr', 'admin']).optional().default('employee'),
+  role: z.enum(['employee', 'lead', 'admin']).optional().default('employee'),
 });
 
 const normalizeEmail = (email: string) => email.trim().toLowerCase();
 
-router.post('/register', requireAuth, authorize(['admin', 'hr']), (req: AuthRequest, res) => {
+router.post('/register', requireAuth, authorize(['admin']), (req: AuthRequest, res) => {
   const parsed = registerSchema.safeParse(req.body);
   if (!parsed.success) {
     return res.status(400).json({ errors: parsed.error.format() });
