@@ -67,6 +67,9 @@
       <h1>Erfassungsterminal</h1>
       <p>RFID scannen und eine Buchung an den Hauptserver senden.</p>
 
+      <label for="serverUrl">Server URL</label>
+      <input id="serverUrl" type="text" placeholder="https://api.example.com" />
+
       <label for="apiKey">API Key</label>
       <input id="apiKey" type="password" placeholder="API Key" />
 
@@ -85,12 +88,14 @@
     </div>
 
     <script>
+      const serverUrlInput = document.getElementById('serverUrl');
       const apiKeyInput = document.getElementById('apiKey');
       const rfidInput = document.getElementById('rfid');
       const actionSelect = document.getElementById('action');
       const status = document.getElementById('status');
       const sendButton = document.getElementById('send');
 
+      serverUrlInput.value = localStorage.getItem('terminalServerUrl') || '';
       apiKeyInput.value = localStorage.getItem('terminalApiKey') || '';
 
       const setStatus = (message, type) => {
@@ -99,17 +104,19 @@
       };
 
       sendButton.addEventListener('click', async () => {
+        const serverUrl = serverUrlInput.value.trim().replace(/\/$/, '');
         const apiKey = apiKeyInput.value.trim();
         const rfid = rfidInput.value.trim();
         const type = actionSelect.value;
-        if (!apiKey || !rfid) {
-          setStatus('Bitte API Key und RFID eingeben.', 'error');
+        if (!serverUrl || !apiKey || !rfid) {
+          setStatus('Bitte Server URL, API Key und RFID eingeben.', 'error');
           return;
         }
+        localStorage.setItem('terminalServerUrl', serverUrl);
         localStorage.setItem('terminalApiKey', apiKey);
         setStatus('Sende Buchung...', '');
         try {
-          const response = await fetch('/api/terminals/entry', {
+          const response = await fetch(`${serverUrl}/api/terminals/entry`, {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',

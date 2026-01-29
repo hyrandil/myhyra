@@ -98,13 +98,19 @@ WEB_ORIGINS=http://localhost:5173,http://<DEINE-IP>:5173
 ---
 
 ### 3) Terminal-Client starten (RFID)
-Der Terminal-Client ist eine **lokale HTML-Seite**, die der Server bereitstellt.
+Der Terminal-Client läuft **auf einem separaten Gerät** (z. B. Surface Tablet mit RFID-Reader) und
+spricht den Server über **Server-URL + Port + API-Key** an.
+Das Gerät kann **nicht** den Server selbst hosten, sondern verbindet sich mit dem Server (z. B. Cloud-Instanz).
 
-**URL:**
-```
-http://localhost:3001/terminal
-```
-(Port muss zu `server/.env` passen)
+**Client-Start (lokale HTML-Seite):**
+1. Öffne die Terminal-Seite **auf dem Client-Gerät** im Browser.  
+   Wenn du den Client über den Server hostest, lautet die URL z. B.:
+   ```
+   https://dein-server.de/terminal
+   ```
+2. Trage die **Server-URL inkl. Port** ein (z. B. `https://dein-server.de`).
+3. Trage den **API-Key** ein.
+4. RFID scannen → **Kommen/Gehen** senden.
 
 **Ablauf Schritt für Schritt:**
 1. Im Web-UI als **Admin** anmelden.
@@ -120,9 +126,9 @@ http://localhost:3001/terminal
 ### 4) Terminal-API konfigurieren (für eigene Clients)
 Wenn du einen **eigenen lokalen Client** bauen willst, nutzt du diesen Request:
 
-**Endpoint:**
+**Endpoint (vom Client-Gerät aus):**
 ```
-POST http://localhost:3001/api/terminals/entry
+POST https://dein-server.de/api/terminals/entry
 ```
 
 **Header:**
@@ -153,25 +159,6 @@ Content-Type: application/json
 2. Terminal 2: `cd web && npm run dev` (Port 5173)
 3. Browser öffnen: `http://localhost:5173`
 4. Optional: `http://localhost:3001/terminal`
-
-### 3) Terminal-Client starten (RFID)
-Der Server liefert eine kleine lokale Terminal-Oberfläche unter:
-```
-http://localhost:<PORT>/terminal
-```
-**Ablauf:**
-1. Im Web-UI als Admin unter **Terminals** einen neuen API-Key erzeugen.
-2. In der Terminal-Seite den API-Key eintragen.
-3. RFID-Chipnummer scannen und **Kommen/Gehen** senden.
-
-### 4) Terminal-API konfigurieren (für lokale Clients)
-Der lokale Terminal-Client sendet folgende Anfrage an den Server:
-```
-POST /api/terminals/entry
-Header: x-api-key: <API_KEY>
-Body: { "rfid": "<RFID>", "type": "CLOCK_IN" | "CLOCK_OUT" }
-```
-Stelle sicher, dass der Server erreichbar ist (Portfreigabe/Reverse Proxy) und der API-Key aktiv ist.
 
 ## Wichtige Endpunkte
 - `POST /api/auth/login` – Login, legt Session-Cookie an.
