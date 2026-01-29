@@ -57,20 +57,22 @@ export function InconsistentPage() {
   });
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between gap-3 flex-wrap">
-        <div>
-          <p className="text-xs uppercase text-slate-500">Qualitätssicherung</p>
-          <h1 className="text-2xl font-bold">Inkonsistente Buchungen</h1>
-          <p className="text-sm text-slate-600">Alle offenen Inkonsistenzen bis gestern, filterbar nach Name.</p>
+    <div className="space-y-6">
+      <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Qualitätssicherung</p>
+            <h1 className="text-2xl font-semibold text-slate-900">Inkonsistente Buchungen</h1>
+            <p className="text-sm text-slate-500">Alle offenen Inkonsistenzen bis gestern, filterbar nach Name.</p>
+          </div>
+          <input
+            type="text"
+            value={filter}
+            onChange={(e) => setFilter(e.target.value)}
+            placeholder="Filter nach Name"
+            className="input max-w-xs"
+          />
         </div>
-        <input
-          type="text"
-          value={filter}
-          onChange={(e) => setFilter(e.target.value)}
-          placeholder="Filter nach Name"
-          className="input max-w-xs"
-        />
       </div>
 
       <div className="card p-4 space-y-3">

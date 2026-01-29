@@ -48,16 +48,18 @@ export function OverviewCalendarPage() {
   };
 
   return (
-    <div className="space-y-4">
-      <div className="card p-4 flex items-center justify-between">
-        <div>
-          <p className="text-xs uppercase text-slate-500">Abteilungsübersicht</p>
-          <h2 className="text-2xl font-semibold">Urlaubskalender</h2>
-          <p className="text-sm text-slate-500">Zeigt geplante Urlaube, alle anderen Abwesenheiten als "Nicht im Haus".</p>
-        </div>
-        <div className="flex gap-2">
-          <button className="btn-ghost" onClick={() => goto(-1)}>← Vorheriger</button>
-          <button className="btn-ghost" onClick={() => goto(1)}>Nächster →</button>
+    <div className="space-y-6">
+      <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Abteilungsübersicht</p>
+            <h2 className="text-2xl font-semibold text-slate-900">Urlaubskalender</h2>
+            <p className="text-sm text-slate-500">Transparente Übersicht über Urlaub und Abwesenheiten im Team.</p>
+          </div>
+          <div className="flex gap-2">
+            <button className="btn-ghost" onClick={() => goto(-1)}>← Vorheriger</button>
+            <button className="btn-ghost" onClick={() => goto(1)}>Nächster →</button>
+          </div>
         </div>
       </div>
 
