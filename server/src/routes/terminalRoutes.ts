@@ -17,7 +17,11 @@ const terminalUpdateSchema = z.object({
 
 const terminalEntrySchema = z.object({
   rfid: z.string().min(1),
-  type: z.enum(['CLOCK_IN', 'CLOCK_OUT']).default('CLOCK_IN'),
+  type: z.enum(['CLOCK_IN', 'CLOCK_OUT']).optional(),
+});
+
+const terminalStatusSchema = z.object({
+  rfid: z.string().min(1),
 });
 
 const terminalByKey = (apiKey?: string | null) => {
@@ -25,6 +29,31 @@ const terminalByKey = (apiKey?: string | null) => {
   return db
     .prepare('SELECT id, name, api_key, active FROM terminal_keys WHERE api_key = ?')
     .get(apiKey) as { id: number; name: string; api_key: string; active: number } | undefined;
+};
+
+const findUserByRfid = (rfid: string) => {
+  return db
+    .prepare(
+      `SELECT u.id, u.name, u.first_name, u.last_name
+       FROM users u
+       JOIN user_profiles up ON up.user_id = u.id
+       WHERE up.rfid_code = ? AND u.active = 1`
+    )
+    .get(rfid) as { id: number; name: string; first_name?: string | null; last_name?: string | null } | undefined;
+};
+
+const resolveUserName = (user: { name: string; first_name?: string | null; last_name?: string | null }) => {
+  return `${[user.first_name, user.last_name].filter(Boolean).join(' ') || user.name}`;
+};
+
+const getNextAction = (userId: number) => {
+  const lastEntry = db
+    .prepare('SELECT type FROM time_entries WHERE user_id = ? ORDER BY timestamp DESC, id DESC LIMIT 1')
+    .get(userId) as { type: 'CLOCK_IN' | 'CLOCK_OUT' } | undefined;
+  if (!lastEntry || lastEntry.type === 'CLOCK_OUT') {
+    return { nextAction: 'CLOCK_IN' as const, lastAction: lastEntry?.type ?? null };
+  }
+  return { nextAction: 'CLOCK_OUT' as const, lastAction: lastEntry.type };
 };
 
 router.get('/', requireAuth, authorize(['admin']), (req: AuthRequest, res) => {
@@ -96,33 +125,56 @@ router.post('/entry', (req, res) => {
   if (!parsed.success) {
     return res.status(400).json({ errors: parsed.error.format() });
   }
-  const user = db
-    .prepare(
-      `SELECT u.id, u.name, u.first_name, u.last_name
-       FROM users u
-       JOIN user_profiles up ON up.user_id = u.id
-       WHERE up.rfid_code = ? AND u.active = 1`
-    )
-    .get(parsed.data.rfid) as { id: number; name: string; first_name?: string | null; last_name?: string | null } | undefined;
+  const user = findUserByRfid(parsed.data.rfid);
   if (!user) {
     return res.status(404).json({ message: 'RFID nicht gefunden' });
   }
+  const { nextAction } = getNextAction(user.id);
+  const action = nextAction;
   const timestamp = new Date().toISOString();
   db.prepare('INSERT INTO time_entries (user_id, timestamp, type, source) VALUES (?, ?, ?, ?)').run(
     user.id,
     timestamp,
-    parsed.data.type,
+    action,
     'TERMINAL'
   );
   db.prepare('UPDATE terminal_keys SET last_seen_at = ? WHERE id = ?').run(timestamp, terminal.id);
   res.json({
     ok: true,
-    action: parsed.data.type,
+    action,
     user: {
       id: user.id,
-      name: `${[user.first_name, user.last_name].filter(Boolean).join(' ') || user.name}`,
+      name: resolveUserName(user),
     },
     timestamp,
+  });
+});
+
+router.get('/status', (req, res) => {
+  const apiKey = req.header('x-api-key');
+  const terminal = terminalByKey(apiKey);
+  if (!terminal || !terminal.active) {
+    return res.status(401).json({ message: 'Terminal nicht autorisiert' });
+  }
+  const parsed = terminalStatusSchema.safeParse(req.query);
+  if (!parsed.success) {
+    return res.status(400).json({ errors: parsed.error.format() });
+  }
+  const user = findUserByRfid(parsed.data.rfid);
+  if (!user) {
+    return res.status(404).json({ message: 'RFID nicht gefunden' });
+  }
+  const { nextAction, lastAction } = getNextAction(user.id);
+  const timestamp = new Date().toISOString();
+  db.prepare('UPDATE terminal_keys SET last_seen_at = ? WHERE id = ?').run(timestamp, terminal.id);
+  res.json({
+    ok: true,
+    nextAction,
+    lastAction,
+    user: {
+      id: user.id,
+      name: resolveUserName(user),
+    },
   });
 });
 
