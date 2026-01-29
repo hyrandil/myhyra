@@ -5,7 +5,7 @@ import { authorize, AuthRequest, requireAuth } from '../auth';
 const router = Router();
 
 router.use(requireAuth);
-router.use(authorize(['admin', 'hr']));
+router.use(authorize(['admin']));
 
 router.get('/', (req: AuthRequest, res) => {
   const q = String(req.query.q || '').trim();
