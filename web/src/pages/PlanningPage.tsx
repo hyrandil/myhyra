@@ -44,7 +44,7 @@ export function PlanningPage() {
   const { data: employees } = useQuery({
     queryKey: ['employees', 'planning'],
     queryFn: () => fetchEmployees(),
-    enabled: auth.hasRole('admin', 'hr'),
+    enabled: auth.hasRole('admin'),
   });
 
   const schedules = useQuery({
@@ -56,7 +56,7 @@ export function PlanningPage() {
   const profiles = useQuery({
     queryKey: ['holiday-profiles'],
     queryFn: fetchHolidayProfiles,
-    enabled: auth.hasRole('admin', 'hr'),
+    enabled: auth.hasRole('admin'),
   });
 
   const profileHolidays = useQuery({

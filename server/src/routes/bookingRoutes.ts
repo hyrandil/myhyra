@@ -44,7 +44,7 @@ router.use(requireAuth);
 
 function ensureCanManage(req: AuthRequest, res: Response, targetUserId: number) {
   if (!req.user) return false;
-  if (req.user.role === 'admin' || req.user.role === 'hr') return true;
+  if (req.user.role === 'admin') return true;
   if (canManageUser(req.user.id, req.user.role, targetUserId)) return true;
   res.status(403).json({ message: 'Keine Berechtigung für diesen Nutzer' });
   return false;
@@ -96,7 +96,7 @@ router.post('/clock-out', (req: AuthRequest, res) => {
   res.json({ message: 'Ausgestempelt' });
 });
 
-router.get('/', authorize(['admin', 'hr']), (_req, res) => {
+router.get('/', authorize(['admin']), (_req, res) => {
   const bookings = db
     .prepare(
       `SELECT b.*, u.name as user_name, u.email as user_email FROM bookings b
@@ -106,7 +106,7 @@ router.get('/', authorize(['admin', 'hr']), (_req, res) => {
   res.json(bookings);
 });
 
-router.get('/user/:userId', authorize(['admin', 'hr', 'lead']), (req: AuthRequest, res) => {
+router.get('/user/:userId', authorize(['admin', 'lead']), (req: AuthRequest, res) => {
   const userId = Number(req.params.userId);
   if (Number.isNaN(userId)) {
     return res.status(400).json({ message: 'Ungültige Nutzer-ID' });
@@ -118,7 +118,7 @@ router.get('/user/:userId', authorize(['admin', 'hr', 'lead']), (req: AuthReques
   res.json(bookings);
 });
 
-router.post('/user/:userId/manual', authorize(['admin', 'hr', 'lead']), (req: AuthRequest, res) => {
+router.post('/user/:userId/manual', authorize(['admin', 'lead']), (req: AuthRequest, res) => {
   const userId = Number(req.params.userId);
   if (Number.isNaN(userId)) {
     return res.status(400).json({ message: 'Ungültige Nutzer-ID' });
@@ -169,7 +169,7 @@ router.post('/user/:userId/manual', authorize(['admin', 'hr', 'lead']), (req: Au
   return res.json(updated);
 });
 
-router.patch('/:bookingId', authorize(['admin', 'hr', 'lead']), (req: AuthRequest, res) => {
+router.patch('/:bookingId', authorize(['admin', 'lead']), (req: AuthRequest, res) => {
   const bookingId = Number(req.params.bookingId);
   if (Number.isNaN(bookingId)) {
     return res.status(400).json({ message: 'Ungültige Buchungs-ID' });

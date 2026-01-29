@@ -77,13 +77,14 @@ export function EmployeesPage() {
     requireLocation: overrides.requireLocation ?? emp.requireLocation,
     trackingStartDate: overrides.trackingStartDate ?? emp.trackingStartDate,
     personnelNumber: overrides.personnelNumber ?? emp.personnelNumber,
+    rfidCode: overrides.rfidCode ?? emp.rfidCode,
     holidayProfileId: overrides.holidayProfileId ?? emp.holidayProfileId,
     holidayProfileValidFrom: overrides.holidayProfileValidFrom ?? emp.holidayProfileValidFrom,
     endDate: overrides.endDate ?? emp.endDate,
   });
 
   const memberMutation = useMutation({
-    mutationFn: ({ departmentId, userId, role }: { departmentId: number; userId: number; role?: 'member' | 'lead' | 'hr' }) =>
+    mutationFn: ({ departmentId, userId, role }: { departmentId: number; userId: number; role?: 'member' | 'lead' }) =>
       upsertDepartmentMember(departmentId, { userId, role }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['departments'] }),
   });
@@ -120,7 +121,7 @@ export function EmployeesPage() {
   });
 
   const memberRoleMutation = useMutation({
-    mutationFn: ({ departmentId, userId, role }: { departmentId: number; userId: number; role: 'member' | 'lead' | 'hr' }) =>
+    mutationFn: ({ departmentId, userId, role }: { departmentId: number; userId: number; role: 'member' | 'lead' }) =>
       updateDepartmentMemberRole(departmentId, userId, role),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['departments'] }),
   });
@@ -155,12 +156,14 @@ export function EmployeesPage() {
       password: String(form.get('password')),
       role: (form.get('role') as Employee['role']) ?? 'employee',
       personnelNumber: String(form.get('personnelNumber') || ''),
+      rfidCode: String(form.get('rfidCode') || ''),
       department: String(form.get('department') || ''),
       location: String(form.get('location') || ''),
       requireLocation: form.get('requireLocation') === 'on',
       vacationAllowance: Number(form.get('vacationAllowance') || 30),
       trackingStartDate: String(form.get('trackingStartDate') || ''),
       holidayProfileId: Number(form.get('holidayProfileId') || '') || undefined,
+      holidayProfileValidFrom: String(form.get('holidayProfileValidFrom') || ''),
     });
     e.currentTarget.reset();
   };
@@ -175,10 +178,107 @@ export function EmployeesPage() {
     setResetPasswordValue('');
   }, [selected?.id]);
 
-  const activeEmployees = (data ?? []).filter((emp) => emp.active && (!emp.endDate || new Date(emp.endDate).getTime() > Date.now()));
-  const separatedEmployees = (data ?? []).filter(
+  const allEmployees = data ?? [];
+  const activeEmployees = allEmployees.filter(
+    (emp) => emp.active && (!emp.endDate || new Date(emp.endDate).getTime() > Date.now())
+  );
+  const separatedEmployees = allEmployees.filter(
     (emp) => !emp.active || (emp.endDate && new Date(emp.endDate).getTime() <= Date.now())
   );
+
+  const exportEmployeesCsv = () => {
+    const headers = [
+      'Name',
+      'E-Mail',
+      'Rolle',
+      'Status',
+      'Abteilung',
+      'Standort',
+      'Personalnummer',
+      'RFID',
+      'Erfassungsbeginn',
+      'Austritt',
+    ];
+    const rows = allEmployees.map((emp) => [
+      [emp.firstName, emp.lastName].filter(Boolean).join(' ') || emp.name,
+      emp.email,
+      emp.role,
+      emp.active ? 'Aktiv' : 'Inaktiv',
+      emp.department ?? '',
+      emp.location ?? '',
+      emp.personnelNumber ?? '',
+      emp.rfidCode ?? '',
+      emp.trackingStartDate ?? '',
+      emp.endDate ?? '',
+    ]);
+    const csv = [headers, ...rows]
+      .map((row) => row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(';'))
+      .join('\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `mitarbeitende-export-${new Date().toISOString().slice(0, 10)}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+  };
+
+  const exportEmployeesPdf = () => {
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) return;
+    const rows = allEmployees
+      .map(
+        (emp) => `
+          <tr>
+            <td>${[emp.firstName, emp.lastName].filter(Boolean).join(' ') || emp.name}</td>
+            <td>${emp.email}</td>
+            <td>${emp.role}</td>
+            <td>${emp.active ? 'Aktiv' : 'Inaktiv'}</td>
+            <td>${emp.department ?? ''}</td>
+            <td>${emp.personnelNumber ?? ''}</td>
+            <td>${emp.rfidCode ?? ''}</td>
+          </tr>
+        `
+      )
+      .join('');
+    printWindow.document.write(`
+      <html>
+        <head>
+          <title>Mitarbeitende Export</title>
+          <style>
+            body { font-family: Arial, sans-serif; padding: 16px; }
+            table { width: 100%; border-collapse: collapse; font-size: 12px; }
+            th, td { border: 1px solid #ddd; padding: 6px; text-align: left; }
+            th { background: #f1f5f9; }
+          </style>
+        </head>
+        <body>
+          <h2>Mitarbeitende Export</h2>
+          <table>
+            <thead>
+              <tr>
+                <th>Name</th>
+                <th>E-Mail</th>
+                <th>Rolle</th>
+                <th>Status</th>
+                <th>Abteilung</th>
+                <th>Personalnummer</th>
+                <th>RFID</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${rows}
+            </tbody>
+          </table>
+        </body>
+      </html>
+    `);
+    printWindow.document.close();
+    printWindow.focus();
+    printWindow.print();
+  };
 
   return (
     <div className="space-y-6">
@@ -227,9 +327,12 @@ export function EmployeesPage() {
               <h3 className="text-lg font-semibold text-slate-900">Neuen Mitarbeitenden anlegen</h3>
               <p className="text-sm text-slate-500">Schnelles Onboarding mit Rollen, Urlaub und Standortregel.</p>
             </div>
-            <span className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">
-              Schnellanlage
-            </span>
+            <div className="flex items-center gap-2">
+              <span className="text-slate-400">▸</span>
+              <span className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">
+                Schnellanlage
+              </span>
+            </div>
           </div>
         </summary>
         <form className="mt-5 grid grid-cols-1 gap-4 lg:grid-cols-3" onSubmit={onCreate}>
@@ -240,10 +343,10 @@ export function EmployeesPage() {
               <input name="lastName" required placeholder="Nachname" className="input" />
               <input name="email" required placeholder="E-Mail" className="input md:col-span-2" />
               <input name="personnelNumber" placeholder="Personalnummer" className="input" />
+              <input name="rfidCode" placeholder="RFID Chipnummer" className="input" />
               <select name="role" className="input">
                 <option value="employee">Mitarbeiter</option>
                 <option value="lead">Teamleiter</option>
-                <option value="hr">HR</option>
                 <option value="admin">Administrator</option>
               </select>
             </div>
@@ -308,7 +411,15 @@ export function EmployeesPage() {
               <h3 className="text-lg font-semibold text-slate-900">Teamübersicht</h3>
               <p className="text-sm text-slate-500">Übersicht aller aktiven Mitarbeitenden.</p>
             </div>
-            <span className="text-xs text-slate-500">{activeEmployees.length} aktive Profile</span>
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-xs text-slate-500">{activeEmployees.length} aktive Profile</span>
+              <button className="btn-ghost text-xs" type="button" onClick={exportEmployeesCsv}>
+                Export (Excel)
+              </button>
+              <button className="btn-ghost text-xs" type="button" onClick={exportEmployeesPdf}>
+                Export (PDF)
+              </button>
+            </div>
           </div>
           <div className="overflow-hidden rounded-xl border border-slate-200">
             <table className="w-full text-sm">
@@ -395,7 +506,10 @@ export function EmployeesPage() {
           <details className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
             <summary className="cursor-pointer list-none">
               <div className="flex items-center justify-between">
-                <h3 className="text-lg font-semibold text-slate-900">Ausgeschiedene Mitarbeitende</h3>
+                <div className="flex items-center gap-2">
+                  <span className="text-slate-400">▸</span>
+                  <h3 className="text-lg font-semibold text-slate-900">Ausgeschiedene Mitarbeitende</h3>
+                </div>
                 <span className="text-xs text-slate-500">{separatedEmployees.length}</span>
               </div>
             </summary>
@@ -426,7 +540,7 @@ export function EmployeesPage() {
                           onClick={() =>
                             updateMutation.mutate({
                               id: emp.id,
-                              payload: buildEmployeePayload(emp, { active: true, endDate: '' }),
+                              payload: buildEmployeePayload(emp, { active: true, endDate: null }),
                             })
                           }
                         >
@@ -494,6 +608,12 @@ export function EmployeesPage() {
                       placeholder="Personalnummer"
                       onChange={(e) => setSelected({ ...selected, personnelNumber: e.target.value })}
                     />
+                    <input
+                      className="input"
+                      value={selected.rfidCode ?? ''}
+                      placeholder="RFID Chipnummer"
+                      onChange={(e) => setSelected({ ...selected, rfidCode: e.target.value })}
+                    />
                     <select
                       className="input"
                       value={selected.role}
@@ -501,7 +621,6 @@ export function EmployeesPage() {
                     >
                       <option value="employee">Mitarbeiter</option>
                       <option value="lead">Teamleiter</option>
-                      <option value="hr">HR</option>
                       <option value="admin">Administrator</option>
                     </select>
                   </div>
@@ -722,7 +841,7 @@ export function EmployeesPage() {
                       e.preventDefault();
                       const form = new FormData(e.currentTarget);
                       const userId = Number(form.get('userId'));
-                      const role = (form.get('role') as 'member' | 'lead' | 'hr') ?? 'member';
+                      const role = (form.get('role') as 'member' | 'lead') ?? 'member';
                       if (!Number.isNaN(userId)) {
                         memberMutation.mutate({ departmentId: dept.id, userId, role });
                       }
@@ -739,7 +858,6 @@ export function EmployeesPage() {
                     <select name="role" className="input">
                       <option value="member">Mitarbeiter</option>
                       <option value="lead">Teamleiter</option>
-                      <option value="hr">HR</option>
                     </select>
                     <button className="btn-ghost" type="submit" disabled={memberMutation.isPending}>
                       Hinzufügen
@@ -761,13 +879,12 @@ export function EmployeesPage() {
                               memberRoleMutation.mutate({
                                 departmentId: dept.id,
                                 userId: member.userId,
-                                role: e.target.value as 'member' | 'lead' | 'hr',
+                                role: e.target.value as 'member' | 'lead',
                               })
                             }
                           >
                             <option value="member">Mitarbeiter</option>
                             <option value="lead">Teamleiter</option>
-                            <option value="hr">HR</option>
                           </select>
                           <button
                             className="btn-ghost text-xs"

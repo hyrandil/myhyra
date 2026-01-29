@@ -78,10 +78,10 @@ export function TimesPage() {
     }
   }, [selectedDate]);
   const [targetUser, setTargetUser] = useState<number | null>(() =>
-    hasRole('admin', 'hr', 'lead') ? user?.id ?? null : user?.id ?? null
+    hasRole('admin', 'lead') ? user?.id ?? null : user?.id ?? null
   );
   const selectedUserId = targetUser ?? user?.id ?? null;
-  const enableManagement = hasRole('admin', 'hr', 'lead');
+  const enableManagement = hasRole('admin', 'lead');
 
   const formatHours = (minutes: number) => {
     const sign = minutes < 0 ? '-' : '';
@@ -267,7 +267,7 @@ export function TimesPage() {
 
   const canEditTarget = useMemo(() => {
     if (!enableManagement || !selectedUserId) return false;
-    if (hasRole('admin', 'hr')) return true;
+    if (hasRole('admin')) return true;
     return selectedUserId !== user?.id;
   }, [enableManagement, hasRole, selectedUserId, user?.id]);
 
@@ -438,15 +438,6 @@ export function TimesPage() {
             <button className="btn-ghost" onClick={() => goto(1)}>Nächster →</button>
           </div>
         </div>
-      </div>
-
-      <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm flex items-center justify-between">
-        <div>
-          <p className="text-xs uppercase text-slate-500">Monat</p>
-          <h2 className="text-2xl font-semibold">{monthLabel}</h2>
-          <p className="text-sm text-slate-500">Kompakte Kalenderansicht mit Statusfarben</p>
-        </div>
-        <div className="text-sm text-slate-500">Ausgewählter Zeitraum</div>
       </div>
 
       {enableManagement && (
@@ -911,7 +902,7 @@ export function TimesPage() {
                   value={flexAdjustmentHours}
                   onChange={(e) => setFlexAdjustmentHours(e.target.value)}
                 />
-                <p className="text-xs text-slate-500">Format: 2h33m, 2:33 oder -0h45m.</p>
+                <p className="text-xs text-slate-500">Format: 2h30m, 1:15 oder -0h45m.</p>
                 <button className="btn-primary" type="submit" disabled={adjustFlexMutation.isPending}>
                   Gleitzeit anpassen
                 </button>

@@ -13,7 +13,7 @@ export function ApprovalListPage() {
   const auth = useAuth();
   const queryClient = useQueryClient();
 
-  if (!auth.hasRole('lead', 'hr', 'admin')) {
+  if (!auth.hasRole('lead', 'admin')) {
     return <Navigate to="/antraege" replace />;
   }
 

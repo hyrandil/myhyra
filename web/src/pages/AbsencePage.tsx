@@ -50,7 +50,7 @@ export function AbsencePage() {
         </div>
       </div>
 
-      {auth.hasRole('hr', 'admin') && (
+      {auth.hasRole('admin') && (
         <div className="card p-4">
           <div className="mb-4 grid gap-3 sm:grid-cols-2">
             <div className="p-3 rounded-lg border border-slate-200 bg-white space-y-2">

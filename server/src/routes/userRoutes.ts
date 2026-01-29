@@ -178,6 +178,7 @@ const toUserPayload = (
     active: number;
     vacation_allowance?: number;
     personnel_number?: string | null;
+    rfid_code?: string | null;
     flex_enabled?: number;
     location?: string | null;
     department?: string | null;
@@ -199,6 +200,7 @@ const toUserPayload = (
   active: Boolean(user.active),
   vacationAllowance: user.vacation_allowance ?? 0,
   personnelNumber: user.personnel_number ?? undefined,
+  rfidCode: user.rfid_code ?? undefined,
   flexEnabled: Boolean(user.flex_enabled ?? 0),
   location: user.location ?? undefined,
   department: user.department ?? undefined,
@@ -481,8 +483,33 @@ router.get('/me/flex', (req: AuthRequest, res) => {
   res.json({ balanceMinutes, plannedMinutes: plannedTotal, workedMinutes: workedTotal, adjustment, enabled });
 });
 
+const selfPasswordSchema = z.object({
+  current_password: z.string().min(6),
+  next_password: z.string().min(6),
+});
+
+router.patch('/me/password', (req: AuthRequest, res) => {
+  const parsed = selfPasswordSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ errors: parsed.error.format() });
+  }
+  const user = db.prepare('SELECT id, password_hash FROM users WHERE id = ?').get(req.user!.id) as
+    | { id: number; password_hash: string }
+    | undefined;
+  if (!user) {
+    return res.status(404).json({ message: 'Nutzer nicht gefunden' });
+  }
+  const valid = bcrypt.compareSync(parsed.data.current_password, user.password_hash);
+  if (!valid) {
+    return res.status(401).json({ message: 'Aktuelles Passwort ist ungültig' });
+  }
+  const nextHash = bcrypt.hashSync(parsed.data.next_password, 10);
+  db.prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(nextHash, user.id);
+  res.json({ ok: true });
+});
+
 const baseUserSelect = `SELECT u.id, u.name, u.first_name, u.last_name, u.email, u.role, u.created_at, u.active, IFNULL(us.vacation_allowance, 0) as vacation_allowance
-       , IFNULL(us.flex_enabled, 0) as flex_enabled, up.personnel_number, up.location, up.department, up.require_location, up.tracking_start_date, up.start_date, up.end_date, up.work_model_id, up.holiday_profile_id
+       , IFNULL(us.flex_enabled, 0) as flex_enabled, up.personnel_number, up.rfid_code, up.location, up.department, up.require_location, up.tracking_start_date, up.start_date, up.end_date, up.work_model_id, up.holiday_profile_id
        FROM users u
        LEFT JOIN user_settings us ON us.user_id = u.id
        LEFT JOIN user_profiles up ON up.user_id = u.id`;
@@ -491,7 +518,7 @@ router.get('/', (req: AuthRequest, res) => {
   const search = typeof req.query.q === 'string' ? `%${req.query.q}%` : '%';
   const filters = `AND (u.name LIKE ? OR u.email LIKE ? OR IFNULL(up.personnel_number,'') LIKE ?)`;
 
-  if (req.user!.role === 'admin' || req.user!.role === 'hr') {
+  if (req.user!.role === 'admin') {
     const users = db
       .prepare(
         `${baseUserSelect}
@@ -532,14 +559,14 @@ router.get('/', (req: AuthRequest, res) => {
   return res.status(403).json({ message: 'Keine Berechtigung' });
 });
 
-router.use(authorize(['admin', 'hr']));
+router.use(authorize(['admin']));
 
 const userSchema = z.object({
   first_name: z.string().min(1),
   last_name: z.string().min(1),
   email: z.string().email(),
   password: z.string().min(6),
-  role: z.enum(['employee', 'lead', 'hr', 'admin']).optional().default('employee'),
+  role: z.enum(['employee', 'lead', 'admin']).optional().default('employee'),
   vacationAllowance: z.number().min(0).max(80).optional(),
   birth_date: z
     .string()
@@ -548,6 +575,7 @@ const userSchema = z.object({
     .or(z.literal(''))
     .transform((value) => value || undefined),
   personnel_number: z.string().max(80).optional().or(z.literal('')).transform((value) => value || undefined),
+  rfid_code: z.string().max(120).optional().or(z.literal('')).transform((value) => value || undefined),
   phone: z.string().max(80).optional().or(z.literal('')).transform((value) => value || undefined),
   address: z.string().max(180).optional().or(z.literal('')).transform((value) => value || undefined),
   city: z.string().max(120).optional().or(z.literal('')).transform((value) => value || undefined),
@@ -576,11 +604,9 @@ const userSchema = z.object({
     .or(z.literal(''))
     .transform((value) => value || undefined),
   end_date: z
-    .string()
-    .regex(dateRegex, 'Datum muss YYYY-MM-DD sein')
+    .union([z.string().regex(dateRegex, 'Datum muss YYYY-MM-DD sein'), z.literal(''), z.null()])
     .optional()
-    .or(z.literal(''))
-    .transform((value) => value || undefined),
+    .transform((value) => (value ? value : null)),
   note: z.string().max(255).optional().or(z.literal('')).transform((value) => value || undefined),
 });
 
@@ -611,13 +637,14 @@ router.post('/', (req, res) => {
   if (Object.values(profile).some((value) => value !== undefined)) {
     db.prepare(
       `UPDATE user_profiles
-       SET birth_date = ?, personnel_number = ?, phone = ?, address = ?, city = ?, postal_code = ?, note = ?,
+       SET birth_date = ?, personnel_number = ?, rfid_code = ?, phone = ?, address = ?, city = ?, postal_code = ?, note = ?,
            location = ?, department = ?, require_location = COALESCE(?, require_location), tracking_start_date = ?, start_date = ?, end_date = ?, work_model_id = COALESCE(?, work_model_id),
            holiday_profile_id = COALESCE(?, holiday_profile_id)
        WHERE user_id = ?`
     ).run(
       profile.birth_date ?? null,
       profile.personnel_number ?? null,
+      profile.rfid_code ?? null,
       profile.phone ?? null,
       profile.address ?? null,
       profile.city ?? null,
@@ -638,7 +665,7 @@ router.post('/', (req, res) => {
   const created = db
     .prepare(
       `SELECT u.id, u.name, u.first_name, u.last_name, u.email, u.role, u.created_at, u.active, IFNULL(us.vacation_allowance, 0) as vacation_allowance
-       , IFNULL(us.flex_enabled, 0) as flex_enabled, up.personnel_number, up.location, up.department, up.require_location, up.tracking_start_date, up.start_date, up.end_date, up.work_model_id, up.holiday_profile_id
+       , IFNULL(us.flex_enabled, 0) as flex_enabled, up.personnel_number, up.rfid_code, up.location, up.department, up.require_location, up.tracking_start_date, up.start_date, up.end_date, up.work_model_id, up.holiday_profile_id
        FROM users u
        LEFT JOIN user_settings us ON us.user_id = u.id
        LEFT JOIN user_profiles up ON up.user_id = u.id
@@ -691,7 +718,7 @@ router.patch('/:id/status', (req, res) => {
   const updated = db
     .prepare(
       `SELECT u.id, u.name, u.first_name, u.last_name, u.email, u.role, u.created_at, u.active, IFNULL(us.vacation_allowance, 0) as vacation_allowance
-       , IFNULL(us.flex_enabled, 0) as flex_enabled, up.personnel_number, up.location, up.department, up.require_location, up.start_date, up.end_date, up.work_model_id, up.holiday_profile_id
+       , IFNULL(us.flex_enabled, 0) as flex_enabled, up.personnel_number, up.rfid_code, up.location, up.department, up.require_location, up.start_date, up.end_date, up.work_model_id, up.holiday_profile_id
        FROM users u
        LEFT JOIN user_settings us ON us.user_id = u.id
        LEFT JOIN user_profiles up ON up.user_id = u.id
@@ -709,8 +736,9 @@ const userUpdateSchema = z.object({
   first_name: z.string().min(1),
   last_name: z.string().min(1),
   email: z.string().email(),
-  role: z.enum(['employee', 'lead', 'hr', 'admin']),
+  role: z.enum(['employee', 'lead', 'admin']),
   personnel_number: z.string().max(80).optional().or(z.literal('')).transform((value) => value || undefined),
+  rfid_code: z.string().max(120).optional().or(z.literal('')).transform((value) => value || undefined),
   location: z.string().max(120).optional().or(z.literal('')).transform((value) => value || undefined),
   department: z.string().max(120).optional().or(z.literal('')).transform((value) => value || undefined),
   require_location: z.boolean().optional(),
@@ -727,11 +755,9 @@ const userUpdateSchema = z.object({
     .or(z.literal(''))
     .transform((value) => value || undefined),
   end_date: z
-    .string()
-    .regex(dateRegex, 'Datum muss YYYY-MM-DD sein')
+    .union([z.string().regex(dateRegex, 'Datum muss YYYY-MM-DD sein'), z.literal(''), z.null()])
     .optional()
-    .or(z.literal(''))
-    .transform((value) => value || undefined),
+    .transform((value) => (value ? value : null)),
   work_model_id: z.number().int().optional(),
   active: z.boolean().optional(),
   holiday_profile_id: z.number().int().optional(),
@@ -787,22 +813,26 @@ router.patch('/:id', (req, res) => {
   db.prepare(
     `UPDATE user_profiles
      SET personnel_number = COALESCE(?, personnel_number),
+         rfid_code = COALESCE(?, rfid_code),
          location = COALESCE(?, location),
          department = COALESCE(?, department),
          require_location = COALESCE(?, require_location),
          tracking_start_date = COALESCE(?, tracking_start_date),
          start_date = COALESCE(?, start_date),
-         end_date = COALESCE(?, end_date),
+         end_date = CASE WHEN ? THEN NULL WHEN ? IS NOT NULL THEN ? ELSE end_date END,
          work_model_id = COALESCE(?, work_model_id),
          holiday_profile_id = COALESCE(?, holiday_profile_id)
      WHERE user_id = ?`
   ).run(
     parsed.data.personnel_number ?? null,
+    parsed.data.rfid_code ?? null,
     parsed.data.location ?? null,
     parsed.data.department ?? null,
     parsed.data.require_location === undefined ? null : parsed.data.require_location ? 1 : 0,
     parsed.data.tracking_start_date ?? null,
     parsed.data.start_date ?? null,
+    parsed.data.end_date === null ? 1 : 0,
+    parsed.data.end_date ?? null,
     parsed.data.end_date ?? null,
     parsed.data.work_model_id ?? null,
     parsed.data.holiday_profile_id ?? null,
@@ -814,7 +844,7 @@ router.patch('/:id', (req, res) => {
   const updated = db
     .prepare(
       `SELECT u.id, u.name, u.first_name, u.last_name, u.email, u.role, u.created_at, u.active, IFNULL(us.vacation_allowance, 0) as vacation_allowance
-       , IFNULL(us.flex_enabled, 0) as flex_enabled, up.personnel_number, up.location, up.department, up.require_location, up.tracking_start_date, up.start_date, up.end_date, up.work_model_id, up.holiday_profile_id
+       , IFNULL(us.flex_enabled, 0) as flex_enabled, up.personnel_number, up.rfid_code, up.location, up.department, up.require_location, up.tracking_start_date, up.start_date, up.end_date, up.work_model_id, up.holiday_profile_id
        FROM users u
        LEFT JOIN user_settings us ON us.user_id = u.id
        LEFT JOIN user_profiles up ON up.user_id = u.id
@@ -840,6 +870,7 @@ const profileSchema = z.object({
     .or(z.literal(''))
     .transform((value) => value || undefined),
   personnel_number: z.string().max(80).optional().or(z.literal('')).transform((value) => value || undefined),
+  rfid_code: z.string().max(120).optional().or(z.literal('')).transform((value) => value || undefined),
   phone: z.string().max(80).optional().or(z.literal('')).transform((value) => value || undefined),
   address: z.string().max(180).optional().or(z.literal('')).transform((value) => value || undefined),
   city: z.string().max(120).optional().or(z.literal('')).transform((value) => value || undefined),
@@ -904,7 +935,7 @@ router.get('/:id/profile', (req, res) => {
   ensureProfileRow(userId);
   const profile = db
     .prepare(
-      `SELECT birth_date, personnel_number, phone, address, city, postal_code, note, tracking_start_date
+      `SELECT birth_date, personnel_number, rfid_code, phone, address, city, postal_code, note, tracking_start_date
        FROM user_profiles WHERE user_id = ?`
     )
     .get(userId);
@@ -927,11 +958,12 @@ router.patch('/:id/profile', (req, res) => {
   ensureProfileRow(userId);
   db.prepare(
     `UPDATE user_profiles
-     SET birth_date = ?, personnel_number = ?, phone = ?, address = ?, city = ?, postal_code = ?, note = ?, tracking_start_date = ?
+     SET birth_date = ?, personnel_number = ?, rfid_code = ?, phone = ?, address = ?, city = ?, postal_code = ?, note = ?, tracking_start_date = ?
      WHERE user_id = ?`
   ).run(
     parsed.data.birth_date ?? null,
     parsed.data.personnel_number ?? null,
+    parsed.data.rfid_code ?? null,
     parsed.data.phone ?? null,
     parsed.data.address ?? null,
     parsed.data.city ?? null,
@@ -942,7 +974,7 @@ router.patch('/:id/profile', (req, res) => {
   );
   const profile = db
     .prepare(
-      `SELECT birth_date, personnel_number, phone, address, city, postal_code, note
+      `SELECT birth_date, personnel_number, rfid_code, phone, address, city, postal_code, note
        FROM user_profiles WHERE user_id = ?`
     )
     .get(userId);

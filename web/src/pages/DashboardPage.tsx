@@ -101,7 +101,7 @@ export function DashboardPage() {
   const requireLocation = user?.requireLocation ?? true;
   const [location, setLocation] = useState<{ lat: number; lng: number } | null>(null);
   const [locationError, setLocationError] = useState<string | null>(null);
-  const canViewLocation = user ? ['lead', 'hr', 'admin'].includes(user.role) : false;
+  const canViewLocation = user ? ['lead', 'admin'].includes(user.role) : false;
   const [now, setNow] = useState<Date>(new Date());
 
   useEffect(() => {

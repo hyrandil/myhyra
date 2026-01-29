@@ -221,7 +221,7 @@ router.get('/kinds', (req: AuthRequest, res) => {
   res.json(kinds);
 });
 
-router.post('/kinds', authorize(['admin', 'hr']), (req: AuthRequest, res) => {
+router.post('/kinds', authorize(['admin']), (req: AuthRequest, res) => {
   const parsed = z
     .object({
       code: z.string().min(2),
@@ -251,7 +251,7 @@ router.post('/kinds', authorize(['admin', 'hr']), (req: AuthRequest, res) => {
   }
 });
 
-router.patch('/kinds/:id', authorize(['admin', 'hr']), (req: AuthRequest, res) => {
+router.patch('/kinds/:id', authorize(['admin']), (req: AuthRequest, res) => {
   const id = Number(req.params.id);
   if (Number.isNaN(id)) return res.status(400).json({ message: 'Ungültige ID' });
   const existing = db.prepare('SELECT * FROM absence_kinds WHERE id = ?').get(id) as AbsenceKind | undefined;
@@ -285,7 +285,7 @@ router.patch('/kinds/:id', authorize(['admin', 'hr']), (req: AuthRequest, res) =
   }
 });
 
-router.delete('/kinds/:id', authorize(['admin', 'hr']), (req: AuthRequest, res) => {
+router.delete('/kinds/:id', authorize(['admin']), (req: AuthRequest, res) => {
   const id = Number(req.params.id);
   if (Number.isNaN(id)) return res.status(400).json({ message: 'Ungültige ID' });
   const existing = db.prepare('SELECT * FROM absence_kinds WHERE id = ?').get(id) as AbsenceKind | undefined;
@@ -411,14 +411,14 @@ router.get('/me/summary', (req: AuthRequest, res) => {
   res.json({ allowance, used, remaining: Math.max(allowance - used, 0) });
 });
 
-router.use(authorize(['admin', 'hr', 'lead']));
+router.use(authorize(['admin', 'lead']));
 
 router.get('/requests', (req: AuthRequest, res) => {
   const baseQuery =
     `SELECT DISTINCT ar.*, u.name as user_name
      FROM absence_requests ar
      JOIN users u ON u.id = ar.user_id`;
-  if (req.user!.role === 'admin' || req.user!.role === 'hr') {
+  if (req.user!.role === 'admin') {
     const rows = db
       .prepare(
         `${baseQuery} WHERE (ar.status = 'pending' OR ar.cancel_requested = 1) ORDER BY ar.start_date DESC, ar.created_at DESC`
@@ -433,10 +433,10 @@ router.get('/requests', (req: AuthRequest, res) => {
     .prepare(
       `${baseQuery}
        JOIN department_members dm ON dm.user_id = ar.user_id
-       WHERE dm.department_id IN (${placeholders}) AND (ar.status = 'pending' OR ar.cancel_requested = 1)
+       WHERE dm.department_id IN (${placeholders}) AND ar.user_id != ? AND (ar.status = 'pending' OR ar.cancel_requested = 1)
        ORDER BY ar.start_date DESC, ar.created_at DESC`
     )
-    .all(...allowedDepartments) as AbsenceRequestRow[];
+    .all(...allowedDepartments, req.user!.id) as AbsenceRequestRow[];
   res.json(rows.map(serializeRequest));
 });
 
@@ -455,7 +455,7 @@ router.patch('/requests/:id/status', (req: AuthRequest, res) => {
   if (!requestRow) {
     return res.status(404).json({ message: 'Antrag nicht gefunden' });
   }
-  if (req.user!.role !== 'admin' && req.user!.role !== 'hr') {
+  if (req.user!.role !== 'admin') {
     const allowed = canManageUser(req.user!.id, req.user!.role, requestRow.user_id);
     if (!allowed) {
       return res.status(403).json({ message: 'Keine Berechtigung für diese Abteilung' });
@@ -512,7 +512,7 @@ router.patch('/requests/:id/status', (req: AuthRequest, res) => {
 
 function ensureManageable(req: AuthRequest, res: any, targetUserId: number) {
   if (!req.user) return false;
-  if (req.user.role === 'admin' || req.user.role === 'hr') return true;
+  if (req.user.role === 'admin') return true;
   if (canManageUser(req.user.id, req.user.role, targetUserId)) return true;
   res.status(403).json({ message: 'Keine Berechtigung für diesen Mitarbeitenden' });
   return false;

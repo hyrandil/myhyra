@@ -307,7 +307,7 @@ const buildVacationOverview = (userIds: number[], today: string) => {
 router.get('/vacation-overview', (req: AuthRequest, res) => {
   const today = new Date().toISOString().slice(0, 10);
   let targetIds: number[] = [];
-  if (req.user?.role === 'admin' || req.user?.role === 'hr' || req.user?.role === 'lead') {
+  if (req.user?.role === 'admin' || req.user?.role === 'lead') {
     const rows = db.prepare('SELECT id FROM users WHERE active = 1').all() as { id: number }[];
     targetIds = rows.map((r) => r.id);
   } else if (req.user) {
@@ -317,7 +317,7 @@ router.get('/vacation-overview', (req: AuthRequest, res) => {
   res.json({ items: buildVacationOverview(targetIds, today) });
 });
 
-router.use(authorize(['admin', 'hr']));
+router.use(authorize(['admin']));
 
 router.get('/attendance', (req, res) => {
   const data = buildAttendance(typeof req.query.month === 'string' ? req.query.month : undefined);

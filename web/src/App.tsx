@@ -11,7 +11,6 @@ import {
 } from './pages/RequestsPage';
 import { EmployeesPage } from './pages/EmployeesPage';
 import { ReportsPage } from './pages/ReportsPage';
-import { OverviewCalendarPage } from './pages/OverviewCalendarPage';
 import { PlanningPage } from './pages/PlanningPage';
 import { InconsistentPage } from './pages/InconsistentPage';
 import { useAuth } from './AuthProvider';
@@ -19,6 +18,8 @@ import { MobileHomePage } from './pages/MobileHomePage';
 import { useIsMobile } from './hooks/useIsMobile';
 import { ApprovalListPage } from './pages/ApprovalListPage';
 import { LoggingPage } from './pages/LoggingPage';
+import { SettingsPage } from './pages/SettingsPage';
+import { TerminalsPage } from './pages/TerminalsPage';
 
 const appVersion = __APP_VERSION__ || 'dev';
 
@@ -71,8 +72,6 @@ function Shell({ children }: { children: React.ReactNode }) {
     switch (role) {
       case 'admin':
         return 'Administrator';
-      case 'hr':
-        return 'Personal';
       case 'lead':
         return 'Teamleiter';
       default:
@@ -93,14 +92,15 @@ function Shell({ children }: { children: React.ReactNode }) {
         <nav className="p-4 space-y-1 flex-1 overflow-y-auto">
           <NavItem to="/" label="Dashboard" />
           <NavItem to="/zeiten" label="Kalender & Zeiten" />
-          <NavItem to="/uebersicht" label="Übersichtkalender" />
           <NavItem to="/antraege" label="Anträge" />
           {auth.hasRole('admin') && <NavItem to="/abwesenheiten" label="Abwesenheiten" />}
-          {auth.hasRole('lead', 'hr', 'admin') && <NavItem to="/inkonsistenzen" label="Inkonsistenzen" />}
-          {auth.hasRole('hr', 'admin') && <NavItem to="/planung" label="Stundenplanung" />}
-          {auth.hasRole('hr', 'admin') && <NavItem to="/mitarbeitende" label="Personalverwaltung" />}
-          {auth.hasRole('hr', 'admin') && <NavItem to="/berichte" label="Berichte" />}
-          {auth.hasRole('admin', 'hr') && <NavItem to="/logging" label="Logging" />}
+          {auth.hasRole('lead', 'admin') && <NavItem to="/inkonsistenzen" label="Inkonsistenzen" />}
+          {auth.hasRole('admin') && <NavItem to="/planung" label="Stundenplanung" />}
+          {auth.hasRole('admin') && <NavItem to="/mitarbeitende" label="Personalverwaltung" />}
+          {auth.hasRole('admin') && <NavItem to="/berichte" label="Berichte" />}
+          {auth.hasRole('admin') && <NavItem to="/terminals" label="Terminals" />}
+          {auth.hasRole('admin') && <NavItem to="/logging" label="Logging" />}
+          <NavItem to="/einstellungen" label="Einstellungen" />
         </nav>
         <div className="p-4 border-t border-slate-200 bg-slate-50 mt-auto">
           <div className="flex items-center gap-3">
@@ -150,8 +150,6 @@ function MobileShell({ children }: { children: React.ReactNode }) {
     switch (role) {
       case 'admin':
         return 'Administrator';
-      case 'hr':
-        return 'Personal';
       case 'lead':
         return 'Teamleiter';
       default:
@@ -183,8 +181,9 @@ function MobileShell({ children }: { children: React.ReactNode }) {
           <MobileNavItem to="/antraege" label="Anträge" />
           {auth.hasRole('admin') && <MobileNavItem to="/abwesenheiten" label="Abwesen" />}
           <MobileNavItem to="/berichte" label="Berichte" />
-          {auth.hasRole('lead', 'hr', 'admin') && <MobileNavItem to="/inkonsistenzen" label="Checks" />}
-          {auth.hasRole('admin', 'hr') && <MobileNavItem to="/logging" label="Log" />}
+          {auth.hasRole('lead', 'admin') && <MobileNavItem to="/inkonsistenzen" label="Checks" />}
+          {auth.hasRole('admin') && <MobileNavItem to="/logging" label="Log" />}
+          <MobileNavItem to="/einstellungen" label="Einstell." />
         </div>
       </nav>
     </div>
@@ -214,11 +213,12 @@ export default function App() {
                   <Route path="/antraege/genehmigungen" element={<ApprovalListPage />} />
                   {auth.hasRole('admin') && <Route path="/abwesenheiten" element={<AbsencePage />} />}
                   <Route path="/berichte" element={<ReportsPage />} />
-                  <Route path="/uebersicht" element={<OverviewCalendarPage />} />
-                  {auth.hasRole('hr', 'admin') && <Route path="/mitarbeitende" element={<EmployeesPage />} />}
-                  <Route path="/inkonsistenzen" element={<InconsistentPage />} />
-                  {auth.hasRole('admin', 'hr') && <Route path="/logging" element={<LoggingPage />} />}
-                  <Route path="/planung" element={<PlanningPage />} />
+                  {auth.hasRole('admin') && <Route path="/mitarbeitende" element={<EmployeesPage />} />}
+                  {auth.hasRole('lead', 'admin') && <Route path="/inkonsistenzen" element={<InconsistentPage />} />}
+                  {auth.hasRole('admin') && <Route path="/logging" element={<LoggingPage />} />}
+                  {auth.hasRole('admin') && <Route path="/planung" element={<PlanningPage />} />}
+                  {auth.hasRole('admin') && <Route path="/terminals" element={<TerminalsPage />} />}
+                  <Route path="/einstellungen" element={<SettingsPage />} />
                 </Routes>
               </MobileShell>
             </Protected>
@@ -228,18 +228,19 @@ export default function App() {
                 <Routes>
                   <Route path="/" element={<DashboardPage />} />
                   <Route path="/zeiten" element={<TimesPage />} />
-                  <Route path="/uebersicht" element={<OverviewCalendarPage />} />
                   <Route path="/antraege" element={<RequestsPage />} />
                   <Route path="/antraege/abwesenheit" element={<AbsenceRequestsPage />} />
                   <Route path="/antraege/korrektur" element={<CorrectionRequestsPage />} />
                   <Route path="/antraege/storno" element={<CancellationRequestsPage />} />
                   <Route path="/antraege/genehmigungen" element={<ApprovalListPage />} />
                   {auth.hasRole('admin') && <Route path="/abwesenheiten" element={<AbsencePage />} />}
-                  <Route path="/inkonsistenzen" element={<InconsistentPage />} />
-                  <Route path="/planung" element={<PlanningPage />} />
-                  {auth.hasRole('hr', 'admin') && <Route path="/mitarbeitende" element={<EmployeesPage />} />}
-                  <Route path="/berichte" element={<ReportsPage />} />
-                  {auth.hasRole('admin', 'hr') && <Route path="/logging" element={<LoggingPage />} />}
+                  {auth.hasRole('lead', 'admin') && <Route path="/inkonsistenzen" element={<InconsistentPage />} />}
+                  {auth.hasRole('admin') && <Route path="/planung" element={<PlanningPage />} />}
+                  {auth.hasRole('admin') && <Route path="/mitarbeitende" element={<EmployeesPage />} />}
+                  {auth.hasRole('admin') && <Route path="/berichte" element={<ReportsPage />} />}
+                  {auth.hasRole('admin') && <Route path="/terminals" element={<TerminalsPage />} />}
+                  {auth.hasRole('admin') && <Route path="/logging" element={<LoggingPage />} />}
+                  <Route path="/einstellungen" element={<SettingsPage />} />
                 </Routes>
               </Shell>
             </Protected>
