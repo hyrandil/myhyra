@@ -230,8 +230,8 @@ function insertEntry(
 }
 
 function buildMonthlyReport(userId: number, monthValue?: string) {
-  const today = new Date();
-  const baseMonth = monthValue || `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
+  const nowDate = new Date();
+  const baseMonth = monthValue || `${nowDate.getFullYear()}-${String(nowDate.getMonth() + 1).padStart(2, '0')}`;
   const baseDate = new Date(`${baseMonth}-01T00:00:00Z`);
   const start = new Date(Date.UTC(baseDate.getUTCFullYear(), baseDate.getUTCMonth(), 1));
   const end = new Date(Date.UTC(baseDate.getUTCFullYear(), baseDate.getUTCMonth() + 1, 0));
@@ -386,6 +386,7 @@ function buildMonthlyReport(userId: number, monthValue?: string) {
   const userRow = db
     .prepare(
       `SELECT u.first_name, u.last_name, u.name, u.email, up.personnel_number, us.vacation_allowance
+       , us.vacation_adjust_days, up.tracking_start_date, up.start_date
        FROM users u
        LEFT JOIN user_profiles up ON up.user_id = u.id
        LEFT JOIN user_settings us ON us.user_id = u.id
@@ -399,12 +400,18 @@ function buildMonthlyReport(userId: number, monthValue?: string) {
         email?: string | null;
         personnel_number?: string | null;
         vacation_allowance?: number | null;
+        vacation_adjust_days?: number | null;
+        tracking_start_date?: string | null;
+        start_date?: string | null;
       }
     | undefined;
   const displayName = [userRow?.first_name, userRow?.last_name].filter(Boolean).join(' ') || userRow?.name || '';
   const baseAllowance = userRow?.vacation_allowance ?? 0;
+  const adjustmentDays = userRow?.vacation_adjust_days ?? 0;
+  const trackingStartValue = userRow?.tracking_start_date || userRow?.start_date || null;
+  const trackingStartDate = trackingStartValue ? new Date(`${trackingStartValue}T00:00:00Z`) : null;
   const year = Number(baseMonth.slice(0, 4));
-  const today = new Date().toISOString().slice(0, 10);
+  const todayIso = new Date().toISOString().slice(0, 10);
   const prevYearStart = `${year - 1}-01-01`;
   const prevYearEnd = `${year - 1}-12-31`;
   const currentYearStart = `${year}-01-01`;
@@ -423,11 +430,16 @@ function buildMonthlyReport(userId: number, monthValue?: string) {
     }[];
   const prevUsage = buildVacationPortions(userId, vacationAbsences, prevYearStart, prevYearEnd, prevYearEnd);
   const prevUsed = Array.from(prevUsage.usedByDay.values()).reduce((sum, value) => sum + value, 0);
-  const carryOver = Math.max(baseAllowance - prevUsed, 0);
-  const allowance = baseAllowance + carryOver;
-  const currentUsage = buildVacationPortions(userId, vacationAbsences, currentYearStart, currentYearEnd, today);
+  const prevYearEndDate = new Date(`${prevYearEnd}T00:00:00Z`);
+  const currentYearEndDate = new Date(`${currentYearEnd}T00:00:00Z`);
+  const isActiveForYear = !trackingStartDate || trackingStartDate.getTime() <= currentYearEndDate.getTime();
+  const baseAllowanceForYear = isActiveForYear ? baseAllowance : 0;
+  const allowCarryOver = !trackingStartDate || trackingStartDate.getTime() <= prevYearEndDate.getTime();
+  const carryOver = allowCarryOver ? Math.max(baseAllowanceForYear - prevUsed, 0) : 0;
+  const allowance = baseAllowanceForYear + carryOver;
+  const currentUsage = buildVacationPortions(userId, vacationAbsences, currentYearStart, currentYearEnd, todayIso);
   const currentUsed = Array.from(currentUsage.usedByDay.values()).reduce((sum, value) => sum + value, 0);
-  const remaining = Math.max(allowance - currentUsed, 0);
+  const remaining = allowance - currentUsed + adjustmentDays;
   const dailySnapshot = buildDailySummary(userId, baseMonth);
 
   return {
@@ -460,7 +472,7 @@ const manualEntrySchema = z.object({
 
 function ensureManageable(req: AuthRequest, res: any, targetUserId: number) {
   if (!req.user) return false;
-  if (req.user.role === 'admin' || req.user.role === 'hr') return true;
+  if (req.user.role === 'admin') return true;
   if (canManageUser(req.user.id, req.user.role, targetUserId)) return true;
   res.status(403).json({ message: 'Keine Berechtigung für diesen Mitarbeitenden' });
   return false;
@@ -473,7 +485,7 @@ function ensureEntryManageable(req: AuthRequest, res: any, entryId: number) {
     return null;
   }
   if (!req.user) return null;
-  if (req.user.role === 'admin' || req.user.role === 'hr') return entry;
+  if (req.user.role === 'admin') return entry;
   if (canManageUser(req.user.id, req.user.role, entry.user_id)) return entry;
   res.status(403).json({ message: 'Keine Berechtigung für diese Buchung' });
   return null;
@@ -711,10 +723,15 @@ function buildDailySummary(userId: number, month?: string, maskAbsences = false)
     cursor.setUTCDate(cursor.getUTCDate() + 1);
   }
 
+  const flexAdjustment =
+    (db.prepare('SELECT flex_adjust_minutes FROM user_settings WHERE user_id = ?').get(userId) as
+      | { flex_adjust_minutes?: number }
+      | undefined)?.flex_adjust_minutes ?? 0;
+
   return {
     month: `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, '0')}`,
     days,
-    flexBalance: flexCarry,
+    flexBalance: flexCarry + flexAdjustment,
   };
 }
 
@@ -790,7 +807,7 @@ router.get('/me/daily', (req: AuthRequest, res) => {
   res.json(buildDailySummary(req.user!.id, month, true));
 });
 
-router.get('/user/:userId/daily', authorize(['admin', 'hr', 'lead']), (req: AuthRequest, res) => {
+router.get('/user/:userId/daily', authorize(['admin', 'lead']), (req: AuthRequest, res) => {
   const userId = Number(req.params.userId);
   const { month } = req.query as { month?: string };
   if (Number.isNaN(userId)) {
@@ -815,7 +832,7 @@ router.get('/user/:userId/day', requireAuth, (req: AuthRequest, res) => {
   const exists = db.prepare('SELECT id FROM users WHERE id = ?').get(userId) as { id: number } | undefined;
   if (!exists) return res.status(404).json({ message: 'Nutzer nicht gefunden' });
   if (req.user!.id !== userId) {
-    if (req.user!.role === 'admin' || req.user!.role === 'hr') {
+    if (req.user!.role === 'admin') {
       if (!ensureManageable(req, res, userId)) return;
     } else if (req.user!.role === 'lead') {
       if (!ensureManageable(req, res, userId)) return;
@@ -900,7 +917,7 @@ router.get('/me/monthly-report', (req: AuthRequest, res) => {
 router.get('/inconsistent', (req: AuthRequest, res) => {
   const actor = req.user!;
   let userIds: { id: number; first_name?: string | null; last_name?: string | null; name?: string | null }[] = [];
-  if (actor.role === 'admin' || actor.role === 'hr') {
+  if (actor.role === 'admin') {
     userIds = db.prepare('SELECT id, first_name, last_name, name FROM users').all() as any[];
   } else if (actor.role === 'lead') {
     const departments = managedDepartments(actor.id);
@@ -1115,7 +1132,7 @@ router.get('/overview', (req: AuthRequest, res) => {
   res.json({ month: monthValue, days });
 });
 
-router.post('/user/:userId/manual', authorize(['admin', 'hr', 'lead']), (req: AuthRequest, res) => {
+router.post('/user/:userId/manual', authorize(['admin', 'lead']), (req: AuthRequest, res) => {
   const userId = Number(req.params.userId);
   if (Number.isNaN(userId)) {
     return res.status(400).json({ message: 'Ungültige Nutzer-ID' });
@@ -1152,7 +1169,7 @@ const updateEntrySchema = z.object({
   type: z.enum(['CLOCK_IN', 'CLOCK_OUT']),
 });
 
-router.patch('/entry/:entryId', authorize(['admin', 'hr', 'lead']), (req: AuthRequest, res) => {
+router.patch('/entry/:entryId', authorize(['admin', 'lead']), (req: AuthRequest, res) => {
   const entryId = Number(req.params.entryId);
   if (Number.isNaN(entryId)) return res.status(400).json({ message: 'Ungültige Buchungs-ID' });
   const entry = ensureEntryManageable(req, res, entryId);
@@ -1166,7 +1183,7 @@ router.patch('/entry/:entryId', authorize(['admin', 'hr', 'lead']), (req: AuthRe
   res.json(updated);
 });
 
-router.delete('/entry/:entryId', authorize(['admin', 'hr', 'lead']), (req: AuthRequest, res) => {
+router.delete('/entry/:entryId', authorize(['admin', 'lead']), (req: AuthRequest, res) => {
   const entryId = Number(req.params.entryId);
   if (Number.isNaN(entryId)) return res.status(400).json({ message: 'Ungültige Buchungs-ID' });
   const entry = ensureEntryManageable(req, res, entryId);
@@ -1266,8 +1283,8 @@ router.get('/corrections/me', requireAuth, (req: AuthRequest, res) => {
   res.json(rows.map((row: any) => ({ ...row, entries: loadCorrectionEntries(row.id) })));
 });
 
-router.get('/corrections/inbox', authorize(['admin', 'hr', 'lead']), (req: AuthRequest, res) => {
-  if (req.user!.role === 'admin' || req.user!.role === 'hr') {
+router.get('/corrections/inbox', authorize(['admin', 'lead']), (req: AuthRequest, res) => {
+  if (req.user!.role === 'admin') {
     const rows = db
       .prepare(
         `SELECT tcr.*, u.name as user_name, u.email as user_email
@@ -1288,10 +1305,10 @@ router.get('/corrections/inbox', authorize(['admin', 'hr', 'lead']), (req: AuthR
        FROM time_correction_requests tcr
        JOIN users u ON u.id = tcr.user_id
        JOIN department_members dm ON dm.user_id = u.id
-       WHERE dm.department_id IN (${placeholders}) AND dm.role IN ('lead','member','hr') AND (tcr.status = 'pending' OR tcr.cancel_requested = 1)
+       WHERE dm.department_id IN (${placeholders}) AND dm.role IN ('lead','member') AND tcr.user_id != ? AND (tcr.status = 'pending' OR tcr.cancel_requested = 1)
        ORDER BY tcr.date DESC, tcr.created_at DESC`
     )
-    .all(...allowedDepartments);
+    .all(...allowedDepartments, req.user!.id);
   res.json(rows.map((row: any) => ({ ...row, entries: loadCorrectionEntries(row.id) })));
 });
 
@@ -1317,7 +1334,7 @@ router.post('/corrections/:id/cancel', requireAuth, (req: AuthRequest, res) => {
   res.json({ message: 'Stornierung angefragt' });
 });
 
-router.patch('/corrections/:id/status', authorize(['admin', 'hr', 'lead']), (req: AuthRequest, res) => {
+router.patch('/corrections/:id/status', authorize(['admin', 'lead']), (req: AuthRequest, res) => {
   const id = Number(req.params.id);
   if (Number.isNaN(id)) return res.status(400).json({ message: 'Ungültige ID' });
   const parsed = z.enum(['approved', 'rejected']).safeParse(req.body?.status);
@@ -1326,7 +1343,7 @@ router.patch('/corrections/:id/status', authorize(['admin', 'hr', 'lead']), (req
     .prepare('SELECT * FROM time_correction_requests WHERE id = ?')
     .get(id) as { user_id: number; status: string; cancel_requested?: number } | undefined;
   if (!row) return res.status(404).json({ message: 'Antrag nicht gefunden' });
-  if (req.user!.role !== 'admin' && req.user!.role !== 'hr') {
+  if (req.user!.role !== 'admin') {
     if (!ensureManageable(req, res, row.user_id)) return;
   }
 

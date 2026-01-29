@@ -3,6 +3,7 @@ import bcrypt from 'bcryptjs';
 import fs from 'fs';
 import path from 'path';
 import { ADMIN_EMAIL, ADMIN_PASSWORD, DATABASE_FILE } from './config';
+import { buildHolidayList } from './utils/holidays';
 
 const dbDir = path.dirname(DATABASE_FILE);
 fs.mkdirSync(dbDir, { recursive: true });
@@ -88,6 +89,7 @@ CREATE TABLE IF NOT EXISTS user_settings (
   flex_enabled INTEGER NOT NULL DEFAULT 0,
   flex_adjust_minutes INTEGER NOT NULL DEFAULT 0,
   vacation_allowance REAL NOT NULL DEFAULT 30,
+  vacation_adjust_days REAL NOT NULL DEFAULT 0,
   FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
 );
 
@@ -140,6 +142,7 @@ CREATE TABLE IF NOT EXISTS user_profiles (
   end_date TEXT,
   birth_date TEXT,
   personnel_number TEXT,
+  rfid_code TEXT,
   phone TEXT,
   address TEXT,
   city TEXT,
@@ -191,6 +194,15 @@ CREATE TABLE IF NOT EXISTS departments (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   name TEXT NOT NULL UNIQUE,
   description TEXT,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS terminal_keys (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL,
+  api_key TEXT NOT NULL UNIQUE,
+  active INTEGER NOT NULL DEFAULT 1,
+  last_seen_at TEXT,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -362,11 +374,67 @@ ensureTableColumn('user_settings', 'week_start', "week_start TEXT NOT NULL DEFAU
 ensureTableColumn('user_settings', 'time_format', "time_format TEXT NOT NULL DEFAULT '24h'");
 ensureTableColumn('user_settings', 'flex_enabled', 'flex_enabled INTEGER NOT NULL DEFAULT 0');
 ensureTableColumn('user_settings', 'flex_adjust_minutes', 'flex_adjust_minutes INTEGER NOT NULL DEFAULT 0');
+ensureTableColumn('user_settings', 'vacation_adjust_days', 'vacation_adjust_days REAL NOT NULL DEFAULT 0');
 db.prepare("UPDATE user_settings SET week_start = 'monday' WHERE week_start IS NULL").run();
 db.prepare("UPDATE user_settings SET time_format = '24h' WHERE time_format IS NULL").run();
 db.prepare('UPDATE user_settings SET flex_enabled = 0 WHERE flex_enabled IS NULL').run();
 db.prepare('UPDATE user_settings SET flex_adjust_minutes = 0 WHERE flex_adjust_minutes IS NULL').run();
+db.prepare('UPDATE user_settings SET vacation_adjust_days = 0 WHERE vacation_adjust_days IS NULL').run();
 db.exec(`INSERT OR IGNORE INTO user_settings (user_id) SELECT id FROM users;`);
+
+const holidayStates: Record<string, string> = {
+  BW: 'Baden-Württemberg',
+  BY: 'Bayern',
+  BE: 'Berlin',
+  BB: 'Brandenburg',
+  HB: 'Bremen',
+  HH: 'Hamburg',
+  HE: 'Hessen',
+  MV: 'Mecklenburg-Vorpommern',
+  NI: 'Niedersachsen',
+  NW: 'Nordrhein-Westfalen',
+  RP: 'Rheinland-Pfalz',
+  SL: 'Saarland',
+  SN: 'Sachsen',
+  ST: 'Sachsen-Anhalt',
+  SH: 'Schleswig-Holstein',
+  TH: 'Thüringen',
+};
+
+const seedHolidayProfiles = () => {
+  const insertProfile = db.prepare('INSERT INTO holiday_profiles (name, state) VALUES (?, ?)');
+  const findProfile = db.prepare('SELECT id FROM holiday_profiles WHERE state = ?');
+  const insertHoliday = db.prepare(
+    'INSERT OR IGNORE INTO holidays (profile_id, date, name, duration, source) VALUES (?, ?, ?, ?, ?)'
+  );
+  const existingYearsStmt = db.prepare(
+    "SELECT DISTINCT strftime('%Y', date) as year FROM holidays WHERE profile_id = ?"
+  );
+
+  const startYear = 2020;
+  const endYear = 2099;
+
+  Object.entries(holidayStates).forEach(([state, label]) => {
+    const existing = findProfile.get(state) as { id: number } | undefined;
+    const profileId = existing?.id ?? Number(insertProfile.run(`Feiertage ${label}`, state).lastInsertRowid);
+
+    const existingYears = new Set(
+      (existingYearsStmt.all(profileId) as { year: string }[])
+        .map((row) => Number(row.year))
+        .filter((year) => Number.isFinite(year))
+    );
+
+    for (let year = startYear; year <= endYear; year += 1) {
+      if (existingYears.has(year)) continue;
+      const holidays = buildHolidayList(state, year);
+      holidays.forEach((holiday) => {
+        insertHoliday.run(profileId, holiday.date, holiday.name, holiday.duration, 'imported');
+      });
+    }
+  });
+};
+
+seedHolidayProfiles();
   ensureTableColumn('absences', 'start_date', 'start_date TEXT');
   ensureTableColumn('absences', 'end_date', 'end_date TEXT');
   ensureTableColumn('absences', 'canceled', 'canceled INTEGER NOT NULL DEFAULT 0');
@@ -378,6 +446,7 @@ db.exec(`INSERT OR IGNORE INTO user_settings (user_id) SELECT id FROM users;`);
   ensureTableColumn('absences', 'minutes_override', 'minutes_override INTEGER');
 ensureTableColumn('user_profiles', 'location', 'location TEXT');
 ensureTableColumn('user_profiles', 'department', 'department TEXT');
+ensureTableColumn('user_profiles', 'rfid_code', 'rfid_code TEXT');
 ensureTableColumn('user_profiles', 'require_location', 'require_location INTEGER NOT NULL DEFAULT 1');
 ensureTableColumn('user_profiles', 'work_model_id', 'work_model_id INTEGER');
 // Ensure legacy databases receive holiday profile support even if they were created

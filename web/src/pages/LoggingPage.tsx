@@ -16,14 +16,15 @@ export function LoggingPage() {
   }, [employees.data]);
 
   return (
-    <div className="space-y-4">
-      <div className="card p-4 flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
-        <div>
-          <p className="text-xs uppercase text-slate-500">Logging</p>
-          <h1 className="text-2xl font-semibold">Aktivitäten</h1>
-          <p className="text-sm text-slate-500">Stemplungen, Anträge und Änderungen mit Suche nach Nutzern.</p>
-        </div>
-        <div className="flex gap-2 items-center flex-wrap">
+    <div className="space-y-6">
+      <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Audit Log</p>
+            <h1 className="text-2xl font-semibold text-slate-900">Aktivitäten & Änderungen</h1>
+            <p className="text-sm text-slate-500">Suche nach Nutzern, Aktionen und Details der Zeitverwaltung.</p>
+          </div>
+          <div className="flex gap-2 items-center flex-wrap">
           <input
             placeholder="Volltextsuche"
             className="input"
@@ -42,6 +43,7 @@ export function LoggingPage() {
               </option>
             ))}
           </select>
+        </div>
         </div>
       </div>
 
