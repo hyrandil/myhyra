@@ -12,7 +12,7 @@ const deptSchema = z.object({
 
 const memberSchema = z.object({
   userId: z.number().int(),
-  role: z.enum(['member', 'lead', 'hr']).default('member'),
+  role: z.enum(['member', 'lead']).default('member'),
 });
 
 router.use(requireAuth);
@@ -22,7 +22,7 @@ router.get('/public', (_req, res) => {
   res.json(departments);
 });
 
-router.use(authorize(['admin', 'hr']));
+router.use(authorize(['admin']));
 
 router.get('/', (_req, res) => {
   const departments = db
@@ -100,7 +100,7 @@ router.post('/:id/members', (req, res) => {
 router.patch('/:id/members/:userId', (req, res) => {
   const departmentId = Number(req.params.id);
   const userId = Number(req.params.userId);
-  const parsedRole = z.enum(['member', 'lead', 'hr']).safeParse(req.body?.role);
+  const parsedRole = z.enum(['member', 'lead']).safeParse(req.body?.role);
   if (!parsedRole.success) return res.status(400).json({ errors: parsedRole.error.format() });
   const exists = db
     .prepare('SELECT id FROM department_members WHERE department_id = ? AND user_id = ?')

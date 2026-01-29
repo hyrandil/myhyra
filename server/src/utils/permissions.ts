@@ -3,7 +3,7 @@ import { Role } from '../types';
 
 export function managedDepartments(userId: number): number[] {
   const rows = db
-    .prepare("SELECT department_id FROM department_members WHERE user_id = ? AND lower(role) IN ('lead','hr')")
+    .prepare("SELECT department_id FROM department_members WHERE user_id = ? AND lower(role) IN ('lead')")
     .all(userId) as { department_id: number }[];
   return rows.map((row) => row.department_id);
 }
@@ -16,7 +16,7 @@ export function userDepartments(userId: number): number[] {
 }
 
 export function canManageUser(actorId: number, actorRole: Role, targetUserId: number) {
-  if (actorRole === 'admin' || actorRole === 'hr') return true;
+  if (actorRole === 'admin') return true;
   if (actorRole !== 'lead') return false;
   if (actorId === targetUserId) return false;
   const owned = managedDepartments(actorId);

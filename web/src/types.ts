@@ -1,4 +1,4 @@
-export type Role = 'employee' | 'lead' | 'hr' | 'admin';
+export type Role = 'employee' | 'lead' | 'admin';
 
 export interface UserInfo {
   id: number;
@@ -20,14 +20,15 @@ export interface Employee extends UserInfo {
   vacationAllowance?: number;
   trackingStartDate?: string;
   startDate?: string;
-  endDate?: string;
+  endDate?: string | null;
+  rfidCode?: string;
   holidayProfileId?: number;
   holidayProfileValidFrom?: string;
 }
 
 export interface DepartmentMember {
   userId: number;
-  role: 'member' | 'lead' | 'hr';
+  role: 'member' | 'lead';
   name: string;
   email: string;
 }
@@ -203,4 +204,14 @@ export interface AuditLogEntry {
   action: string;
   detail?: string | null;
   created_at: string;
+}
+
+export interface TerminalDevice {
+  id: number;
+  name: string;
+  apiKey: string;
+  active: boolean;
+  lastSeenAt?: string | null;
+  createdAt?: string;
+  status?: 'online' | 'offline';
 }
