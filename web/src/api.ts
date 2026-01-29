@@ -239,21 +239,6 @@ export async function updateMyPassword(payload: { currentPassword: string; nextP
   return res.data as { ok: boolean };
 }
 
-export async function fetchTerminals() {
-  const res = await api.get('/terminals');
-  return res.data as { terminals: any[] };
-}
-
-export async function createTerminal(payload: { name: string }) {
-  const res = await api.post('/terminals', payload);
-  return res.data;
-}
-
-export async function updateTerminal(id: number, payload: { active: boolean }) {
-  const res = await api.patch(`/terminals/${id}`, payload);
-  return res.data;
-}
-
 export async function fetchEntries() {
   const res = await api.get<TimeEntry[]>('/time/me');
   return res.data;

@@ -74,7 +74,7 @@ export interface WorkScheduleEntry {
 
 export type TimeEntryType = 'CLOCK_IN' | 'CLOCK_OUT' | 'BREAK_START' | 'BREAK_END';
 
-export type TimeSource = 'WEB' | 'APP' | 'TERMINAL';
+export type TimeSource = 'WEB' | 'APP' | 'CORRECTION';
 
 export interface TimeEntry {
   id: number;

@@ -19,7 +19,6 @@ import { useIsMobile } from './hooks/useIsMobile';
 import { ApprovalListPage } from './pages/ApprovalListPage';
 import { LoggingPage } from './pages/LoggingPage';
 import { SettingsPage } from './pages/SettingsPage';
-import { TerminalsPage } from './pages/TerminalsPage';
 
 const appVersion = __APP_VERSION__ || 'dev';
 
@@ -98,7 +97,6 @@ function Shell({ children }: { children: React.ReactNode }) {
           {auth.hasRole('admin') && <NavItem to="/planung" label="Stundenplanung" />}
           {auth.hasRole('admin') && <NavItem to="/mitarbeitende" label="Personalverwaltung" />}
           {auth.hasRole('admin') && <NavItem to="/berichte" label="Berichte" />}
-          {auth.hasRole('admin') && <NavItem to="/terminals" label="Terminals" />}
           {auth.hasRole('admin') && <NavItem to="/logging" label="Logging" />}
           <NavItem to="/einstellungen" label="Einstellungen" />
         </nav>
@@ -217,7 +215,6 @@ export default function App() {
                   {auth.hasRole('lead', 'admin') && <Route path="/inkonsistenzen" element={<InconsistentPage />} />}
                   {auth.hasRole('admin') && <Route path="/logging" element={<LoggingPage />} />}
                   {auth.hasRole('admin') && <Route path="/planung" element={<PlanningPage />} />}
-                  {auth.hasRole('admin') && <Route path="/terminals" element={<TerminalsPage />} />}
                   <Route path="/einstellungen" element={<SettingsPage />} />
                 </Routes>
               </MobileShell>
@@ -238,7 +235,6 @@ export default function App() {
                   {auth.hasRole('admin') && <Route path="/planung" element={<PlanningPage />} />}
                   {auth.hasRole('admin') && <Route path="/mitarbeitende" element={<EmployeesPage />} />}
                   {auth.hasRole('admin') && <Route path="/berichte" element={<ReportsPage />} />}
-                  {auth.hasRole('admin') && <Route path="/terminals" element={<TerminalsPage />} />}
                   {auth.hasRole('admin') && <Route path="/logging" element={<LoggingPage />} />}
                   <Route path="/einstellungen" element={<SettingsPage />} />
                 </Routes>

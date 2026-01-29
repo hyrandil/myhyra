@@ -77,7 +77,6 @@ export function EmployeesPage() {
     requireLocation: overrides.requireLocation ?? emp.requireLocation,
     trackingStartDate: overrides.trackingStartDate ?? emp.trackingStartDate,
     personnelNumber: overrides.personnelNumber ?? emp.personnelNumber,
-    rfidCode: overrides.rfidCode ?? emp.rfidCode,
     holidayProfileId: overrides.holidayProfileId ?? emp.holidayProfileId,
     holidayProfileValidFrom: overrides.holidayProfileValidFrom ?? emp.holidayProfileValidFrom,
     endDate: overrides.endDate ?? emp.endDate,
@@ -207,7 +206,6 @@ export function EmployeesPage() {
       emp.department ?? '',
       emp.location ?? '',
       emp.personnelNumber ?? '',
-      emp.rfidCode ?? '',
       emp.trackingStartDate ?? '',
       emp.endDate ?? '',
     ]);
@@ -238,7 +236,6 @@ export function EmployeesPage() {
             <td>${emp.active ? 'Aktiv' : 'Inaktiv'}</td>
             <td>${emp.department ?? ''}</td>
             <td>${emp.personnelNumber ?? ''}</td>
-            <td>${emp.rfidCode ?? ''}</td>
           </tr>
         `
       )
@@ -265,7 +262,6 @@ export function EmployeesPage() {
                 <th>Status</th>
                 <th>Abteilung</th>
                 <th>Personalnummer</th>
-                <th>RFID</th>
               </tr>
             </thead>
             <tbody>
@@ -343,7 +339,6 @@ export function EmployeesPage() {
               <input name="lastName" required placeholder="Nachname" className="input" />
               <input name="email" required placeholder="E-Mail" className="input md:col-span-2" />
               <input name="personnelNumber" placeholder="Personalnummer" className="input" />
-              <input name="rfidCode" placeholder="RFID Chipnummer" className="input" />
               <select name="role" className="input">
                 <option value="employee">Mitarbeiter</option>
                 <option value="lead">Teamleiter</option>
@@ -607,12 +602,6 @@ export function EmployeesPage() {
                       value={selected.personnelNumber ?? ''}
                       placeholder="Personalnummer"
                       onChange={(e) => setSelected({ ...selected, personnelNumber: e.target.value })}
-                    />
-                    <input
-                      className="input"
-                      value={selected.rfidCode ?? ''}
-                      placeholder="RFID Chipnummer"
-                      onChange={(e) => setSelected({ ...selected, rfidCode: e.target.value })}
                     />
                     <select
                       className="input"

@@ -21,7 +21,6 @@ export interface Employee extends UserInfo {
   trackingStartDate?: string;
   startDate?: string;
   endDate?: string | null;
-  rfidCode?: string;
   holidayProfileId?: number;
   holidayProfileValidFrom?: string;
 }
@@ -46,7 +45,7 @@ export interface TimeEntry {
   user_id: number;
   timestamp: string;
   type: 'CLOCK_IN' | 'CLOCK_OUT' | 'BREAK_START' | 'BREAK_END';
-  source: 'WEB' | 'APP' | 'TERMINAL' | 'CORRECTION';
+  source: 'WEB' | 'APP' | 'CORRECTION';
   lat?: number | null;
   lng?: number | null;
 }

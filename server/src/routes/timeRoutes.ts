@@ -15,7 +15,7 @@ const locationSchema = z.object({
   lng: z.number().min(-180).max(180).optional(),
 });
 
-const sourceEnum = z.enum(['WEB', 'APP', 'TERMINAL']).default('WEB');
+const sourceEnum = z.enum(['WEB', 'APP', 'CORRECTION']).default('WEB');
 
 function getSchedule(userId: number): WorkScheduleEntry[] {
   const entries = db
