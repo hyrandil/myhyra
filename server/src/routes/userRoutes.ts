@@ -4,6 +4,7 @@ import { z } from 'zod';
 import db from '../db';
 import { requireAuth, authorize, AuthRequest } from '../auth';
 import { managedDepartments } from '../utils/permissions';
+import { logAction } from '../utils/logger';
 import type { User, Booking, Absence } from '../types';
 
 const router = Router();
@@ -391,37 +392,6 @@ const computeFlexBalance = (userId: number) => {
 
 router.use(requireAuth);
 
-const selfPasswordSchema = z
-  .object({
-    currentPassword: z.string().min(6),
-    newPassword: z.string().min(6),
-    confirmPassword: z.string().min(6),
-  })
-  .refine((data) => data.newPassword === data.confirmPassword, {
-    message: 'Passwörter stimmen nicht überein',
-    path: ['confirmPassword'],
-  });
-
-router.patch('/me/password', (req: AuthRequest, res) => {
-  const parsed = selfPasswordSchema.safeParse(req.body);
-  if (!parsed.success) {
-    return res.status(400).json({ errors: parsed.error.format() });
-  }
-  const user = db
-    .prepare('SELECT password_hash FROM users WHERE id = ?')
-    .get(req.user!.id) as { password_hash: string } | undefined;
-  if (!user) {
-    return res.status(404).json({ message: 'Nutzer nicht gefunden' });
-  }
-  const valid = bcrypt.compareSync(parsed.data.currentPassword, user.password_hash);
-  if (!valid) {
-    return res.status(400).json({ message: 'Das alte Passwort ist nicht korrekt' });
-  }
-  const passwordHash = bcrypt.hashSync(parsed.data.newPassword, 10);
-  db.prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(passwordHash, req.user!.id);
-  res.json({ message: 'Passwort aktualisiert' });
-});
-
 const selfSettingsSchema = z.object({
   language: z.enum(['de', 'en']),
   week_start: z.enum(['monday', 'sunday']),
@@ -480,6 +450,31 @@ router.get('/me/flex', (req: AuthRequest, res) => {
   res.json({ balanceMinutes, plannedMinutes: plannedTotal, workedMinutes: workedTotal, adjustment, enabled });
 });
 
+const selfPasswordSchema = z.object({
+  current_password: z.string().min(6),
+  next_password: z.string().min(6),
+});
+
+router.patch('/me/password', (req: AuthRequest, res) => {
+  const parsed = selfPasswordSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ errors: parsed.error.format() });
+  }
+  const user = db.prepare('SELECT id, password_hash FROM users WHERE id = ?').get(req.user!.id) as
+    | { id: number; password_hash: string }
+    | undefined;
+  if (!user) {
+    return res.status(404).json({ message: 'Nutzer nicht gefunden' });
+  }
+  const valid = bcrypt.compareSync(parsed.data.current_password, user.password_hash);
+  if (!valid) {
+    return res.status(401).json({ message: 'Aktuelles Passwort ist ungültig' });
+  }
+  const nextHash = bcrypt.hashSync(parsed.data.next_password, 10);
+  db.prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(nextHash, user.id);
+  res.json({ ok: true });
+});
+
 const baseUserSelect = `SELECT u.id, u.name, u.first_name, u.last_name, u.email, u.role, u.created_at, u.active, IFNULL(us.vacation_allowance, 0) as vacation_allowance
        , IFNULL(us.flex_enabled, 0) as flex_enabled, up.personnel_number, up.location, up.department, up.require_location, up.tracking_start_date, up.start_date, up.end_date, up.work_model_id, up.holiday_profile_id
        FROM users u
@@ -490,7 +485,7 @@ router.get('/', (req: AuthRequest, res) => {
   const search = typeof req.query.q === 'string' ? `%${req.query.q}%` : '%';
   const filters = `AND (u.name LIKE ? OR u.email LIKE ? OR IFNULL(up.personnel_number,'') LIKE ?)`;
 
-  if (req.user!.role === 'admin' || req.user!.role === 'hr') {
+  if (req.user!.role === 'admin') {
     const users = db
       .prepare(
         `${baseUserSelect}
@@ -531,14 +526,14 @@ router.get('/', (req: AuthRequest, res) => {
   return res.status(403).json({ message: 'Keine Berechtigung' });
 });
 
-router.use(authorize(['admin', 'hr']));
+router.use(authorize(['admin']));
 
 const userSchema = z.object({
   first_name: z.string().min(1),
   last_name: z.string().min(1),
   email: z.string().email(),
   password: z.string().min(6),
-  role: z.enum(['employee', 'lead', 'hr', 'admin']).optional().default('employee'),
+  role: z.enum(['employee', 'lead', 'admin']).optional().default('employee'),
   vacationAllowance: z.number().min(0).max(80).optional(),
   birth_date: z
     .string()
@@ -575,11 +570,9 @@ const userSchema = z.object({
     .or(z.literal(''))
     .transform((value) => value || undefined),
   end_date: z
-    .string()
-    .regex(dateRegex, 'Datum muss YYYY-MM-DD sein')
+    .union([z.string().regex(dateRegex, 'Datum muss YYYY-MM-DD sein'), z.literal(''), z.null()])
     .optional()
-    .or(z.literal(''))
-    .transform((value) => value || undefined),
+    .transform((value) => (value ? value : null)),
   note: z.string().max(255).optional().or(z.literal('')).transform((value) => value || undefined),
 });
 
@@ -708,7 +701,7 @@ const userUpdateSchema = z.object({
   first_name: z.string().min(1),
   last_name: z.string().min(1),
   email: z.string().email(),
-  role: z.enum(['employee', 'lead', 'hr', 'admin']),
+  role: z.enum(['employee', 'lead', 'admin']),
   personnel_number: z.string().max(80).optional().or(z.literal('')).transform((value) => value || undefined),
   location: z.string().max(120).optional().or(z.literal('')).transform((value) => value || undefined),
   department: z.string().max(120).optional().or(z.literal('')).transform((value) => value || undefined),
@@ -726,11 +719,9 @@ const userUpdateSchema = z.object({
     .or(z.literal(''))
     .transform((value) => value || undefined),
   end_date: z
-    .string()
-    .regex(dateRegex, 'Datum muss YYYY-MM-DD sein')
+    .union([z.string().regex(dateRegex, 'Datum muss YYYY-MM-DD sein'), z.literal(''), z.null()])
     .optional()
-    .or(z.literal(''))
-    .transform((value) => value || undefined),
+    .transform((value) => (value ? value : null)),
   work_model_id: z.number().int().optional(),
   active: z.boolean().optional(),
   holiday_profile_id: z.number().int().optional(),
@@ -745,6 +736,10 @@ const userUpdateSchema = z.object({
 const flexConfigSchema = z.object({
   enabled: z.boolean(),
   adjustment: z.number().int().optional(),
+});
+
+const vacationAdjustmentSchema = z.object({
+  delta: z.number(),
 });
 
 router.patch('/:id', (req, res) => {
@@ -787,7 +782,7 @@ router.patch('/:id', (req, res) => {
          require_location = COALESCE(?, require_location),
          tracking_start_date = COALESCE(?, tracking_start_date),
          start_date = COALESCE(?, start_date),
-         end_date = COALESCE(?, end_date),
+         end_date = CASE WHEN ? THEN NULL WHEN ? IS NOT NULL THEN ? ELSE end_date END,
          work_model_id = COALESCE(?, work_model_id),
          holiday_profile_id = COALESCE(?, holiday_profile_id)
      WHERE user_id = ?`
@@ -798,6 +793,8 @@ router.patch('/:id', (req, res) => {
     parsed.data.require_location === undefined ? null : parsed.data.require_location ? 1 : 0,
     parsed.data.tracking_start_date ?? null,
     parsed.data.start_date ?? null,
+    parsed.data.end_date === null ? 1 : 0,
+    parsed.data.end_date ?? null,
     parsed.data.end_date ?? null,
     parsed.data.work_model_id ?? null,
     parsed.data.holiday_profile_id ?? null,
@@ -1045,7 +1042,7 @@ router.get('/:id/flex', (req, res) => {
   res.json({ balanceMinutes, plannedMinutes: plannedTotal, workedMinutes: workedTotal, adjustment, enabled });
 });
 
-router.patch('/:id/flex', (req, res) => {
+router.patch('/:id/flex', (req: AuthRequest, res: Response) => {
   const userId = Number(req.params.id);
   if (Number.isNaN(userId)) {
     return res.status(400).json({ message: 'Ungültige Nutzer-ID' });
@@ -1056,16 +1053,50 @@ router.patch('/:id/flex', (req, res) => {
     return res.status(400).json({ errors: parsed.error.format() });
   }
   ensureSettingsRow(userId);
-  const adjustment = parsed.data.adjustment ??
-    (db.prepare('SELECT flex_adjust_minutes FROM user_settings WHERE user_id = ?').get(userId) as { flex_adjust_minutes?: number }
-      | undefined)?.flex_adjust_minutes ?? 0;
+  const currentRow = db
+    .prepare('SELECT flex_adjust_minutes FROM user_settings WHERE user_id = ?')
+    .get(userId) as { flex_adjust_minutes?: number } | undefined;
+  const currentAdjustment = currentRow?.flex_adjust_minutes ?? 0;
+  const adjustment = parsed.data.adjustment ?? currentAdjustment;
   db.prepare('UPDATE user_settings SET flex_enabled = ?, flex_adjust_minutes = ? WHERE user_id = ?').run(
     parsed.data.enabled ? 1 : 0,
     adjustment,
     userId
   );
+  if (adjustment !== currentAdjustment || parsed.data.enabled !== undefined) {
+    logAction(req.user?.id ?? null, 'flex.adjust', userId, {
+      previous: currentAdjustment,
+      next: adjustment,
+      enabled: parsed.data.enabled,
+    });
+  }
   const { balanceMinutes, plannedTotal, workedTotal } = computeFlexBalance(userId);
   res.json({ balanceMinutes, plannedMinutes: plannedTotal, workedMinutes: workedTotal, adjustment, enabled: parsed.data.enabled });
+});
+
+router.patch('/:id/vacation-adjust', authorize(['admin']), (req: AuthRequest, res: Response) => {
+  const userId = Number(req.params.id);
+  if (Number.isNaN(userId)) {
+    return res.status(400).json({ message: 'Ungültige Nutzer-ID' });
+  }
+  if (guardMissingUser(userId, res)) return;
+  const parsed = vacationAdjustmentSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ errors: parsed.error.format() });
+  }
+  ensureSettingsRow(userId);
+  const row = db
+    .prepare('SELECT vacation_adjust_days FROM user_settings WHERE user_id = ?')
+    .get(userId) as { vacation_adjust_days?: number } | undefined;
+  const current = row?.vacation_adjust_days ?? 0;
+  const next = current + parsed.data.delta;
+  db.prepare('UPDATE user_settings SET vacation_adjust_days = ? WHERE user_id = ?').run(next, userId);
+  logAction(req.user?.id ?? null, 'vacation.adjust', userId, {
+    previous: current,
+    delta: parsed.data.delta,
+    next,
+  });
+  res.json({ adjustment: next });
 });
 
 export default router;
