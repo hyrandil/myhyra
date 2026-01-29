@@ -394,37 +394,6 @@ const computeFlexBalance = (userId: number) => {
 
 router.use(requireAuth);
 
-const selfPasswordSchema = z
-  .object({
-    currentPassword: z.string().min(6),
-    newPassword: z.string().min(6),
-    confirmPassword: z.string().min(6),
-  })
-  .refine((data) => data.newPassword === data.confirmPassword, {
-    message: 'Passwörter stimmen nicht überein',
-    path: ['confirmPassword'],
-  });
-
-router.patch('/me/password', (req: AuthRequest, res) => {
-  const parsed = selfPasswordSchema.safeParse(req.body);
-  if (!parsed.success) {
-    return res.status(400).json({ errors: parsed.error.format() });
-  }
-  const user = db
-    .prepare('SELECT password_hash FROM users WHERE id = ?')
-    .get(req.user!.id) as { password_hash: string } | undefined;
-  if (!user) {
-    return res.status(404).json({ message: 'Nutzer nicht gefunden' });
-  }
-  const valid = bcrypt.compareSync(parsed.data.currentPassword, user.password_hash);
-  if (!valid) {
-    return res.status(400).json({ message: 'Das alte Passwort ist nicht korrekt' });
-  }
-  const passwordHash = bcrypt.hashSync(parsed.data.newPassword, 10);
-  db.prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(passwordHash, req.user!.id);
-  res.json({ message: 'Passwort aktualisiert' });
-});
-
 const selfSettingsSchema = z.object({
   language: z.enum(['de', 'en']),
   week_start: z.enum(['monday', 'sunday']),
