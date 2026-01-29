@@ -18,6 +18,7 @@ Browserbasierte Beispiel-Anwendung für eine Zeiterfassung mit Express/SQLite-AP
 > Dieses Projekt hat **zwei** Teile:
 > 1. **Server** (Express API + SQLite)
 > 2. **Web-Frontend** (React/Vite)
+> Hinweis: Der frühere Terminal-Client wurde entfernt.
 
 ### Voraussetzungen (einmalig)
 1. **Node.js installieren** (empfohlen: aktuelle LTS Version).
