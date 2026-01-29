@@ -1,4 +1,5 @@
 import express from 'express';
+import path from 'path';
 import cors, { CorsOptionsDelegate } from 'cors';
 import bodyParser from 'body-parser';
 import session from 'express-session';
@@ -12,6 +13,7 @@ import timeRoutes from './routes/timeRoutes';
 import departmentRoutes from './routes/departmentRoutes';
 import holidayRoutes from './routes/holidayRoutes';
 import logRoutes from './routes/logRoutes';
+import terminalRoutes from './routes/terminalRoutes';
 import './db';
 
 const app = express();
@@ -24,6 +26,11 @@ const corsDelegate: CorsOptionsDelegate = (req, callback) => {
 
   // Always allow same-origin / server-to-server calls
   if (!origin) return callback(null, { origin: true, credentials: true });
+
+  const requestPath = req.url ?? '';
+  if (requestPath.startsWith('/api/terminals')) {
+    return callback(null, { origin: true, credentials: false });
+  }
 
   if (WEB_ORIGINS.includes(origin)) return callback(null, { origin: true, credentials: true });
 
@@ -80,6 +87,11 @@ app.use('/api/time', timeRoutes);
 app.use('/api/departments', departmentRoutes);
 app.use('/api/holidays', holidayRoutes);
 app.use('/api/logs', logRoutes);
+app.use('/api/terminals', terminalRoutes);
+
+app.get('/terminal', (_req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'terminal.html'));
+});
 
 app.listen(PORT, () => {
   console.log(`API läuft auf Port ${PORT}`);
