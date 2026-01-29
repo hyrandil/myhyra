@@ -13,8 +13,31 @@ Browserbasierte Beispiel-Anwendung für eine Zeiterfassung mit Express/SQLite-AP
   sowie Kalenderansichten berücksichtigt.
 - Beispiel-Unit-Test für die Kernlogik der Tagesberechnung.
 
-## Setup (Schritt für Schritt)
+## Setup (Schritt für Schritt, sehr ausführlich)
+> Ziel: API-Server starten, Web-Client starten, Terminal-Client einrichten.  
+> Dieses Projekt hat **drei** Teile:
+> 1. **Server** (Express API + SQLite)
+> 2. **Web-Frontend** (React/Vite)
+> 3. **Terminal-Client** (lokale HTML-Seite für RFID)
+
+### Voraussetzungen (einmalig)
+1. **Node.js installieren** (empfohlen: aktuelle LTS Version).
+2. **Repository klonen** und in den Projektordner wechseln.  
+   Beispielpfad:  
+   ```
+   /path/to/myhyra
+   ```
+3. Stelle sicher, dass du **Terminal/PowerShell** öffnen kannst und der Befehl `node -v` eine Version ausgibt.
+
+---
+
 ### 1) Server starten (API)
+**Pfad:**  
+```
+/path/to/myhyra/server
+```
+
+**Befehle (genau in dieser Reihenfolge):**
 ```bash
 cd server
 cp .env.example .env
@@ -22,18 +45,114 @@ npm install
 npm run dev
 # Produktion: npm run build && npm start
 ```
-Standard-Admin stammt aus `.env` (ADMIN_EMAIL/ADMIN_PASSWORD). Datenbank liegt in `data/myhyra.db` oder in `DATABASE_FILE`.
 
-**API-Basis-URL:** `http://localhost:<PORT>/api` (Standard-Port siehe `.env`, z. B. 3001).
+**Was passiert hier?**
+- `cd server` wechselt in den Server-Ordner.
+- `cp .env.example .env` erstellt eine lokale Konfigurationsdatei.
+- `npm install` installiert Abhängigkeiten.
+- `npm run dev` startet den API-Server.
+
+**Standard-Port:**  
+In `.env` steht `PORT` (z. B. `3001`).  
+Die API ist dann unter **`http://localhost:3001/api`** erreichbar.
+
+**Wichtige Server-Dateien:**
+- `.env` (Konfiguration, z. B. `ADMIN_EMAIL`, `ADMIN_PASSWORD`)
+- Datenbank: `server/data/myhyra.db` (oder `DATABASE_FILE` in `.env`)
+
+---
 
 ### 2) Web-Client starten
+**Neues Terminal-Fenster öffnen** (Server läuft weiter im ersten Terminal).
+
+**Pfad:**  
+```
+/path/to/myhyra/web
+```
+
+**Befehle:**
 ```bash
 cd web
 npm install
 npm run dev
 ```
-Vite hört auf `0.0.0.0:5173`, damit du über die LAN-IP entwickeln kannst. Setze in `.env` im Server `WEB_ORIGINS` auf eine kommagetrennte Liste (z. B. `http://localhost:5173,http://10.10.1.18:5173,https://zeit-pilot.de`) oder auf die Domain deines Reverse-Proxys, damit CORS Cookies für deine Entwickler-IP bzw. dein Produktiv-Host zulässt.
-`VITE_API_URL` zeigt auf die API (Standard: relative `/api`, damit der Vite-Proxy greift). Cookies werden automatisch (withCredentials) gesendet.
+
+**Port und URL:**
+- Vite läuft standardmäßig auf **`http://localhost:5173`**
+- Der Web-Client spricht den Server über `/api` an (Vite-Proxy).
+
+**Wichtig: CORS/Origins konfigurieren**  
+In `server/.env` muss `WEB_ORIGINS` die Web-URL erlauben:
+```
+WEB_ORIGINS=http://localhost:5173
+```
+Wenn du über LAN oder eine andere IP zugreifst:
+```
+WEB_ORIGINS=http://localhost:5173,http://<DEINE-IP>:5173
+```
+
+**Typische Fehler:**
+- `ECONNREFUSED` → Server läuft nicht oder falscher Port.
+- Login funktioniert nicht → `WEB_ORIGINS` falsch gesetzt.
+
+---
+
+### 3) Terminal-Client starten (RFID)
+Der Terminal-Client ist eine **lokale HTML-Seite**, die der Server bereitstellt.
+
+**URL:**
+```
+http://localhost:3001/terminal
+```
+(Port muss zu `server/.env` passen)
+
+**Ablauf Schritt für Schritt:**
+1. Im Web-UI als **Admin** anmelden.
+2. Menüpunkt **Terminals** öffnen.
+3. Neues Terminal anlegen → API-Key wird angezeigt.
+4. Terminal-Seite öffnen (`/terminal`).
+5. API-Key in das Feld eintragen.
+6. RFID-Chipnummer eingeben oder scannen.
+7. **Kommen** oder **Gehen** senden.
+
+---
+
+### 4) Terminal-API konfigurieren (für eigene Clients)
+Wenn du einen **eigenen lokalen Client** bauen willst, nutzt du diesen Request:
+
+**Endpoint:**
+```
+POST http://localhost:3001/api/terminals/entry
+```
+
+**Header:**
+```
+x-api-key: <DEIN_API_KEY>
+Content-Type: application/json
+```
+
+**Body:**
+```json
+{ "rfid": "1234567890", "type": "CLOCK_IN" }
+```
+
+**Antwort-Beispiel:**
+```json
+{
+  "ok": true,
+  "action": "CLOCK_IN",
+  "user": { "id": 5, "name": "Max Mustermann" },
+  "timestamp": "2026-01-01T08:00:00.000Z"
+}
+```
+
+---
+
+### 5) Typische Start-Reihenfolge (Kurzfassung)
+1. Terminal 1: `cd server && npm run dev` (Port 3001)
+2. Terminal 2: `cd web && npm run dev` (Port 5173)
+3. Browser öffnen: `http://localhost:5173`
+4. Optional: `http://localhost:3001/terminal`
 
 ### 3) Terminal-Client starten (RFID)
 Der Server liefert eine kleine lokale Terminal-Oberfläche unter:
