@@ -1,4 +1,5 @@
 import express from 'express';
+import path from 'path';
 import cors, { CorsOptionsDelegate } from 'cors';
 import bodyParser from 'body-parser';
 import session from 'express-session';
@@ -12,6 +13,7 @@ import timeRoutes from './routes/timeRoutes';
 import departmentRoutes from './routes/departmentRoutes';
 import holidayRoutes from './routes/holidayRoutes';
 import logRoutes from './routes/logRoutes';
+import terminalRoutes from './routes/terminalRoutes';
 import './db';
 
 const app = express();
@@ -80,6 +82,11 @@ app.use('/api/time', timeRoutes);
 app.use('/api/departments', departmentRoutes);
 app.use('/api/holidays', holidayRoutes);
 app.use('/api/logs', logRoutes);
+app.use('/api/terminals', terminalRoutes);
+
+app.get('/terminal', (_req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'terminal.html'));
+});
 
 app.listen(PORT, () => {
   console.log(`API läuft auf Port ${PORT}`);

@@ -27,7 +27,7 @@ const profileUpdateSchema = z.object({
 });
 
 router.use(requireAuth);
-router.use(authorize(['admin', 'hr']));
+router.use(authorize(['admin']));
 
 const resolveYears = (payload: {
   year?: number | null | undefined;
