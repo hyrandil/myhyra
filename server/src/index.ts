@@ -27,6 +27,11 @@ const corsDelegate: CorsOptionsDelegate = (req, callback) => {
   // Always allow same-origin / server-to-server calls
   if (!origin) return callback(null, { origin: true, credentials: true });
 
+  const requestPath = req.url ?? '';
+  if (requestPath.startsWith('/api/terminals')) {
+    return callback(null, { origin: true, credentials: false });
+  }
+
   if (WEB_ORIGINS.includes(origin)) return callback(null, { origin: true, credentials: true });
 
   // Allow common dev hosts on port 5173 (e.g., LAN IPs)
