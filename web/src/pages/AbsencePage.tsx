@@ -38,16 +38,19 @@ export function AbsencePage() {
   });
 
   return (
-    <div className="space-y-4">
-      <div className="card p-4 flex items-center justify-between">
-        <div>
-          <p className="text-xs uppercase text-slate-500">Abwesenheitsverwaltung</p>
-          <h2 className="text-2xl font-semibold">Abwesenheiten & Arten</h2>
+    <div className="space-y-6">
+      <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Abwesenheiten</p>
+            <h2 className="text-2xl font-semibold text-slate-900">Abwesenheitsarten verwalten</h2>
+            <p className="text-sm text-slate-500">Steuere, welche Abwesenheiten verfügbar sind und wie sie zählen.</p>
+          </div>
+          <div className="badge bg-slate-100 text-slate-700">{auth.user?.role}</div>
         </div>
-        <div className="badge bg-slate-200 text-slate-700">{auth.user?.role}</div>
       </div>
 
-      {auth.hasRole('hr', 'admin') && (
+      {auth.hasRole('admin') && (
         <div className="card p-4">
           <div className="mb-4 grid gap-3 sm:grid-cols-2">
             <div className="p-3 rounded-lg border border-slate-200 bg-white space-y-2">
