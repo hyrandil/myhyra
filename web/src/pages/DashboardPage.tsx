@@ -101,7 +101,7 @@ export function DashboardPage() {
   const requireLocation = user?.requireLocation ?? true;
   const [location, setLocation] = useState<{ lat: number; lng: number } | null>(null);
   const [locationError, setLocationError] = useState<string | null>(null);
-  const canViewLocation = user ? ['lead', 'hr', 'admin'].includes(user.role) : false;
+  const canViewLocation = user ? ['lead', 'admin'].includes(user.role) : false;
   const [now, setNow] = useState<Date>(new Date());
 
   useEffect(() => {
@@ -173,7 +173,20 @@ export function DashboardPage() {
   );
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-6">
+      <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Dashboard</p>
+            <h1 className="text-2xl font-semibold text-slate-900">Arbeitszeit im Blick</h1>
+            <p className="text-sm text-slate-500">Stempelstatus, heutige Arbeitszeit und die letzte Aktion.</p>
+          </div>
+          <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+            Letzte Aktion: <span className="font-semibold text-slate-900">{last ? labels[last.type] : '—'}</span>
+          </div>
+        </div>
+      </div>
+
       <div className="card p-5 flex flex-col gap-4">
         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
           <div>
