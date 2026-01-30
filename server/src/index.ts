@@ -17,7 +17,7 @@ import './db';
 const app = express();
 app.set('trust proxy', 1);
 
-const corsDelegate: CorsOptionsDelegate = (req, callback) => {
+const corsDelegate: CorsOptionsDelegate = (req: any, callback) => {
   const origin = req.headers.origin as string | undefined;
   const host = req.headers.host;
   const forwardedHost = req.headers['x-forwarded-host'] as string | undefined;

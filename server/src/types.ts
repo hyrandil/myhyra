@@ -1,4 +1,4 @@
-export type Role = 'employee' | 'lead' | 'hr' | 'admin';
+export type Role = 'employee' | 'lead' | 'admin';
 
 export interface User {
   id: number;
@@ -73,7 +73,7 @@ export interface WorkScheduleEntry {
 
 export type TimeEntryType = 'CLOCK_IN' | 'CLOCK_OUT' | 'BREAK_START' | 'BREAK_END';
 
-export type TimeSource = 'WEB' | 'APP' | 'TERMINAL';
+export type TimeSource = 'WEB' | 'APP' | 'CORRECTION';
 
 export interface TimeEntry {
   id: number;

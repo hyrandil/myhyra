@@ -1,4 +1,4 @@
-export type Role = 'employee' | 'lead' | 'hr' | 'admin';
+export type Role = 'employee' | 'lead' | 'admin';
 
 export interface UserInfo {
   id: number;
@@ -20,14 +20,14 @@ export interface Employee extends UserInfo {
   vacationAllowance?: number;
   trackingStartDate?: string;
   startDate?: string;
-  endDate?: string;
+  endDate?: string | null;
   holidayProfileId?: number;
   holidayProfileValidFrom?: string;
 }
 
 export interface DepartmentMember {
   userId: number;
-  role: 'member' | 'lead' | 'hr';
+  role: 'member' | 'lead';
   name: string;
   email: string;
 }
@@ -45,7 +45,7 @@ export interface TimeEntry {
   user_id: number;
   timestamp: string;
   type: 'CLOCK_IN' | 'CLOCK_OUT' | 'BREAK_START' | 'BREAK_END';
-  source: 'WEB' | 'APP' | 'TERMINAL' | 'CORRECTION';
+  source: 'WEB' | 'APP' | 'CORRECTION';
   lat?: number | null;
   lng?: number | null;
 }

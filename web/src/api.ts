@@ -66,6 +66,11 @@ export async function updateUserFlex(id: number, payload: { enabled: boolean; ad
   return res.data as { balanceMinutes: number; adjustment: number; enabled: boolean };
 }
 
+export async function updateUserVacationAdjustment(id: number, payload: { delta: number }) {
+  const res = await api.patch(`/users/${id}/vacation-adjust`, payload);
+  return res.data as { adjustment: number };
+}
+
 export async function fetchHolidayProfiles() {
   const res = await api.get<HolidayProfile[]>('/holidays/profiles');
   return res.data;
@@ -199,7 +204,7 @@ export async function updateDepartment(id: number, payload: { name: string; desc
 
 export async function upsertDepartmentMember(
   departmentId: number,
-  payload: { userId: number; role?: 'member' | 'lead' | 'hr' }
+  payload: { userId: number; role?: 'member' | 'lead' }
 ) {
   const res = await api.post(`/departments/${departmentId}/members`, payload);
   return res.data;
@@ -208,7 +213,7 @@ export async function upsertDepartmentMember(
 export async function updateDepartmentMemberRole(
   departmentId: number,
   userId: number,
-  role: 'member' | 'lead' | 'hr'
+  role: 'member' | 'lead'
 ) {
   const res = await api.patch(`/departments/${departmentId}/members/${userId}`, { role });
   return res.data;
@@ -222,6 +227,14 @@ export async function removeDepartmentMember(departmentId: number, userId: numbe
 export async function deleteDepartment(id: number) {
   const res = await api.delete(`/departments/${id}`);
   return res.data;
+}
+
+export async function updateMyPassword(payload: { currentPassword: string; nextPassword: string }) {
+  const res = await api.patch('/users/me/password', {
+    current_password: payload.currentPassword,
+    next_password: payload.nextPassword,
+  });
+  return res.data as { ok: boolean };
 }
 
 export async function fetchEntries() {
